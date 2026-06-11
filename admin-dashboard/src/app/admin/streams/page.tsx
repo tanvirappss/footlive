@@ -38,6 +38,7 @@ interface Stream {
   backup_url_2: string | null;
   backup_url_3: string | null;
   is_enabled: boolean;
+  urls?: { label: string; url: string }[];
   match?: Match;
 }
 
@@ -51,10 +52,7 @@ export default function StreamsPage() {
   // Form states
   const [matchId, setMatchId] = useState('');
   const [streamName, setStreamName] = useState('');
-  const [primaryUrl, setPrimaryUrl] = useState('');
-  const [backupUrl1, setBackupUrl1] = useState('');
-  const [backupUrl2, setBackupUrl2] = useState('');
-  const [backupUrl3, setBackupUrl3] = useState('');
+  const [streamUrls, setStreamUrls] = useState<{ label: string; url: string }[]>([{ label: 'Primary Server', url: '' }]);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   // Queries
@@ -110,10 +108,7 @@ export default function StreamsPage() {
     setEditingStream(null);
     setMatchId(matches[0]?.id || '');
     setStreamName('Primary English Broadcast');
-    setPrimaryUrl('');
-    setBackupUrl1('');
-    setBackupUrl2('');
-    setBackupUrl3('');
+    setStreamUrls([{ label: 'Primary Server', url: '' }]);
     setMutationError(null);
     setIsModalOpen(true);
   };
@@ -122,24 +117,37 @@ export default function StreamsPage() {
     setEditingStream(stream);
     setMatchId(stream.match_id);
     setStreamName(stream.stream_name);
-    setPrimaryUrl(stream.primary_url);
-    setBackupUrl1(stream.backup_url_1 || '');
-    setBackupUrl2(stream.backup_url_2 || '');
-    setBackupUrl3(stream.backup_url_3 || '');
+    
+    // Parse JSONB list if exists, otherwise build it from static columns
+    if (Array.isArray(stream.urls) && stream.urls.length > 0) {
+      setStreamUrls(stream.urls);
+    } else {
+      const urlsList = [];
+      if (stream.primary_url) urlsList.push({ label: 'Primary Server', url: stream.primary_url });
+      if (stream.backup_url_1) urlsList.push({ label: 'Backup Server 1', url: stream.backup_url_1 });
+      if (stream.backup_url_2) urlsList.push({ label: 'Backup Server 2', url: stream.backup_url_2 });
+      if (stream.backup_url_3) urlsList.push({ label: 'Backup Server 3', url: stream.backup_url_3 });
+      if (urlsList.length === 0) urlsList.push({ label: 'Primary Server', url: '' });
+      setStreamUrls(urlsList);
+    }
     setMutationError(null);
     setIsModalOpen(true);
   };
 
-  // Create or Update Mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (streamUrls.length === 0 || !streamUrls[0].url) {
+        throw new Error('You must provide at least one valid streaming feed link.');
+      }
+
       const streamData = {
         match_id: matchId,
         stream_name: streamName,
-        primary_url: primaryUrl,
-        backup_url_1: backupUrl1 || null,
-        backup_url_2: backupUrl2 || null,
-        backup_url_3: backupUrl3 || null,
+        primary_url: streamUrls[0]?.url || '',
+        backup_url_1: streamUrls[1]?.url || null,
+        backup_url_2: streamUrls[2]?.url || null,
+        backup_url_3: streamUrls[3]?.url || null,
+        urls: streamUrls // Save full list
       };
 
       if (editingStream) {
@@ -381,49 +389,56 @@ export default function StreamsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-white uppercase tracking-wider block">Primary Stream URL (M3U8 / M3U)</label>
-                  <input
-                    type="url"
-                    required
-                    value={primaryUrl}
-                    onChange={(e) => setPrimaryUrl(e.target.value)}
-                    placeholder="https://server.com/live/stream.m3u8"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Backup Stream URL 1 (Optional)</label>
-                  <input
-                    type="url"
-                    value={backupUrl1}
-                    onChange={(e) => setBackupUrl1(e.target.value)}
-                    placeholder="https://backup1.com/live/stream.m3u8"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Backup URL 2 (Optional)</label>
-                    <input
-                      type="url"
-                      value={backupUrl2}
-                      onChange={(e) => setBackupUrl2(e.target.value)}
-                      placeholder="https://backup2.com/live/stream.m3u8"
-                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                    />
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-white uppercase tracking-wider">Streaming Channels / Fallbacks</label>
+                    <button
+                      type="button"
+                      onClick={() => setStreamUrls([...streamUrls, { label: `Backup Server ${streamUrls.length}`, url: '' }])}
+                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-accent border border-slate-700 text-[10px] font-black uppercase rounded-lg transition-colors cursor-pointer"
+                    >
+                      + Add More Link
+                    </button>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Backup URL 3 (Optional)</label>
-                    <input
-                      type="url"
-                      value={backupUrl3}
-                      onChange={(e) => setBackupUrl3(e.target.value)}
-                      placeholder="https://backup3.com/live/stream.m3u8"
-                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                    />
+
+                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                    {streamUrls.map((item, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          required
+                          value={item.label}
+                          onChange={(e) => {
+                            const newUrls = [...streamUrls];
+                            newUrls[idx].label = e.target.value;
+                            setStreamUrls(newUrls);
+                          }}
+                          placeholder="Label (e.g. Server 1)"
+                          className="w-1/3 px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                        <input
+                          type="url"
+                          required
+                          value={item.url}
+                          onChange={(e) => {
+                            const newUrls = [...streamUrls];
+                            newUrls[idx].url = e.target.value;
+                            setStreamUrls(newUrls);
+                          }}
+                          placeholder="M3U8 Streaming URL"
+                          className="flex-1 px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                        {streamUrls.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setStreamUrls(streamUrls.filter((_, i) => i !== idx))}
+                            className="p-2 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4 text-slate-400" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
 

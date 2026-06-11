@@ -29,6 +29,7 @@ interface Stream {
   backup_url_1: string | null;
   backup_url_2: string | null;
   backup_url_3: string | null;
+  urls?: { label: string; url: string }[];
 }
 
 export default function UserWatchPage() {
@@ -112,12 +113,17 @@ export default function UserWatchPage() {
   }
 
   const stream = streams[0];
-  const streamUrls = [
-    stream.primary_url,
-    stream.backup_url_1,
-    stream.backup_url_2,
-    stream.backup_url_3
-  ].filter((url): url is string => !!url);
+  const streamItems = Array.isArray(stream.urls) && stream.urls.length > 0
+    ? stream.urls
+    : [
+        { label: 'Primary', url: stream.primary_url },
+        { label: 'Backup 1', url: stream.backup_url_1 },
+        { label: 'Backup 2', url: stream.backup_url_2 },
+        { label: 'Backup 3', url: stream.backup_url_3 }
+      ].filter((item): item is { label: string; url: string } => !!item.url);
+
+  const streamUrls = streamItems.map(item => item.url);
+  const streamLabels = streamItems.map(item => item.label || 'Server');
 
   const activeUrl = streamUrls[currentUrlIndex];
 
@@ -212,7 +218,7 @@ export default function UserWatchPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {streamUrls.map((url, idx) => {
                 const isSelected = currentUrlIndex === idx;
                 return (
@@ -224,13 +230,14 @@ export default function UserWatchPage() {
                       setIsReconnecting(false);
                       setBufferState('Healthy');
                     }}
-                    className={`py-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    className={`py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
                       isSelected
                         ? 'bg-emerald-accent border-emerald-accent text-black'
                         : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                     }`}
+                    title={streamLabels[idx]}
                   >
-                    {idx === 0 ? 'Primary' : `Backup ${idx}`}
+                    {streamLabels[idx]}
                   </button>
                 );
               })}

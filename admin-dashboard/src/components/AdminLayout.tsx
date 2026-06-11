@@ -44,6 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Teams', href: '/admin/teams', icon: Users },
     { name: 'Matches', href: '/admin/matches', icon: Calendar },
     { name: 'Streams', href: '/admin/streams', icon: Tv },
+    { name: 'TV Channels', href: '/admin/channels', icon: Tv },
     { name: 'Earnings', href: '/admin/earnings', icon: DollarSign },
     { name: 'Announcements', href: '/admin/announcements', icon: Megaphone },
   ];
