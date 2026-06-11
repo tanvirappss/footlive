@@ -12,13 +12,15 @@ import {
   X, 
   Loader2, 
   Tv, 
-  Power
+  Power,
+  Upload
 } from 'lucide-react';
 
 interface Channel {
   id: string;
   name: string;
   url: string;
+  logo_url: string;
   is_enabled: boolean;
   created_at: string;
 }
@@ -33,6 +35,9 @@ export default function ChannelsPage() {
   // Form states
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   // Fetch channels query
@@ -44,7 +49,7 @@ export default function ChannelsPage() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []) as Channel[];
     }
   });
 
@@ -52,6 +57,8 @@ export default function ChannelsPage() {
     setEditingChannel(null);
     setName('');
     setUrl('');
+    setLogoUrl('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=150&auto=format&fit=crop');
+    setLogoFile(null);
     setMutationError(null);
     setIsModalOpen(true);
   };
@@ -60,16 +67,46 @@ export default function ChannelsPage() {
     setEditingChannel(channel);
     setName(channel.name);
     setUrl(channel.url);
+    setLogoUrl(channel.logo_url || '');
+    setLogoFile(null);
     setMutationError(null);
     setIsModalOpen(true);
+  };
+
+  // Upload file helper
+  const uploadLogo = async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_channel_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `logos/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('teams')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+    return data.publicUrl;
   };
 
   // Create or Update Mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
+      setUploading(true);
+      let logoPublicUrl = logoUrl;
+
+      if (logoFile) {
+        logoPublicUrl = await uploadLogo(logoFile);
+      }
+
+      if (!logoPublicUrl) {
+        logoPublicUrl = 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=150&auto=format&fit=crop';
+      }
+
       const channelData = {
         name,
         url,
+        logo_url: logoPublicUrl
       };
 
       if (editingChannel) {
@@ -88,9 +125,11 @@ export default function ChannelsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channels-admin'] });
       setIsModalOpen(false);
+      setUploading(false);
     },
     onError: (err: any) => {
       setMutationError(err.message);
+      setUploading(false);
     }
   });
 
@@ -167,10 +206,17 @@ export default function ChannelsPage() {
                 }`}
               >
                 <div className="flex items-center gap-4 w-full md:w-auto">
-                  <div className={`p-4 bg-slate-900/60 border border-slate-800 rounded-2xl shrink-0 ${
-                    channel.is_enabled ? 'text-emerald-accent' : 'text-slate-500'
-                  }`}>
-                    <Tv className="h-8 w-8" />
+                  {/* Channel Logo preview */}
+                  <div className="h-12 w-16 bg-slate-900/60 rounded-xl overflow-hidden border border-card-border flex items-center justify-center shrink-0">
+                    {channel.logo_url ? (
+                      <img 
+                        src={channel.logo_url} 
+                        alt={`${channel.name} Logo`} 
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Tv className="h-6 w-6 text-slate-500" />
+                    )}
                   </div>
 
                   <div className="space-y-1 min-w-0">
@@ -241,16 +287,45 @@ export default function ChannelsPage() {
                   </div>
                 )}
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Channel Name / Title</label>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Fox Sports HD"
+                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Channel Logo URL</label>
+                    <input
+                      type="text"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                      placeholder="https://server.com/logo.png"
+                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Channel Name / Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Fox Sports HD"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Logo Icon File</label>
+                  <label className="flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
+                    <Upload className="h-5 w-5 text-slate-500 shrink-0" />
+                    <span className="text-xs text-slate-400 font-semibold truncate">
+                      {logoFile ? logoFile.name : 'Upload logo file (stored in Supabase Storage)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
 
                 <div className="space-y-1.5">
@@ -276,10 +351,10 @@ export default function ChannelsPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={saveMutation.isPending}
+                    disabled={uploading || saveMutation.isPending}
                     className="flex items-center gap-2 px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer"
                   >
-                    {saveMutation.isPending ? (
+                    {(uploading || saveMutation.isPending) ? (
                       <Loader2 className="h-4.5 w-4.5 animate-spin" />
                     ) : (
                       <Check className="h-4.5 w-4.5" />

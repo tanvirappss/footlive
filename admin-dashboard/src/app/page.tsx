@@ -12,7 +12,9 @@ import {
   Loader2, 
   Bell, 
   ShieldAlert,
-  X
+  X,
+  ArrowLeft,
+  Search
 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 
@@ -59,15 +61,60 @@ export default function UserHomePage() {
   const [selectedChannelUrl, setSelectedChannelUrl] = useState<string | null>(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string>('');
 
+  // M3U Playlist States
+  const [selectedPlaylist, setSelectedPlaylist] = useState<any | null>(null);
+  const [playlistChannels, setPlaylistChannels] = useState<any[]>([]);
+  const [loadingPlaylist, setLoadingPlaylist] = useState(false);
+  const [playlistError, setPlaylistError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleChannelSelect = async (chan: any) => {
+    const isM3u = chan.url.toLowerCase().includes('.m3u') && !chan.url.toLowerCase().includes('.m3u8');
+    
+    if (isM3u) {
+      setSelectedPlaylist(chan);
+      setLoadingPlaylist(true);
+      setPlaylistError(null);
+      setPlaylistChannels([]);
+      setSearchQuery('');
+      
+      try {
+        const response = await fetch(`/api/proxy-m3u?url=${encodeURIComponent(chan.url)}`);
+        const data = await response.json();
+        
+        if (data.success && data.channels && data.channels.length > 0) {
+          setPlaylistChannels(data.channels);
+          // Auto-play first sub-channel
+          setSelectedChannelUrl(data.channels[0].url);
+          setSelectedChannelName(`${chan.name} - ${data.channels[0].name}`);
+        } else {
+          throw new Error(data.error || 'No channels found in playlist.');
+        }
+      } catch (err: any) {
+        console.error(err);
+        setPlaylistError(err.message || 'Failed to fetch or parse M3U playlist.');
+        setSelectedChannelUrl(chan.url);
+        setSelectedChannelName(chan.name);
+      } finally {
+        setLoadingPlaylist(false);
+      }
+    } else {
+      setSelectedPlaylist(null);
+      setPlaylistChannels([]);
+      setSelectedChannelUrl(chan.url);
+      setSelectedChannelName(chan.name);
+    }
+  };
+
   // Fetch M3U TV channels
   const { data: channels = [], isLoading: isLoadingChannels } = useQuery<any[]>({
     queryKey: ['user-channels'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('m3u_channels')
-        .select('*')
-        .eq('is_enabled', true)
-        .order('created_at', { ascending: false });
+          .from('m3u_channels')
+          .select('*')
+          .eq('is_enabled', true)
+          .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -79,8 +126,8 @@ export default function UserHomePage() {
     queryKey: ['total-views'],
     queryFn: async () => {
       const { count, error } = await supabase
-        .from('analytics')
-        .select('*', { count: 'exact', head: true });
+          .from('analytics')
+          .select('*', { count: 'exact', head: true });
       if (error) throw error;
       return (count || 0) + 14820;
     },
@@ -101,8 +148,7 @@ export default function UserHomePage() {
 
   useEffect(() => {
     if (activeTab === 'channels' && channels.length > 0 && !selectedChannelUrl) {
-      setSelectedChannelUrl(channels[0].url);
-      setSelectedChannelName(channels[0].name);
+      handleChannelSelect(channels[0]);
     }
   }, [activeTab, channels, selectedChannelUrl]);
 
@@ -185,9 +231,19 @@ export default function UserHomePage() {
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🏆</span>
+            {ticker?.logo_url ? (
+              <img 
+                src={ticker.logo_url} 
+                alt="Site Logo" 
+                className="h-8 w-8 object-contain rounded-lg border border-card-border" 
+              />
+            ) : (
+              <span className="text-2xl">🏆</span>
+            )}
             <div>
-              <h1 className="font-black text-sm tracking-wider uppercase text-white">WORLD CUP 2026</h1>
+              <h1 className="font-black text-sm tracking-wider uppercase text-white">
+                {ticker?.site_name || 'WORLD CUP 2026'}
+              </h1>
               <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">Premium Streaming Portal</p>
             </div>
           </div>
@@ -430,52 +486,183 @@ export default function UserHomePage() {
             )}
           </div>
 
-          {/* TV Channels List */}
+          {/* TV Channels List / M3U Playlist Browser */}
           <div className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col gap-4">
-            <div>
-              <h3 className="font-black text-xs text-white uppercase tracking-wider">M3U TV Channels</h3>
-              <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5">Click server to load player</p>
-            </div>
+            {selectedPlaylist ? (
+              // Playlist Browser Mode
+              <>
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => {
+                      setSelectedPlaylist(null);
+                      setPlaylistChannels([]);
+                      setPlaylistError(null);
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-emerald-accent hover:text-emerald-400 font-extrabold uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Streams
+                  </button>
+                  <div>
+                    <h3 className="font-black text-sm text-white uppercase tracking-wider truncate">
+                      {selectedPlaylist.name}
+                    </h3>
+                    <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5">
+                      {loadingPlaylist 
+                        ? 'Loading channel list...' 
+                        : playlistError 
+                          ? 'Error loading channels' 
+                          : `${playlistChannels.length} channels available`}
+                    </p>
+                  </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2.5 max-h-[350px] pr-1">
-              {isLoadingChannels ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
+                  {playlistChannels.length > 0 && (
+                    <div className="relative mt-2">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Search channels..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-slate-950/60 border border-slate-900 focus:border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all"
+                      />
+                    </div>
+                  )}
                 </div>
-              ) : channels.length === 0 ? (
-                <div className="text-center py-12 text-slate-500 text-xs font-bold uppercase tracking-wide">
-                  No TV channels active.
+
+                <div className="flex-1 overflow-y-auto space-y-2 max-h-[350px] pr-1">
+                  {loadingPlaylist ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
+                      <span className="text-[10px] text-slate-500 font-bold uppercase mt-2">Parsing Playlist...</span>
+                    </div>
+                  ) : playlistError ? (
+                    <div className="text-center py-8 text-red-400 text-xs font-bold uppercase border border-red-950/20 bg-red-950/5 rounded-2xl p-4">
+                      {playlistError}
+                    </div>
+                  ) : (
+                    (() => {
+                      const filtered = playlistChannels.filter(c => 
+                        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (c.group && c.group.toLowerCase().includes(searchQuery.toLowerCase()))
+                      );
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="text-center py-12 text-slate-500 text-xs font-bold uppercase tracking-wide">
+                            No channels match search.
+                          </div>
+                        );
+                      }
+
+                      return filtered.map((subChan, idx) => {
+                        const isSubPlaying = selectedChannelUrl === subChan.url;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setSelectedChannelUrl(subChan.url);
+                              setSelectedChannelName(`${selectedPlaylist.name} - ${subChan.name}`);
+                            }}
+                            className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                              isSubPlaying 
+                                ? 'bg-emerald-500/10 border-emerald-accent text-white' 
+                                : 'bg-slate-950/30 border-slate-900/60 text-slate-400 hover:border-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="h-7 w-9 bg-slate-900/80 rounded-lg overflow-hidden border border-card-border/60 flex items-center justify-center shrink-0">
+                                {subChan.logo ? (
+                                  <img 
+                                    src={subChan.logo} 
+                                    alt="" 
+                                    className="h-full w-full object-cover" 
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src = '';
+                                    }}
+                                  />
+                                ) : (
+                                  <Tv className="h-3.5 w-3.5 text-slate-500" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[11px] font-extrabold truncate block">{subChan.name}</span>
+                                {subChan.group && (
+                                  <span className="text-[8px] text-slate-500 font-bold block uppercase tracking-wide truncate">{subChan.group}</span>
+                                )}
+                              </div>
+                            </div>
+                            {isSubPlaying && (
+                              <span className="text-[8px] font-black text-emerald-accent uppercase tracking-widest shrink-0">
+                                Playing
+                              </span>
+                            )}
+                          </button>
+                        );
+                      });
+                    })()
+                  )}
                 </div>
-              ) : (
-                channels.map((chan) => {
-                  const isPlaying = selectedChannelUrl === chan.url;
-                  return (
-                    <button
-                      key={chan.id}
-                      onClick={() => {
-                        setSelectedChannelUrl(chan.url);
-                        setSelectedChannelName(chan.name);
-                      }}
-                      className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                        isPlaying 
-                          ? 'bg-emerald-500/10 border-emerald-accent text-white shadow-lg shadow-emerald-500/5' 
-                          : 'bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Tv className={`h-4.5 w-4.5 shrink-0 ${isPlaying ? 'text-emerald-accent' : 'text-slate-500'}`} />
-                        <span className="text-xs font-black truncate">{chan.name}</span>
-                      </div>
-                      {isPlaying && (
-                        <span className="text-[9px] font-black text-emerald-accent uppercase tracking-widest shrink-0">
-                          Active
-                        </span>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
+              </>
+            ) : (
+              // Main Channels List Mode
+              <>
+                <div>
+                  <h3 className="font-black text-xs text-white uppercase tracking-wider">M3U TV Channels</h3>
+                  <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5">Click server to load player</p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2.5 max-h-[350px] pr-1">
+                  {isLoadingChannels ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
+                    </div>
+                  ) : channels.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500 text-xs font-bold uppercase tracking-wide">
+                      No TV channels active.
+                    </div>
+                  ) : (
+                    channels.map((chan) => {
+                      const isPlaying = selectedChannelUrl === chan.url || (selectedPlaylist && selectedPlaylist.id === chan.id);
+                      const isM3u = chan.url.toLowerCase().includes('.m3u') && !chan.url.toLowerCase().includes('.m3u8');
+                      
+                      return (
+                        <button
+                          key={chan.id}
+                          onClick={() => handleChannelSelect(chan)}
+                          className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                            isPlaying 
+                              ? 'bg-emerald-500/10 border-emerald-accent text-white shadow-lg shadow-emerald-500/5' 
+                              : 'bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-8 w-11 bg-slate-900/60 rounded-xl overflow-hidden border border-card-border flex items-center justify-center shrink-0">
+                              {chan.logo_url ? (
+                                <img src={chan.logo_url} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <Tv className="h-4.5 w-4.5 text-slate-500" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-black truncate block">{chan.name}</span>
+                              <span className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mt-0.5">
+                                {isM3u ? '📁 M3U Playlist' : '📺 Direct Stream'}
+                              </span>
+                            </div>
+                          </div>
+                          {isPlaying && (
+                            <span className="text-[9px] font-black text-emerald-accent uppercase tracking-widest shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

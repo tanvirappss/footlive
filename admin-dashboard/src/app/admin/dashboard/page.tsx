@@ -11,7 +11,9 @@ import {
   Eye, 
   TrendingUp, 
   TrendingDown, 
-  BellRing
+  BellRing,
+  Upload,
+  Check
 } from 'lucide-react';
 import {
   AreaChart,
@@ -62,9 +64,20 @@ export default function DashboardPage() {
   const [updatingTicker, setUpdatingTicker] = useState(false);
   const [tickerSuccess, setTickerSuccess] = useState(false);
 
+  // Site Identity States
+  const [siteName, setSiteName] = useState('WORLD CUP 2026');
+  const [siteLogoUrl, setSiteLogoUrl] = useState('');
+  const [siteLogoFile, setSiteLogoFile] = useState<File | null>(null);
+  const [showCounters, setShowCounters] = useState(true);
+  const [updatingBranding, setUpdatingBranding] = useState(false);
+  const [brandingSuccess, setBrandingSuccess] = useState(false);
+
   useEffect(() => {
     if (tickerData) {
-      setTickerText(tickerData.ticker_text);
+      setTickerText(tickerData.ticker_text || '');
+      setSiteName(tickerData.site_name || 'WORLD CUP 2026');
+      setSiteLogoUrl(tickerData.logo_url || '');
+      setShowCounters(tickerData.show_counters !== false); // default to true
     }
   }, [tickerData]);
 
@@ -94,6 +107,65 @@ export default function DashboardPage() {
       alert('Failed to update ticker settings');
     } finally {
       setUpdatingTicker(false);
+    }
+  };
+
+  const uploadSiteLogo = async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_logo_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `site/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('teams')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
+
+  const handleBrandingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingBranding(true);
+    setBrandingSuccess(false);
+
+    try {
+      let finalLogoUrl = siteLogoUrl;
+
+      if (siteLogoFile) {
+        finalLogoUrl = await uploadSiteLogo(siteLogoFile);
+      }
+
+      const updateData = {
+        site_name: siteName,
+        logo_url: finalLogoUrl || null,
+        show_counters: showCounters,
+        updated_at: new Date().toISOString()
+      };
+
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update(updateData)
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([updateData]);
+        if (error) throw error;
+      }
+
+      setBrandingSuccess(true);
+      refetchTicker();
+      setSiteLogoFile(null);
+      setTimeout(() => setBrandingSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update website branding settings');
+    } finally {
+      setUpdatingBranding(false);
     }
   };
 
@@ -232,6 +304,157 @@ export default function DashboardPage() {
           {tickerSuccess && (
             <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Ticker text updated successfully!</p>
           )}
+        </div>
+
+        {/* Website Identity & Branding Settings Form */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-6">
+          <div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Tv className="h-5 w-5 text-emerald-accent" />
+              Website Branding & Analytics Settings
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Configure your website's name, logo icon, and real-time statistics counters.</p>
+          </div>
+
+          <form onSubmit={handleBrandingSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Site Name and Counters Toggle */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Website Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={siteName}
+                    onChange={(e) => setSiteName(e.target.value)}
+                    placeholder="e.g. WORLD CUP 2026"
+                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Total Views & Live Viewers Count</label>
+                  <div className="flex items-center gap-3 p-3 bg-slate-950/60 border border-slate-900 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setShowCounters(!showCounters)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-0 ${
+                        showCounters ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          showCounters ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <div>
+                      <span className="text-xs font-extrabold text-white block">Enable Real-Time Counters</span>
+                      <span className="text-[10px] text-slate-500 block">Show total views and active concurrent viewers on footer</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Logo Settings */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Custom Logo URL</label>
+                    <input
+                      type="text"
+                      value={siteLogoUrl}
+                      onChange={(e) => {
+                        setSiteLogoUrl(e.target.value);
+                        setSiteLogoFile(null); // Clear file upload if manually entering URL
+                      }}
+                      placeholder="https://example.com/logo.png"
+                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                    />
+                  </div>
+
+                  <div className="flex items-end justify-center">
+                    <div className="h-12 w-12 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                      {siteLogoFile ? (
+                        <img
+                          src={URL.createObjectURL(siteLogoFile)}
+                          alt="Preview"
+                          className="h-full w-full object-contain p-1"
+                        />
+                      ) : siteLogoUrl ? (
+                        <img
+                          src={siteLogoUrl}
+                          alt="Site Logo"
+                          className="h-full w-full object-contain p-1"
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-600 font-extrabold">No Logo</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Logo Icon File</label>
+                  <label className="flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
+                    <Upload className="h-5 w-5 text-slate-500 shrink-0" />
+                    <span className="text-xs text-slate-400 font-semibold truncate">
+                      {siteLogoFile ? siteLogoFile.name : 'Upload logo file (PNG/SVG recommended)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setSiteLogoFile(file);
+                        if (file) setSiteLogoUrl(''); // Clear text input if uploading file
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Recommendations Alert Box */}
+            <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl space-y-2.5">
+              <span className="text-[10px] text-emerald-accent font-black uppercase tracking-wider block">💡 LOGO SIZE GUIDANCE & RECOMMENDATIONS</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <p className="font-extrabold text-white">Worldwide Standard Branding Sizes:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-slate-400 font-medium">
+                    <li>Landscape Header Logo: <strong className="text-slate-300">250px × 150px</strong> or <strong className="text-slate-300">400px × 100px</strong></li>
+                    <li>Square App / Favicon Icon: <strong className="text-slate-300">512px × 512px</strong> (High-DPI display standard)</li>
+                  </ul>
+                </div>
+                <div className="space-y-1">
+                  <p className="font-extrabold text-white">Recommended for this Website's Layout:</p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-slate-400 font-medium">
+                    <li>Header Square Icon: <strong className="text-emerald-accent">32px × 32px</strong> or <strong className="text-emerald-accent">48px × 48px</strong></li>
+                    <li>Header Banner/Logo: <strong className="text-emerald-accent">120px × 32px</strong> (Height is limited to 32px for spacing)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Form footer */}
+            <div className="flex items-center justify-between border-t border-card-border pt-4">
+              {brandingSuccess ? (
+                <p className="text-xs text-emerald-accent font-bold flex items-center gap-1 animate-pulse">
+                  <Check className="h-4 w-4" /> Branding settings saved successfully!
+                </p>
+              ) : (
+                <div />
+              )}
+              <button
+                type="submit"
+                disabled={updatingBranding}
+                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {updatingBranding ? 'Saving Settings...' : 'Save Branding'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Graphs section */}
