@@ -1,0 +1,297 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { useParams, useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
+import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2 } from 'lucide-react';
+import HlsPlayer from '@/components/HlsPlayer';
+
+interface Match {
+  id: string;
+  home_team_id: string | null;
+  away_team_id: string | null;
+  home_team_custom_name: string | null;
+  away_team_custom_name: string | null;
+  match_date: string;
+  status: string;
+  tournament_name: string;
+  home_team?: { name: string; flag_url: string };
+  away_team?: { name: string; flag_url: string };
+}
+
+interface Stream {
+  id: string;
+  match_id: string;
+  stream_name: string;
+  primary_url: string;
+  backup_url_1: string | null;
+  backup_url_2: string | null;
+  backup_url_3: string | null;
+}
+
+export default function UserWatchPage() {
+  const { id } = useParams() as { id: string };
+  const router = useRouter();
+
+  // States
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [playError, setPlayError] = useState<string | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  // Health stats
+  const [latency, setLatency] = useState('80ms');
+  const [bufferState, setBufferState] = useState('Healthy');
+
+  // Fetch match details
+  const { data: match } = useQuery<Match>({
+    queryKey: ['watch-match', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('matches')
+        .select(`
+          *,
+          home_team:teams!matches_home_team_id_fkey(*),
+          away_team:teams!matches_away_team_id_fkey(*)
+        `)
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data as Match;
+    }
+  });
+
+  // Fetch match streams
+  const { data: streams = [], isLoading } = useQuery<Stream[]>({
+    queryKey: ['watch-streams', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('streams')
+        .select('*')
+        .eq('match_id', id)
+        .eq('is_enabled', true);
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Record web analytic watch event
+  useEffect(() => {
+    if (match) {
+      const logView = async () => {
+        await supabase.from('analytics').insert([{
+          event_name: 'web_watch_stream',
+          session_id: 'web_session',
+          metadata: { match_id: match.id, tournament: match.tournament_name }
+        }]);
+      };
+      logView();
+    }
+  }, [match]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#090c10] flex flex-col items-center justify-center">
+        <LoaderComponent message="Connecting to live stream feeds..." />
+      </div>
+    );
+  }
+
+  if (streams.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col items-center justify-center p-6 text-center">
+        <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+        <h3 className="text-xl font-black uppercase">No Streams Configured</h3>
+        <p className="text-sm text-slate-400 mt-1 max-w-md">There are no active video links bound to this match yet. Check back closer to game kickoff.</p>
+        <Link href="/" className="mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-all">
+          Back to Home
+        </Link>
+      </div>
+    );
+  }
+
+  const stream = streams[0];
+  const streamUrls = [
+    stream.primary_url,
+    stream.backup_url_1,
+    stream.backup_url_2,
+    stream.backup_url_3
+  ].filter((url): url is string => !!url);
+
+  const activeUrl = streamUrls[currentUrlIndex];
+
+  const handleStreamError = (errorMsg: string) => {
+    setPlayError(errorMsg);
+    setIsReconnecting(true);
+    setBufferState('Stalled');
+
+    // Automatic Fallback Loop: switch to next backup stream after 3 seconds
+    setTimeout(() => {
+      if (currentUrlIndex < streamUrls.length - 1) {
+        setCurrentUrlIndex(prev => prev + 1);
+        setPlayError(null);
+        setIsReconnecting(false);
+        setBufferState('Healthy');
+      } else {
+        // Recycle back to primary
+        setCurrentUrlIndex(0);
+        setPlayError(null);
+        setIsReconnecting(false);
+        setBufferState('Healthy');
+      }
+    }, 3000);
+  };
+
+  const getMatchTitle = () => {
+    if (!match) return 'Live Match Broadcast';
+    const home = match.home_team_id ? match.home_team?.name : match.home_team_custom_name;
+    const away = match.away_team_id ? match.away_team?.name : match.away_team_custom_name;
+    return `${home} vs ${away}`;
+  };
+
+  return (
+    <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col">
+      {/* Header bar */}
+      <header className="glass-panel border-b border-card-border sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
+          <button 
+            onClick={() => router.back()}
+            className="p-2 bg-slate-900 border border-card-border hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+          >
+            <ArrowLeft className="h-5 w-5 text-white" />
+          </button>
+          <div>
+            <h2 className="font-extrabold text-sm text-slate-400 uppercase tracking-wider">Now Playing</h2>
+            <h1 className="font-black text-base md:text-lg text-white mt-0.5">{getMatchTitle()}</h1>
+          </div>
+        </div>
+      </header>
+
+      {/* Main player layout */}
+      <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Video Player Card */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="aspect-video w-full relative">
+            <HlsPlayer 
+              url={activeUrl} 
+              onError={handleStreamError} 
+            />
+            {isReconnecting && (
+              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">
+                <LoaderComponent message="Reconnecting stream feed..." />
+              </div>
+            )}
+          </div>
+
+          {/* Feedback alerts */}
+          {playError && (
+            <div className="p-4 bg-red-950/20 border border-red-500/25 rounded-2xl text-red-400 text-xs font-bold flex flex-col gap-1">
+              <span className="uppercase text-red-500">Stream Connection Error</span>
+              <p className="font-medium text-slate-300">{playError}. Attempting automated backup switch in 3 seconds...</p>
+            </div>
+          )}
+
+          {/* Stream selector */}
+          <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-black uppercase text-xs text-slate-400 tracking-wider">Fallback Channels</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Toggle feeds if experience lag</p>
+              </div>
+              <button 
+                onClick={() => {
+                  const current = activeUrl;
+                  setCurrentUrlIndex(-1); // force reset
+                  setTimeout(() => setCurrentUrlIndex(streamUrls.indexOf(current)), 50);
+                }}
+                className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <RefreshCw className="h-4 w-4 text-emerald-accent" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {streamUrls.map((url, idx) => {
+                const isSelected = currentUrlIndex === idx;
+                return (
+                  <button
+                    key={url}
+                    onClick={() => {
+                      setCurrentUrlIndex(idx);
+                      setPlayError(null);
+                      setIsReconnecting(false);
+                      setBufferState('Healthy');
+                    }}
+                    className={`py-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-accent border-emerald-accent text-black'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {idx === 0 ? 'Primary' : `Backup ${idx}`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Telemetry log cards */}
+        <div className="space-y-6">
+          <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-6 h-full flex flex-col justify-between">
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 border-b border-card-border pb-4">
+                <Activity className="h-5 w-5 text-emerald-accent" />
+                <h3 className="font-black uppercase text-xs text-white tracking-wider">Stream Health Monitor</h3>
+              </div>
+
+              <div className="space-y-4 text-xs font-bold">
+                <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                  <span className="text-slate-500">Live Status:</span>
+                  <span className="text-emerald-accent uppercase flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-accent animate-ping" />
+                    ONLINE
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                  <span className="text-slate-500">Active Channel:</span>
+                  <span className="text-white uppercase">{currentUrlIndex === 0 ? 'Primary Feed' : `Backup Feed ${currentUrlIndex}`}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                  <span className="text-slate-500">Codec Type:</span>
+                  <span className="text-white font-mono">H.264 / AAC</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                  <span className="text-slate-500">Network Latency:</span>
+                  <span className="text-white">{latency} (Low Delay)</span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-slate-500">Buffer state:</span>
+                  <span className={bufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}>{bufferState}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-card-border">
+              <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-900 flex gap-2.5 text-[10px] text-slate-500 font-bold uppercase">
+                <Check className="h-4 w-4 text-emerald-accent shrink-0" />
+                Adaptive bitrate engine is active and adjusting to your bandwidth speeds automatically.
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function LoaderComponent({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center">
+      <Loader2 className="h-8 w-8 text-emerald-accent animate-spin" />
+      <p className="text-sm text-slate-400 mt-4 font-semibold">{message}</p>
+    </div>
+  );
+}

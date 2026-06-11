@@ -1,0 +1,9 @@
+# netlify.toml
+# Netlify Configuration for Next.js Admin Dashboard
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

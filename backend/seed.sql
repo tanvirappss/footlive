@@ -1,0 +1,65 @@
+-- seed.sql
+-- Seed 48 Teams for FIFA World Cup 2026
+
+INSERT INTO teams (name, short_name, country_name, country_code, flag_url, logo_url, region, is_enabled) VALUES
+('United States', 'USA', 'United States', 'US', 'https://flagcdn.com/w320/us.png', 'https://flagcdn.com/w320/us.png', 'CONCACAF', true),
+('Mexico', 'MEX', 'Mexico', 'MX', 'https://flagcdn.com/w320/mx.png', 'https://flagcdn.com/w320/mx.png', 'CONCACAF', true),
+('Canada', 'CAN', 'Canada', 'CA', 'https://flagcdn.com/w320/ca.png', 'https://flagcdn.com/w320/ca.png', 'CONCACAF', true),
+('Argentina', 'ARG', 'Argentina', 'AR', 'https://flagcdn.com/w320/ar.png', 'https://flagcdn.com/w320/ar.png', 'CONMEBOL', true),
+('Brazil', 'BRA', 'Brazil', 'BR', 'https://flagcdn.com/w320/br.png', 'https://flagcdn.com/w320/br.png', 'CONMEBOL', true),
+('France', 'FRA', 'France', 'FR', 'https://flagcdn.com/w320/fr.png', 'https://flagcdn.com/w320/fr.png', 'UEFA', true),
+('Germany', 'GER', 'Germany', 'DE', 'https://flagcdn.com/w320/de.png', 'https://flagcdn.com/w320/de.png', 'UEFA', true),
+('Spain', 'ESP', 'Spain', 'ES', 'https://flagcdn.com/w320/es.png', 'https://flagcdn.com/w320/es.png', 'UEFA', true),
+('Portugal', 'POR', 'Portugal', 'PT', 'https://flagcdn.com/w320/pt.png', 'https://flagcdn.com/w320/pt.png', 'UEFA', true),
+('England', 'ENG', 'England', 'GB-ENG', 'https://flagcdn.com/w320/gb-eng.png', 'https://flagcdn.com/w320/gb-eng.png', 'UEFA', true),
+('Netherlands', 'NED', 'Netherlands', 'NL', 'https://flagcdn.com/w320/nl.png', 'https://flagcdn.com/w320/nl.png', 'UEFA', true),
+('Italy', 'ITA', 'Italy', 'IT', 'https://flagcdn.com/w320/it.png', 'https://flagcdn.com/w320/it.png', 'UEFA', true),
+('Belgium', 'BEL', 'Belgium', 'BE', 'https://flagcdn.com/w320/be.png', 'https://flagcdn.com/w320/be.png', 'UEFA', true),
+('Croatia', 'CRO', 'Croatia', 'HR', 'https://flagcdn.com/w320/hr.png', 'https://flagcdn.com/w320/hr.png', 'UEFA', true),
+('Uruguay', 'URU', 'Uruguay', 'UY', 'https://flagcdn.com/w320/uy.png', 'https://flagcdn.com/w320/uy.png', 'CONMEBOL', true),
+('Colombia', 'COL', 'Colombia', 'CO', 'https://flagcdn.com/w320/co.png', 'https://flagcdn.com/w320/co.png', 'CONMEBOL', true),
+('Morocco', 'MAR', 'Morocco', 'MA', 'https://flagcdn.com/w320/ma.png', 'https://flagcdn.com/w320/ma.png', 'CAF', true),
+('Japan', 'JPN', 'Japan', 'JP', 'https://flagcdn.com/w320/jp.png', 'https://flagcdn.com/w320/jp.png', 'AFC', true),
+('Senegal', 'SEN', 'Senegal', 'SN', 'https://flagcdn.com/w320/sn.png', 'https://flagcdn.com/w320/sn.png', 'CAF', true),
+('South Korea', 'KOR', 'South Korea', 'KR', 'https://flagcdn.com/w320/kr.png', 'https://flagcdn.com/w320/kr.png', 'AFC', true),
+('Australia', 'AUS', 'Australia', 'AU', 'https://flagcdn.com/w320/au.png', 'https://flagcdn.com/w320/au.png', 'AFC', true),
+('Saudi Arabia', 'KSA', 'Saudi Arabia', 'SA', 'https://flagcdn.com/w320/sa.png', 'https://flagcdn.com/w320/sa.png', 'AFC', true),
+('Iran', 'IRN', 'Iran', 'IR', 'https://flagcdn.com/w320/ir.png', 'https://flagcdn.com/w320/ir.png', 'AFC', true),
+('Ecuador', 'ECU', 'Ecuador', 'EC', 'https://flagcdn.com/w320/ec.png', 'https://flagcdn.com/w320/ec.png', 'CONMEBOL', true),
+('Switzerland', 'SUI', 'Switzerland', 'CH', 'https://flagcdn.com/w320/ch.png', 'https://flagcdn.com/w320/ch.png', 'UEFA', true),
+('Denmark', 'DEN', 'Denmark', 'DK', 'https://flagcdn.com/w320/dk.png', 'https://flagcdn.com/w320/dk.png', 'UEFA', true),
+('Poland', 'POL', 'Poland', 'PL', 'https://flagcdn.com/w320/pl.png', 'https://flagcdn.com/w320/pl.png', 'UEFA', true),
+('Ukraine', 'UKR', 'Ukraine', 'UA', 'https://flagcdn.com/w320/ua.png', 'https://flagcdn.com/w320/ua.png', 'UEFA', true),
+('Sweden', 'SWE', 'Sweden', 'SE', 'https://flagcdn.com/w320/se.png', 'https://flagcdn.com/w320/se.png', 'UEFA', true),
+('Wales', 'WAL', 'Wales', 'GB-WLS', 'https://flagcdn.com/w320/gb-wls.png', 'https://flagcdn.com/w320/gb-wls.png', 'UEFA', true),
+('Scotland', 'SCO', 'Scotland', 'GB-SCT', 'https://flagcdn.com/w320/gb-sct.png', 'https://flagcdn.com/w320/gb-sct.png', 'UEFA', true),
+('Turkey', 'TUR', 'Turkey', 'TR', 'https://flagcdn.com/w320/tr.png', 'https://flagcdn.com/w320/tr.png', 'UEFA', true),
+('Austria', 'AUT', 'Austria', 'AT', 'https://flagcdn.com/w320/at.png', 'https://flagcdn.com/w320/at.png', 'UEFA', true),
+('Chile', 'CHI', 'Chile', 'CL', 'https://flagcdn.com/w320/cl.png', 'https://flagcdn.com/w320/cl.png', 'CONMEBOL', true),
+('Peru', 'PER', 'Peru', 'PE', 'https://flagcdn.com/w320/pe.png', 'https://flagcdn.com/w320/pe.png', 'CONMEBOL', true),
+('Egypt', 'EGY', 'Egypt', 'EG', 'https://flagcdn.com/w320/eg.png', 'https://flagcdn.com/w320/eg.png', 'CAF', true),
+('Nigeria', 'NGA', 'Nigeria', 'NG', 'https://flagcdn.com/w320/ng.png', 'https://flagcdn.com/w320/ng.png', 'CAF', true),
+('Cameroon', 'CMR', 'Cameroon', 'CM', 'https://flagcdn.com/w320/cm.png', 'https://flagcdn.com/w320/cm.png', 'CAF', true),
+('Ghana', 'GHA', 'Ghana', 'GH', 'https://flagcdn.com/w320/gh.png', 'https://flagcdn.com/w320/gh.png', 'CAF', true),
+('Algeria', 'ALG', 'Algeria', 'DZ', 'https://flagcdn.com/w320/dz.png', 'https://flagcdn.com/w320/dz.png', 'CAF', true),
+('Tunisia', 'TUN', 'Tunisia', 'TN', 'https://flagcdn.com/w320/tn.png', 'https://flagcdn.com/w320/tn.png', 'CAF', true),
+('Costa Rica', 'CRC', 'Costa Rica', 'CR', 'https://flagcdn.com/w320/cr.png', 'https://flagcdn.com/w320/cr.png', 'CONCACAF', true),
+('Jamaica', 'JAM', 'Jamaica', 'JM', 'https://flagcdn.com/w320/jm.png', 'https://flagcdn.com/w320/jm.png', 'CONCACAF', true),
+('Panama', 'PAN', 'Panama', 'PA', 'https://flagcdn.com/w320/pa.png', 'https://flagcdn.com/w320/pa.png', 'CONCACAF', true),
+('New Zealand', 'NZL', 'New Zealand', 'NZ', 'https://flagcdn.com/w320/nz.png', 'https://flagcdn.com/w320/nz.png', 'OFC', true),
+('Qatar', 'QAT', 'Qatar', 'QA', 'https://flagcdn.com/w320/qa.png', 'https://flagcdn.com/w320/qa.png', 'AFC', true),
+('Ivory Coast', 'CIV', 'Ivory Coast', 'CI', 'https://flagcdn.com/w320/ci.png', 'https://flagcdn.com/w320/ci.png', 'CAF', true),
+('South Africa', 'RSA', 'South Africa', 'ZA', 'https://flagcdn.com/w320/za.png', 'https://flagcdn.com/w320/za.png', 'CAF', true)
+ON CONFLICT (name) DO UPDATE SET
+  short_name = EXCLUDED.short_name,
+  country_name = EXCLUDED.country_name,
+  country_code = EXCLUDED.country_code,
+  flag_url = EXCLUDED.flag_url,
+  logo_url = EXCLUDED.logo_url,
+  region = EXCLUDED.region;
+
+-- Add default ad network entries
+INSERT INTO ad_networks (network_name, is_enabled, verification_code, header_script, footer_script, banner_script, native_script, social_bar_script, popunder_script) VALUES
+('Google AdSense', false, '<!-- adsense-verify -->', '<!-- adsense-header -->', '<!-- adsense-footer -->', '', '', '', ''),
+('Adsterra', false, '', '', '', '<!-- adsterra-banner -->', '<!-- adsterra-native -->', '<!-- adsterra-social -->', '<!-- adsterra-popunder -->')
+ON CONFLICT (network_name) DO NOTHING;
