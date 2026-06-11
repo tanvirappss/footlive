@@ -51,6 +51,25 @@ interface Match {
   away_team?: Team;
 }
 
+const standardStadiums = [
+  'MetLife Stadium (New York/New Jersey)',
+  'SoFi Stadium (Los Angeles)',
+  'AT&T Stadium (Dallas)',
+  'Arrowhead Stadium (Kansas City)',
+  'Mercedes-Benz Stadium (Atlanta)',
+  'Lincoln Financial Field (Philadelphia)',
+  'Lumen Field (Seattle)',
+  'Levi\'s Stadium (San Francisco)',
+  'Gillette Stadium (Boston)',
+  'NRG Stadium (Houston)',
+  'Hard Rock Stadium (Miami)',
+  'Estadio Azteca (Mexico City)',
+  'Estadio BBVA (Monterrey)',
+  'Estadio Akron (Guadalajara)',
+  'BC Place (Vancouver)',
+  'BMO Field (Toronto)'
+];
+
 export default function MatchesPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,6 +95,7 @@ export default function MatchesPage() {
   const [matchDate, setMatchDate] = useState('');
   const [matchTime, setMatchTime] = useState('');
   const [stadiumName, setStadiumName] = useState('');
+  const [selectedStadiumSelect, setSelectedStadiumSelect] = useState('custom');
   const [status, setStatus] = useState('upcoming');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
@@ -130,7 +150,8 @@ export default function MatchesPage() {
     const now = new Date();
     setMatchDate(now.toISOString().split('T')[0]);
     setMatchTime(now.toTimeString().split(' ')[0].substring(0, 5));
-    setStadiumName('MetLife Stadium');
+    setSelectedStadiumSelect('MetLife Stadium (New York/New Jersey)');
+    setStadiumName('MetLife Stadium (New York/New Jersey)');
     setStatus('upcoming');
     setHomeScore(0);
     setAwayScore(0);
@@ -154,6 +175,14 @@ export default function MatchesPage() {
     setMatchDate(match.match_date);
     setMatchTime(match.match_time.substring(0, 5));
     setStadiumName(match.stadium_name);
+    
+    const isStandard = standardStadiums.includes(match.stadium_name);
+    if (isStandard) {
+      setSelectedStadiumSelect(match.stadium_name);
+    } else {
+      setSelectedStadiumSelect('custom');
+    }
+
     setStatus(match.status);
     setHomeScore(match.home_score);
     setAwayScore(match.away_score);
@@ -220,10 +249,29 @@ export default function MatchesPage() {
           .eq('id', editingMatch.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('matches')
-          .insert([matchData]);
+          .insert([matchData])
+          .select()
+          .single();
         if (error) throw error;
+
+        // Auto-create stream record in the streams table for immediate configuration
+        if (data) {
+          const { error: streamError } = await supabase
+            .from('streams')
+            .insert([{
+              match_id: data.id,
+              stream_name: 'Main Server',
+              primary_url: '',
+              backup_url_1: '',
+              backup_url_2: '',
+              backup_url_3: '',
+              is_enabled: true,
+              urls: []
+            }]);
+          if (streamError) console.error('Auto stream creation failed:', streamError);
+        }
       }
     },
     onSuccess: () => {
@@ -488,13 +536,36 @@ export default function MatchesPage() {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Stadium Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={stadiumName}
-                      onChange={(e) => setStadiumName(e.target.value)}
-                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                    />
+                    <select
+                      value={selectedStadiumSelect}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedStadiumSelect(val);
+                        if (val !== 'custom') {
+                          setStadiumName(val);
+                        } else {
+                          setStadiumName('');
+                        }
+                      }}
+                      className="w-full px-4 py-3 glass-input rounded-xl text-sm appearance-none cursor-pointer mb-2"
+                    >
+                      <option value="" disabled>-- Select Stadium --</option>
+                      {standardStadiums.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                      <option value="custom">✍️ Manually Enter Custom Stadium</option>
+                    </select>
+
+                    {selectedStadiumSelect === 'custom' && (
+                      <input
+                        type="text"
+                        required
+                        value={stadiumName}
+                        onChange={(e) => setStadiumName(e.target.value)}
+                        placeholder="Type stadium name manually..."
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm animate-fadeIn"
+                      />
+                    )}
                   </div>
                 </div>
 

@@ -303,7 +303,7 @@ export default function UserHomePage() {
         {/* Banner Section */}
         <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
           <img 
-            src="/banner.png" 
+            src={ticker?.banner_url || "/banner.png"} 
             alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
             className="w-full h-auto block" 
           />
