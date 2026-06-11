@@ -11,7 +11,8 @@ import {
   Calendar as CalendarIcon, 
   Loader2, 
   Bell, 
-  ShieldAlert
+  ShieldAlert,
+  X
 } from 'lucide-react';
 
 interface Team {
@@ -53,6 +54,21 @@ interface Announcement {
 
 export default function UserHomePage() {
   const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'finished'>('live');
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
+
+  // Fetch ticker settings
+  const { data: ticker } = useQuery({
+    queryKey: ['user-ticker'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticker_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data?.[0] || null;
+    }
+  });
 
   // Fetch announcements
   const { data: announcements = [] } = useQuery<Announcement[]>({
@@ -126,15 +142,35 @@ export default function UserHomePage() {
             </div>
           </div>
 
-          <Link
-            href="/admin"
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition-all"
+          <button
+            onClick={() => setIsNoticeModalOpen(true)}
+            className="relative p-2.5 bg-slate-900 hover:bg-slate-800 text-white border border-card-border rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            title="View Announcements"
           >
-            <ShieldAlert className="h-4 w-4 text-emerald-accent" />
-            Admin Console
-          </Link>
+            <Bell className="h-5 w-5 text-emerald-accent" />
+            {announcements.length > 0 && (
+              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-600 border border-[#090c10] text-[9px] font-black text-white flex items-center justify-center">
+                {announcements.length}
+              </span>
+            )}
+          </button>
         </div>
       </header>
+
+      {/* Ticker Marquee Headline */}
+      {ticker && ticker.is_enabled && (
+        <div className="bg-gradient-to-r from-red-950/80 via-[#0f1422] to-red-950/80 border-b border-card-border py-2 relative overflow-hidden flex items-center h-9 z-40">
+          <div className="absolute left-0 top-0 bottom-0 px-3.5 bg-red-600 text-white font-black uppercase tracking-wider text-[9px] flex items-center justify-center z-10 shadow-md">
+            ⚡ NEWS TICKER
+          </div>
+          
+          <div className="w-full whitespace-nowrap overflow-hidden">
+            <span className="animate-marquee text-xs font-extrabold text-white tracking-wide">
+              {ticker.ticker_text}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Announcements Slider */}
       {announcements.length > 0 && (
@@ -307,6 +343,84 @@ export default function UserHomePage() {
           </div>
         )}
       </main>
+
+      {/* Footer credits */}
+      <footer className="border-t border-card-border bg-[#07090d]/60 py-6 text-center text-xs font-bold text-slate-500 uppercase tracking-widest mt-auto">
+        Developed by{' '}
+        <a 
+          href="https://www.tanvirh.pro" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-emerald-accent hover:text-emerald-400 underline decoration-dotted transition-colors"
+        >
+          Tanvir Hossain
+        </a>
+      </footer>
+
+      {/* Notifications / Announcements Modal */}
+      {isNoticeModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg glass-panel p-6 rounded-3xl space-y-6 relative border border-card-border shadow-2xl">
+            <div className="flex justify-between items-center pb-3 border-b border-card-border">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-emerald-accent" />
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                  Important Broadcasts ({announcements.length})
+                </h3>
+              </div>
+              <button 
+                onClick={() => setIsNoticeModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-4">
+              {announcements.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs font-semibold uppercase">
+                  No active broadcasts found.
+                </div>
+              ) : (
+                announcements.map((ann) => {
+                  const isHighPriority = ann.priority === 'high';
+                  return (
+                    <div 
+                      key={ann.id} 
+                      className={`p-4 rounded-2xl border transition-all ${
+                        isHighPriority 
+                          ? 'bg-red-500/5 border-red-500/20' 
+                          : 'bg-slate-950/40 border-slate-900'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <h4 className="text-sm font-black text-white tracking-wide">{ann.title}</h4>
+                        {isHighPriority && (
+                          <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-[8px] font-black uppercase tracking-wider">
+                            Urgent
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-300 font-medium mt-1.5 leading-relaxed">
+                        {ann.message}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-card-border flex justify-end">
+              <button
+                onClick={() => setIsNoticeModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all border border-card-border cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import AdminLayout from '@/components/AdminLayout';
@@ -44,6 +44,59 @@ const mockMatchesData = [
 ];
 
 export default function DashboardPage() {
+  // Fetch ticker settings
+  const { data: tickerData, refetch: refetchTicker } = useQuery({
+    queryKey: ['ticker-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticker_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data?.[0] || null;
+    }
+  });
+
+  const [tickerText, setTickerText] = useState('');
+  const [updatingTicker, setUpdatingTicker] = useState(false);
+  const [tickerSuccess, setTickerSuccess] = useState(false);
+
+  useEffect(() => {
+    if (tickerData) {
+      setTickerText(tickerData.ticker_text);
+    }
+  }, [tickerData]);
+
+  const handleTickerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingTicker(true);
+    setTickerSuccess(false);
+
+    try {
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update({ ticker_text: tickerText, updated_at: new Date().toISOString() })
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([{ ticker_text: tickerText }]);
+        if (error) throw error;
+      }
+      setTickerSuccess(true);
+      refetchTicker();
+      setTimeout(() => setTickerSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update ticker settings');
+    } finally {
+      setUpdatingTicker(false);
+    }
+  };
+
   // Fetch real database statistics
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -147,6 +200,38 @@ export default function DashboardPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Headline Ticker Settings Form */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+          <div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-emerald-accent" />
+              Animated TV Headline Ticker
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Update the marquee text scrolling under the main header on the user homepage.</p>
+          </div>
+          
+          <form onSubmit={handleTickerSubmit} className="flex flex-col sm:flex-row gap-4">
+            <input
+              type="text"
+              required
+              value={tickerText}
+              onChange={(e) => setTickerText(e.target.value)}
+              className="flex-1 px-4 py-3.5 glass-input rounded-xl text-sm"
+              placeholder="e.g. 📢 Welcome to the FIFA World Cup 2026 Live Streaming Portal! Enjoy HD streams! 📢"
+            />
+            <button
+              type="submit"
+              disabled={updatingTicker}
+              className="px-6 py-3.5 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {updatingTicker ? 'Saving...' : 'Save Ticker'}
+            </button>
+          </form>
+          {tickerSuccess && (
+            <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Ticker text updated successfully!</p>
+          )}
         </div>
 
         {/* Graphs section */}

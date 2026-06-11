@@ -194,8 +194,8 @@ export default function MatchesPage() {
 
       const matchData = {
         tournament_name: tournamentName,
-        home_team_id: homeTeamType === 'existing' ? homeTeamId : null,
-        away_team_id: awayTeamType === 'existing' ? awayTeamId : null,
+        home_team_id: (homeTeamType === 'existing' && homeTeamId !== '') ? homeTeamId : null,
+        away_team_id: (awayTeamType === 'existing' && awayTeamId !== '') ? awayTeamId : null,
         home_team_custom_name: homeTeamType === 'custom' ? homeCustomName : null,
         home_team_custom_flag: homeTeamType === 'custom' ? homeCustomFlagUrl : null,
         home_team_custom_logo: homeTeamType === 'custom' ? homeCustomFlagUrl : null,
