@@ -301,19 +301,12 @@ export default function UserHomePage() {
       <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 space-y-8">
         
         {/* Banner Section */}
-        <section className="glass-panel p-8 md:p-12 rounded-3xl relative overflow-hidden bg-gradient-to-br from-[#10b981]/10 to-transparent border border-card-border">
-          <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-80 h-80 bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none" />
-          <div className="max-w-xl space-y-4 relative z-10">
-            <span className="px-3 py-1 bg-emerald-accent/20 border border-emerald-accent/30 text-emerald-accent text-[10px] font-black uppercase tracking-wider rounded-lg">
-              Live Sports Broadcasts
-            </span>
-            <h2 className="text-3xl md:text-5xl font-black text-white leading-tight uppercase tracking-tight">
-              Watch FIFA World Cup 2026 Live streams
-            </h2>
-            <p className="text-sm md:text-base text-slate-300 font-medium">
-              Free, instant access to all matches in ultra high quality. No sign-ups required. Connect your players and enjoy latency-free soccer feeds.
-            </p>
-          </div>
+        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+          <img 
+            src="/banner.png" 
+            alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
+            className="w-full h-auto block" 
+          />
         </section>
 
         {/* Tab Row */}
