@@ -390,7 +390,7 @@ export default function UserHomePage() {
               <img 
                 src={ticker.logo_url} 
                 alt={ticker?.site_name || "Site Logo"} 
-                className="h-9 w-auto max-w-[200px] object-contain" 
+                className="h-11 md:h-14 w-auto max-w-[240px] md:max-w-[280px] object-contain hover:scale-[1.02] transition-transform duration-200" 
               />
             ) : (
               <div className="flex items-center gap-3">
