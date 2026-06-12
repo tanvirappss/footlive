@@ -105,81 +105,34 @@ export default function StreamsPage() {
     }
   });
 
+  // Fetch default stream settings
+  const { data: ticker } = useQuery({
+    queryKey: ['admin-ticker-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticker_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data?.[0] || null;
+    }
+  });
+
   const handleImportToggle = (val: 'yes' | 'no') => {
     setImportPreviousLinks(val);
     if (val === 'yes') {
-      // 1. Prioritize finding an existing stream config for the selected match with valid links
-      let targetStream = streams.find(s => {
-        if (s.match_id !== matchId) return false;
-        const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
-        return !!(hasUrls || s.primary_url);
-      });
-
-      // 2. Fall back to any other stream configuration with links
-      if (!targetStream) {
-        targetStream = streams.find(s => {
-          const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
-          return !!(hasUrls || s.primary_url);
-        });
-      }
-
-      if (targetStream) {
-        const previousLinks = Array.isArray(targetStream.urls) && targetStream.urls.length > 0
-          ? targetStream.urls.map(item => ({ ...item }))
-          : [
-              { label: 'Primary Server', url: targetStream.primary_url || '' },
-              { label: 'Backup Server 1', url: targetStream.backup_url_1 || '' },
-              { label: 'Backup Server 2', url: targetStream.backup_url_2 || '' },
-              { label: 'Backup Server 3', url: targetStream.backup_url_3 || '' }
-            ].filter(item => item.url !== '');
-        
-        if (previousLinks.length > 0) {
-          setStreamUrls(previousLinks);
-        } else {
-          alert('No previous stream links found to copy.');
-          setImportPreviousLinks('no');
-        }
+      const defaultStreamsList = (ticker as any)?.default_streams;
+      if (Array.isArray(defaultStreamsList) && defaultStreamsList.length > 0) {
+        setStreamUrls(defaultStreamsList.map(item => ({ ...item })));
       } else {
-        alert('No previous stream configurations found in the database.');
-        setImportPreviousLinks('no');
+        alert('No default stream links configured yet. Please configure them on the Admin Dashboard.');
+        setTimeout(() => setImportPreviousLinks('no'), 50);
       }
     } else {
       setStreamUrls([{ label: 'Primary Server', url: '' }]);
     }
   };
-
-  // Sync stream urls when match selection changes, if Auto-copy is enabled
-  useEffect(() => {
-    if (importPreviousLinks === 'yes' && !editingStream && matchId) {
-      let targetStream = streams.find(s => {
-        if (s.match_id !== matchId) return false;
-        const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
-        return !!(hasUrls || s.primary_url);
-      });
-
-      if (!targetStream) {
-        targetStream = streams.find(s => {
-          const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
-          return !!(hasUrls || s.primary_url);
-        });
-      }
-
-      if (targetStream) {
-        const previousLinks = Array.isArray(targetStream.urls) && targetStream.urls.length > 0
-          ? targetStream.urls.map(item => ({ ...item }))
-          : [
-              { label: 'Primary Server', url: targetStream.primary_url || '' },
-              { label: 'Backup Server 1', url: targetStream.backup_url_1 || '' },
-              { label: 'Backup Server 2', url: targetStream.backup_url_2 || '' },
-              { label: 'Backup Server 3', url: targetStream.backup_url_3 || '' }
-            ].filter(item => item.url !== '');
-        
-        if (previousLinks.length > 0) {
-          setStreamUrls(previousLinks);
-        }
-      }
-    }
-  }, [matchId, importPreviousLinks, streams, editingStream]);
 
   const handleAddClick = () => {
     setEditingStream(null);
@@ -471,7 +424,7 @@ export default function StreamsPage() {
                 {!editingStream && (
                   <div className="space-y-2 p-3.5 bg-slate-950/40 border border-slate-900 rounded-xl">
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                      Do you want to add all previous stream links here?
+                      Do you want to add all default m3u8 links here?
                     </label>
                     <div className="flex gap-4 mt-1">
                       <label className="flex items-center gap-2 text-xs font-extrabold text-white cursor-pointer">
@@ -483,7 +436,7 @@ export default function StreamsPage() {
                           onChange={() => handleImportToggle('yes')}
                           className="accent-emerald-accent"
                         />
-                        Yes (Auto-copy)
+                        Yes (Default list)
                       </label>
                       <label className="flex items-center gap-2 text-xs font-extrabold text-white cursor-pointer">
                         <input

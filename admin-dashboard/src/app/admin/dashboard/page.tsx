@@ -89,6 +89,12 @@ export default function DashboardPage() {
   const [updatingAudio, setUploadingAudio] = useState(false);
   const [audioSuccess, setAudioSuccess] = useState(false);
 
+  // Default Streams States
+  const [defaultStreams, setDefaultStreams] = useState<{ label: string; url: string }[]>([]);
+  const [updatingDefaultStreams, setUpdatingDefaultStreams] = useState(false);
+  const [defaultStreamsSuccess, setDefaultStreamsSuccess] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
   // Fetch real database traffic statistics using optimized RPCs
   const { data: trafficStats } = useQuery({
     queryKey: ['dashboard-traffic-stats'],
@@ -121,6 +127,11 @@ export default function DashboardPage() {
       setViewersOffset(tickerData.viewers_offset || 0);
       setAudioUrl(tickerData.audio_url || '');
       setIsAudioEnabled(tickerData.audio_enabled !== false);
+      if (Array.isArray((tickerData as any).default_streams)) {
+        setDefaultStreams((tickerData as any).default_streams);
+      } else {
+        setDefaultStreams([]);
+      }
     }
   }, [tickerData]);
 
@@ -245,6 +256,78 @@ export default function DashboardPage() {
       alert('Failed to update visitor offset settings');
     } finally {
       setUpdatingCounts(false);
+    }
+  };
+
+  // Drag and Drop Helpers for Default Stream List
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const list = [...defaultStreams];
+    const draggedItem = list[draggedIndex];
+    list.splice(draggedIndex, 1);
+    list.splice(index, 0, draggedItem);
+    
+    setDraggedIndex(index);
+    setDefaultStreams(list);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const moveStreamItem = (index: number, direction: 'up' | 'down') => {
+    const list = [...defaultStreams];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    if (newIndex < 0 || newIndex >= list.length) return;
+    
+    const temp = list[index];
+    list[index] = list[newIndex];
+    list[newIndex] = temp;
+    
+    setDefaultStreams(list);
+  };
+
+  const handleDefaultStreamsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingDefaultStreams(true);
+    setDefaultStreamsSuccess(false);
+
+    try {
+      const filteredStreams = defaultStreams.filter(item => item.label.trim() && item.url.trim());
+
+      const updateData = {
+        default_streams: filteredStreams,
+        updated_at: new Date().toISOString()
+      };
+
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update(updateData)
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([updateData]);
+        if (error) throw error;
+      }
+
+      setDefaultStreamsSuccess(true);
+      refetchTicker();
+      setTimeout(() => setDefaultStreamsSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save default stream links.');
+    } finally {
+      setUpdatingDefaultStreams(false);
     }
   };
 
@@ -632,6 +715,128 @@ export default function DashboardPage() {
                 className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {updatingCounts ? 'Saving...' : 'Save Offsets'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Default m3u8 Links Priority Configuration */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+          <div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Tv className="h-5 w-5 text-emerald-accent" />
+              Default m3u8 Stream Links
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Configure your default streaming servers and fallbacks. These can be auto-copied when adding new match streams. Drag-and-drop or use the arrows to set their priority list order.
+            </p>
+          </div>
+
+          <form onSubmit={handleDefaultStreamsSubmit} className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Priority List ({defaultStreams.length} links)</span>
+              <button
+                type="button"
+                onClick={() => setDefaultStreams([...defaultStreams, { label: `Server ${defaultStreams.length + 1}`, url: '' }])}
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-accent border border-slate-800 text-[10px] font-black uppercase rounded-lg transition-colors cursor-pointer"
+              >
+                + Add More Link
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+              {defaultStreams.length === 0 ? (
+                <div className="text-center py-6 border border-dashed border-card-border rounded-xl">
+                  <p className="text-xs text-slate-500 font-medium">No default links configured yet. Click "+ Add More Link" to begin.</p>
+                </div>
+              ) : (
+                defaultStreams.map((item, idx) => (
+                  <div
+                    key={idx}
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex gap-2 items-center p-2.5 bg-slate-950/40 border border-slate-900/60 rounded-xl cursor-move transition-all ${
+                      draggedIndex === idx ? 'opacity-40 scale-[0.99] border-emerald-500/40' : 'hover:border-slate-800'
+                    }`}
+                  >
+                    {/* Drag Handle & Ordering Indicator */}
+                    <div className="flex flex-col items-center justify-center text-slate-600 px-1 select-none">
+                      <span className="text-[10px] font-black text-slate-500 mb-0.5">#{idx + 1}</span>
+                      <span className="text-[9px]">☰</span>
+                    </div>
+
+                    {/* Form Fields */}
+                    <input
+                      type="text"
+                      required
+                      value={item.label}
+                      onChange={(e) => {
+                        const list = [...defaultStreams];
+                        list[idx].label = e.target.value;
+                        setDefaultStreams(list);
+                      }}
+                      placeholder="Label (e.g. Server 1)"
+                      className="w-1/3 px-3 py-2 glass-input rounded-xl text-xs"
+                    />
+                    <input
+                      type="url"
+                      required
+                      value={item.url}
+                      onChange={(e) => {
+                        const list = [...defaultStreams];
+                        list[idx].url = e.target.value;
+                        setDefaultStreams(list);
+                      }}
+                      placeholder="M3U8 Streaming URL"
+                      className="flex-1 px-3 py-2 glass-input rounded-xl text-xs"
+                    />
+
+                    {/* Reordering & Control Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveStreamItem(idx, 'up')}
+                        className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                        title="Move Up"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === defaultStreams.length - 1}
+                        onClick={() => moveStreamItem(idx, 'down')}
+                        className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                        title="Move Down"
+                      >
+                        ▼
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDefaultStreams(defaultStreams.filter((_, i) => i !== idx))}
+                        className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer"
+                        title="Delete Link"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-between items-center border-t border-card-border pt-4">
+              {defaultStreamsSuccess ? (
+                <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Default stream priority list saved!</p>
+              ) : <div />}
+              <button
+                type="submit"
+                disabled={updatingDefaultStreams}
+                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {updatingDefaultStreams ? 'Saving...' : 'Save Default Links'}
               </button>
             </div>
           </form>
