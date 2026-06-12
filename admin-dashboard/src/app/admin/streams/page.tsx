@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import AdminLayout from '@/components/AdminLayout';
@@ -56,35 +56,6 @@ export default function StreamsPage() {
   const [importPreviousLinks, setImportPreviousLinks] = useState('no');
   const [mutationError, setMutationError] = useState<string | null>(null);
 
-  const handleImportToggle = (val: 'yes' | 'no') => {
-    setImportPreviousLinks(val);
-    if (val === 'yes') {
-      const mostRecentStream = streams[0];
-      if (mostRecentStream) {
-        const previousLinks = Array.isArray(mostRecentStream.urls) && mostRecentStream.urls.length > 0
-          ? mostRecentStream.urls.map(item => ({ ...item }))
-          : [
-              { label: 'Primary Server', url: mostRecentStream.primary_url || '' },
-              { label: 'Backup Server 1', url: mostRecentStream.backup_url_1 || '' },
-              { label: 'Backup Server 2', url: mostRecentStream.backup_url_2 || '' },
-              { label: 'Backup Server 3', url: mostRecentStream.backup_url_3 || '' }
-            ].filter(item => item.url !== '');
-        
-        if (previousLinks.length > 0) {
-          setStreamUrls(previousLinks);
-        } else {
-          alert('No previous stream links found to copy.');
-          setImportPreviousLinks('no');
-        }
-      } else {
-        alert('No previous stream configurations found.');
-        setImportPreviousLinks('no');
-      }
-    } else {
-      setStreamUrls([{ label: 'Primary Server', url: '' }]);
-    }
-  };
-
   // Queries
   const { data: matches = [] } = useQuery<Match[]>({
     queryKey: ['matches-for-streams'],
@@ -133,6 +104,82 @@ export default function StreamsPage() {
       return (data || []) as unknown as Stream[];
     }
   });
+
+  const handleImportToggle = (val: 'yes' | 'no') => {
+    setImportPreviousLinks(val);
+    if (val === 'yes') {
+      // 1. Prioritize finding an existing stream config for the selected match with valid links
+      let targetStream = streams.find(s => {
+        if (s.match_id !== matchId) return false;
+        const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
+        return !!(hasUrls || s.primary_url);
+      });
+
+      // 2. Fall back to any other stream configuration with links
+      if (!targetStream) {
+        targetStream = streams.find(s => {
+          const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
+          return !!(hasUrls || s.primary_url);
+        });
+      }
+
+      if (targetStream) {
+        const previousLinks = Array.isArray(targetStream.urls) && targetStream.urls.length > 0
+          ? targetStream.urls.map(item => ({ ...item }))
+          : [
+              { label: 'Primary Server', url: targetStream.primary_url || '' },
+              { label: 'Backup Server 1', url: targetStream.backup_url_1 || '' },
+              { label: 'Backup Server 2', url: targetStream.backup_url_2 || '' },
+              { label: 'Backup Server 3', url: targetStream.backup_url_3 || '' }
+            ].filter(item => item.url !== '');
+        
+        if (previousLinks.length > 0) {
+          setStreamUrls(previousLinks);
+        } else {
+          alert('No previous stream links found to copy.');
+          setImportPreviousLinks('no');
+        }
+      } else {
+        alert('No previous stream configurations found in the database.');
+        setImportPreviousLinks('no');
+      }
+    } else {
+      setStreamUrls([{ label: 'Primary Server', url: '' }]);
+    }
+  };
+
+  // Sync stream urls when match selection changes, if Auto-copy is enabled
+  useEffect(() => {
+    if (importPreviousLinks === 'yes' && !editingStream && matchId) {
+      let targetStream = streams.find(s => {
+        if (s.match_id !== matchId) return false;
+        const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
+        return !!(hasUrls || s.primary_url);
+      });
+
+      if (!targetStream) {
+        targetStream = streams.find(s => {
+          const hasUrls = Array.isArray(s.urls) && s.urls.length > 0 && s.urls.some(item => item.url);
+          return !!(hasUrls || s.primary_url);
+        });
+      }
+
+      if (targetStream) {
+        const previousLinks = Array.isArray(targetStream.urls) && targetStream.urls.length > 0
+          ? targetStream.urls.map(item => ({ ...item }))
+          : [
+              { label: 'Primary Server', url: targetStream.primary_url || '' },
+              { label: 'Backup Server 1', url: targetStream.backup_url_1 || '' },
+              { label: 'Backup Server 2', url: targetStream.backup_url_2 || '' },
+              { label: 'Backup Server 3', url: targetStream.backup_url_3 || '' }
+            ].filter(item => item.url !== '');
+        
+        if (previousLinks.length > 0) {
+          setStreamUrls(previousLinks);
+        }
+      }
+    }
+  }, [matchId, importPreviousLinks, streams, editingStream]);
 
   const handleAddClick = () => {
     setEditingStream(null);
