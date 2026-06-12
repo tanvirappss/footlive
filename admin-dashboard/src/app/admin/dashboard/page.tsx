@@ -95,6 +95,14 @@ export default function DashboardPage() {
   const [defaultStreamsSuccess, setDefaultStreamsSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  // Social Share & SEO Meta States
+  const [metaTitle, setMetaTitle] = useState('');
+  const [metaDescription, setMetaDescription] = useState('');
+  const [metaImageUrl, setMetaImageUrl] = useState('');
+  const [metaImageFile, setMetaImageFile] = useState<File | null>(null);
+  const [updatingMeta, setUpdatingMeta] = useState(false);
+  const [metaSuccess, setMetaSuccess] = useState(false);
+
   // Fetch real database traffic statistics using optimized RPCs
   const { data: trafficStats } = useQuery({
     queryKey: ['dashboard-traffic-stats'],
@@ -132,6 +140,9 @@ export default function DashboardPage() {
       } else {
         setDefaultStreams([]);
       }
+      setMetaTitle((tickerData as any).meta_title || '');
+      setMetaDescription((tickerData as any).meta_description || '');
+      setMetaImageUrl((tickerData as any).meta_image || '');
     }
   }, [tickerData]);
 
@@ -320,6 +331,27 @@ export default function DashboardPage() {
         if (error) throw error;
       }
 
+      // Automatically sync all streams in the database with the new default priority list
+      const { data: allStreams, error: fetchErr } = await supabase
+        .from('streams')
+        .select('id');
+
+      if (!fetchErr && allStreams && allStreams.length > 0) {
+        const updatePromises = allStreams.map(s => {
+          return supabase
+            .from('streams')
+            .update({
+              primary_url: filteredStreams[0]?.url || '',
+              backup_url_1: filteredStreams[1]?.url || null,
+              backup_url_2: filteredStreams[2]?.url || null,
+              backup_url_3: filteredStreams[3]?.url || null,
+              urls: filteredStreams
+            })
+            .eq('id', s.id);
+        });
+        await Promise.all(updatePromises);
+      }
+
       setDefaultStreamsSuccess(true);
       refetchTicker();
       setTimeout(() => setDefaultStreamsSuccess(false), 3000);
@@ -328,6 +360,66 @@ export default function DashboardPage() {
       alert('Failed to save default stream links.');
     } finally {
       setUpdatingDefaultStreams(false);
+    }
+  };
+
+  const uploadMetaImage = async (file: File): Promise<string> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_meta_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `site/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('teams')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
+
+  const handleMetaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingMeta(true);
+    setMetaSuccess(false);
+
+    try {
+      let finalImageUrl = metaImageUrl;
+
+      if (metaImageFile) {
+        finalImageUrl = await uploadMetaImage(metaImageFile);
+        setMetaImageUrl(finalImageUrl);
+        setMetaImageFile(null);
+      }
+
+      const updateData = {
+        meta_title: metaTitle,
+        meta_description: metaDescription,
+        meta_image: finalImageUrl || null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update(updateData)
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([updateData]);
+        if (error) throw error;
+      }
+
+      setMetaSuccess(true);
+      refetchTicker();
+      setTimeout(() => setMetaSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update social share meta settings');
+    } finally {
+      setUpdatingMeta(false);
     }
   };
 
@@ -1072,6 +1164,125 @@ export default function DashboardPage() {
                 className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {updatingBranding ? 'Saving Settings...' : 'Save Branding'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Social Share & SEO Metadata Form */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-6">
+          <div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Tv className="h-5 w-5 text-emerald-accent" />
+              Social Share & SEO Metadata Settings
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Configure the preview title, description, and image displayed when the website link is shared on social networks like Facebook, WhatsApp, Twitter, etc.</p>
+          </div>
+
+          <form onSubmit={handleMetaSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Meta Title & Description */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Share Title (Meta Title)</label>
+                  <input
+                    type="text"
+                    required
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                    placeholder="e.g. FIFA World Cup 2026 Live Streaming"
+                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Share Description (Meta Description)</label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    placeholder="e.g. Watch FIFA World Cup 2026 matches live in high definition with zero latency. Free streams, fixtures schedules, and team updates."
+                    className="w-full px-4 py-3 glass-input rounded-xl text-sm resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Share Image URL & File Uploader */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Preview Image URL (Meta Image)</label>
+                    <input
+                      type="text"
+                      value={metaImageUrl}
+                      onChange={(e) => {
+                        setMetaImageUrl(e.target.value);
+                        setMetaImageFile(null); // Clear file upload if manually entering URL
+                      }}
+                      placeholder="https://example.com/share-preview.png"
+                      className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                    />
+                  </div>
+
+                  <div className="flex items-end justify-center">
+                    <div className="h-12 w-24 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                      {metaImageFile ? (
+                        <img
+                          src={URL.createObjectURL(metaImageFile)}
+                          alt="Preview"
+                          className="h-full w-full object-contain p-1"
+                        />
+                      ) : metaImageUrl ? (
+                        <img
+                          src={metaImageUrl}
+                          alt="Share Preview"
+                          className="h-full w-full object-contain p-1"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-600 font-extrabold text-center leading-none">No Preview Image</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Share Image File</label>
+                  <label className="flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
+                    <Upload className="h-5 w-5 text-slate-500 shrink-0" />
+                    <span className="text-xs text-slate-400 font-semibold truncate">
+                      {metaImageFile ? metaImageFile.name : 'Upload preview image file (1200x630 recommended)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        setMetaImageFile(file);
+                        if (file) setMetaImageUrl(''); // Clear text input if uploading file
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Form footer */}
+            <div className="flex items-center justify-between border-t border-card-border pt-4">
+              {metaSuccess ? (
+                <p className="text-xs text-emerald-accent font-bold flex items-center gap-1 animate-pulse">
+                  <Check className="h-4 w-4" /> SEO & Social Share metadata saved!
+                </p>
+              ) : (
+                <div />
+              )}
+              <button
+                type="submit"
+                disabled={updatingMeta}
+                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {updatingMeta ? 'Saving Settings...' : 'Save Meta Settings'}
               </button>
             </div>
           </form>
