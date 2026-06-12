@@ -53,7 +53,37 @@ export default function StreamsPage() {
   const [matchId, setMatchId] = useState('');
   const [streamName, setStreamName] = useState('');
   const [streamUrls, setStreamUrls] = useState<{ label: string; url: string }[]>([{ label: 'Primary Server', url: '' }]);
+  const [importPreviousLinks, setImportPreviousLinks] = useState('no');
   const [mutationError, setMutationError] = useState<string | null>(null);
+
+  const handleImportToggle = (val: 'yes' | 'no') => {
+    setImportPreviousLinks(val);
+    if (val === 'yes') {
+      const mostRecentStream = streams[0];
+      if (mostRecentStream) {
+        const previousLinks = Array.isArray(mostRecentStream.urls) && mostRecentStream.urls.length > 0
+          ? mostRecentStream.urls.map(item => ({ ...item }))
+          : [
+              { label: 'Primary Server', url: mostRecentStream.primary_url || '' },
+              { label: 'Backup Server 1', url: mostRecentStream.backup_url_1 || '' },
+              { label: 'Backup Server 2', url: mostRecentStream.backup_url_2 || '' },
+              { label: 'Backup Server 3', url: mostRecentStream.backup_url_3 || '' }
+            ].filter(item => item.url !== '');
+        
+        if (previousLinks.length > 0) {
+          setStreamUrls(previousLinks);
+        } else {
+          alert('No previous stream links found to copy.');
+          setImportPreviousLinks('no');
+        }
+      } else {
+        alert('No previous stream configurations found.');
+        setImportPreviousLinks('no');
+      }
+    } else {
+      setStreamUrls([{ label: 'Primary Server', url: '' }]);
+    }
+  };
 
   // Queries
   const { data: matches = [] } = useQuery<Match[]>({
@@ -109,6 +139,7 @@ export default function StreamsPage() {
     setMatchId(matches[0]?.id || '');
     setStreamName('Primary English Broadcast');
     setStreamUrls([{ label: 'Primary Server', url: '' }]);
+    setImportPreviousLinks('no');
     setMutationError(null);
     setIsModalOpen(true);
   };
@@ -117,6 +148,7 @@ export default function StreamsPage() {
     setEditingStream(stream);
     setMatchId(stream.match_id);
     setStreamName(stream.stream_name);
+    setImportPreviousLinks('no');
     
     // Parse JSONB list if exists, otherwise build it from static columns
     if (Array.isArray(stream.urls) && stream.urls.length > 0) {
@@ -388,6 +420,38 @@ export default function StreamsPage() {
                     />
                   </div>
                 </div>
+
+                {!editingStream && (
+                  <div className="space-y-2 p-3.5 bg-slate-950/40 border border-slate-900 rounded-xl">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                      Do you want to add all previous stream links here?
+                    </label>
+                    <div className="flex gap-4 mt-1">
+                      <label className="flex items-center gap-2 text-xs font-extrabold text-white cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importPrevious"
+                          value="yes"
+                          checked={importPreviousLinks === 'yes'}
+                          onChange={() => handleImportToggle('yes')}
+                          className="accent-emerald-accent"
+                        />
+                        Yes (Auto-copy)
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-extrabold text-white cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importPrevious"
+                          value="no"
+                          checked={importPreviousLinks === 'no'}
+                          onChange={() => handleImportToggle('no')}
+                          className="accent-emerald-accent"
+                        />
+                        No (Start fresh)
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">

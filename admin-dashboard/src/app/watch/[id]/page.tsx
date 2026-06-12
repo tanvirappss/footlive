@@ -40,10 +40,24 @@ export default function UserWatchPage() {
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [playError, setPlayError] = useState<string | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [playerKey, setPlayerKey] = useState(0);
+  const [sessionId, setSessionId] = useState('web_session');
 
   // Health stats
   const [latency, setLatency] = useState('80ms');
   const [bufferState, setBufferState] = useState('Healthy');
+
+  // Initialize unique session ID
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let sid = sessionStorage.getItem('user_session_id');
+      if (!sid) {
+        sid = 'sess_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+        sessionStorage.setItem('user_session_id', sid);
+      }
+      setSessionId(sid);
+    }
+  }, []);
 
   // Fetch match details
   const { data: match } = useQuery<Match>({
@@ -77,19 +91,113 @@ export default function UserWatchPage() {
     }
   });
 
+  // Fetch ticker settings
+  const { data: ticker } = useQuery({
+    queryKey: ['user-ticker'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ticker_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data?.[0] || null;
+    }
+  });
+
   // Record web analytic watch event
   useEffect(() => {
-    if (match) {
+    if (match && sessionId !== 'web_session') {
       const logView = async () => {
         await supabase.from('analytics').insert([{
           event_name: 'web_watch_stream',
-          session_id: 'web_session',
+          session_id: sessionId,
           metadata: { match_id: match.id, tournament: match.tournament_name }
         }]);
       };
       logView();
     }
-  }, [match]);
+  }, [match, sessionId]);
+
+  // Audio announcement autoplay handler (shared session limit)
+  useEffect(() => {
+    if (!ticker || !ticker.audio_enabled || !ticker.audio_url) return;
+
+    // Check if audio has already played in this client-side JS load context
+    if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
+      return;
+    }
+
+    let playCount = 0;
+    try {
+      const stored = sessionStorage.getItem('audio_play_count');
+      if (stored) {
+        playCount = parseInt(stored, 10);
+      }
+    } catch (e) {
+      console.error('Failed to read session storage', e);
+    }
+
+    if (playCount >= 2) return;
+
+    let audio: HTMLAudioElement | null = null;
+    let playTimeout: NodeJS.Timeout | null = null;
+
+    const startAudioPlay = () => {
+      if (audio) return;
+
+      audio = new Audio(ticker.audio_url);
+      audio.preload = 'auto';
+      
+      const playPromise = audio.play();
+
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            try {
+              sessionStorage.setItem('audio_play_count', String(playCount + 1));
+              (window as any).__audioPlayedInCurrentLoad = true;
+            } catch (e) {
+              console.error(e);
+            }
+            cleanupListeners();
+          })
+          .catch((err) => {
+            console.log('Autoplay blocked on watch page. Waiting for user interaction.', err);
+            audio = null;
+          });
+      }
+    };
+
+    const interactionEvents = ['click', 'touchstart', 'mousedown', 'keydown', 'scroll'];
+
+    const handleUserInteraction = () => {
+      startAudioPlay();
+    };
+
+    const cleanupListeners = () => {
+      interactionEvents.forEach((event) => {
+        window.removeEventListener(event, handleUserInteraction);
+      });
+    };
+
+    playTimeout = setTimeout(() => {
+      startAudioPlay();
+      
+      interactionEvents.forEach((event) => {
+        window.addEventListener(event, handleUserInteraction, { passive: true });
+      });
+    }, 1500);
+
+    return () => {
+      if (playTimeout) clearTimeout(playTimeout);
+      cleanupListeners();
+      if (audio) {
+        audio.pause();
+        audio = null;
+      }
+    };
+  }, [ticker]);
 
   if (isLoading) {
     return (
@@ -174,6 +282,21 @@ export default function UserWatchPage() {
         </div>
       </header>
 
+      {/* Ticker Marquee Headline */}
+      {ticker && ticker.is_enabled && (
+        <div className="bg-gradient-to-r from-red-950/80 via-[#0f1422] to-red-950/80 border-b border-card-border py-2 relative overflow-hidden flex items-center h-9 z-40">
+          <div className="absolute left-0 top-0 bottom-0 px-3.5 bg-red-600 text-white font-black uppercase tracking-wider text-[9px] flex items-center justify-center z-10 shadow-md">
+            ⚡ NEWS TICKER
+          </div>
+          
+          <div className="w-full whitespace-nowrap overflow-hidden">
+            <span className="animate-marquee text-xs font-extrabold text-white tracking-wide">
+              {ticker.ticker_text}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Main player layout */}
       <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
@@ -181,6 +304,7 @@ export default function UserWatchPage() {
         <div className="lg:col-span-2 space-y-6">
           <div className="aspect-video w-full relative">
             <HlsPlayer 
+              key={playerKey}
               url={activeUrl} 
               onError={handleStreamError} 
             />
@@ -208,9 +332,10 @@ export default function UserWatchPage() {
               </div>
               <button 
                 onClick={() => {
-                  const current = activeUrl;
-                  setCurrentUrlIndex(-1); // force reset
-                  setTimeout(() => setCurrentUrlIndex(streamUrls.indexOf(current)), 50);
+                  setPlayerKey(prev => prev + 1);
+                  setPlayError(null);
+                  setIsReconnecting(false);
+                  setBufferState('Healthy');
                 }}
                 className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
               >

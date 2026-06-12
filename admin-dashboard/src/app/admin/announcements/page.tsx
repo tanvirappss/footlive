@@ -10,11 +10,7 @@ import {
   Check, 
   X, 
   Loader2, 
-  Megaphone, 
-  Send, 
-  BellRing, 
-  Settings,
-  AlertCircle
+  Megaphone
 } from 'lucide-react';
 
 interface Announcement {
@@ -33,8 +29,6 @@ export default function AnnouncementsPage() {
   
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPushModalOpen, setIsPushModalOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Form states - Announcement
   const [title, setTitle] = useState('');
@@ -44,29 +38,6 @@ export default function AnnouncementsPage() {
   const [status, setStatus] = useState('published');
   const [scheduledFor, setScheduledFor] = useState('');
   const [mutationError, setMutationError] = useState<string | null>(null);
-
-  // Form states - Push Notification
-  const [pushTitle, setPushTitle] = useState('');
-  const [pushMessage, setPushMessage] = useState('');
-  const [pushSending, setPushSending] = useState(false);
-  const [pushSuccess, setPushSuccess] = useState(false);
-  const [pushError, setPushError] = useState<string | null>(null);
-
-  // OneSignal Settings state (Stored in LocalStorage for simplicity)
-  const [oneSignalAppId, setOneSignalAppId] = useState('');
-  const [oneSignalApiKey, setOneSignalApiKey] = useState('');
-
-  useEffect(() => {
-    setOneSignalAppId(localStorage.getItem('onesignal_app_id') || '');
-    setOneSignalApiKey(localStorage.getItem('onesignal_api_key') || '');
-  }, []);
-
-  const handleSaveSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem('onesignal_app_id', oneSignalAppId);
-    localStorage.setItem('onesignal_api_key', oneSignalApiKey);
-    setIsSettingsOpen(false);
-  };
 
   // Queries
   const { data: announcements = [], isLoading } = useQuery<Announcement[]>({
@@ -90,14 +61,6 @@ export default function AnnouncementsPage() {
     setScheduledFor('');
     setMutationError(null);
     setIsModalOpen(true);
-  };
-
-  const handlePushClick = () => {
-    setPushTitle('');
-    setPushMessage('');
-    setPushSuccess(false);
-    setPushError(null);
-    setIsPushModalOpen(true);
   };
 
   // Create Announcement Mutation
@@ -146,47 +109,6 @@ export default function AnnouncementsPage() {
     saveMutation.mutate();
   };
 
-  // Send Push Notification via Proxy API
-  const handleSendPush = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!oneSignalAppId || !oneSignalApiKey) {
-      setPushError('Please configure OneSignal App ID and API Key in the settings first.');
-      return;
-    }
-
-    setPushSending(true);
-    setPushError(null);
-    setPushSuccess(false);
-
-    try {
-      const response = await fetch('/api/notify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: pushTitle,
-          message: pushMessage,
-          appId: oneSignalAppId,
-          apiKey: oneSignalApiKey,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to dispatch notification.');
-      }
-
-      setPushSuccess(true);
-      setTimeout(() => setIsPushModalOpen(false), 2000);
-    } catch (err: any) {
-      setPushError(err.message);
-    } finally {
-      setPushSending(false);
-    }
-  };
-
   return (
     <AdminLayout>
       <div className="space-y-8">
@@ -198,20 +120,6 @@ export default function AnnouncementsPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-2 px-4 py-3 border border-slate-800 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer"
-            >
-              <Settings className="h-4.5 w-4.5" />
-              OneSignal Config
-            </button>
-            <button
-              onClick={handlePushClick}
-              className="flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-blue-500/10"
-            >
-              <BellRing className="h-4.5 w-4.5" />
-              Broadcast Push
-            </button>
-            <button
               onClick={handleAddClick}
               className="flex items-center gap-2 px-4 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-500/10"
             >
@@ -220,17 +128,6 @@ export default function AnnouncementsPage() {
             </button>
           </div>
         </div>
-
-        {/* Credentials Warning */}
-        {(!oneSignalAppId || !oneSignalApiKey) && (
-          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex gap-3 text-amber-400 text-xs font-semibold">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <div>
-              <p className="font-bold text-white uppercase">OneSignal Settings Required</p>
-              <p className="mt-0.5 text-slate-400 font-medium">To send push alerts, click "OneSignal Config" to register your App ID and REST API Key. This will be stored locally in your browser.</p>
-            </div>
-          </div>
-        )}
 
         {/* Announcements List */}
         {isLoading ? (
@@ -403,141 +300,6 @@ export default function AnnouncementsPage() {
           </div>
         )}
 
-        {/* Broadcast Push Modal */}
-        {isPushModalOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-lg glass-panel p-8 rounded-3xl space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-card-border">
-                <h3 className="text-xl font-extrabold text-white uppercase">OneSignal Broadcast</h3>
-                <button 
-                  onClick={() => setIsPushModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSendPush} className="space-y-4">
-                {pushSuccess && (
-                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-bold rounded-2xl flex items-center gap-2">
-                    <Check className="h-5 w-5" />
-                    Notification broadcasted successfully!
-                  </div>
-                )}
-                {pushError && (
-                  <div className="p-4 bg-red-950/20 border border-red-500/25 text-red-400 text-sm font-bold rounded-2xl">
-                    {pushError}
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Push Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={pushTitle}
-                    onChange={(e) => setPushTitle(e.target.value)}
-                    placeholder="e.g. 🏆 Match Kickoff Alert!"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Push Body Message</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={pushMessage}
-                    onChange={(e) => setPushMessage(e.target.value)}
-                    placeholder="e.g. Argentina vs France is live now! Tap here to watch in premium HD."
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="pt-4 flex justify-end gap-3 border-t border-card-border">
-                  <button
-                    type="button"
-                    onClick={() => setIsPushModalOpen(false)}
-                    className="px-5 py-3 border border-slate-800 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={pushSending}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
-                  >
-                    {pushSending ? (
-                      <Loader2 className="h-4.5 w-4.5 animate-spin" />
-                    ) : (
-                      <Send className="h-4.5 w-4.5" />
-                    )}
-                    Send Broadcast
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* OneSignal Settings Modal */}
-        {isSettingsOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-lg glass-panel p-8 rounded-3xl space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-card-border">
-                <h3 className="text-xl font-extrabold text-white uppercase">OneSignal Settings</h3>
-                <button 
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveSettings} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">OneSignal App ID</label>
-                  <input
-                    type="text"
-                    required
-                    value={oneSignalAppId}
-                    onChange={(e) => setOneSignalAppId(e.target.value)}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">OneSignal REST API Key</label>
-                  <input
-                    type="password"
-                    required
-                    value={oneSignalApiKey}
-                    onChange={(e) => setOneSignalApiKey(e.target.value)}
-                    placeholder="os_v2_app_xxxxxxxxxxxxxxxxxxxxxxxx"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="pt-4 flex justify-end gap-3 border-t border-card-border">
-                  <button
-                    type="button"
-                    onClick={() => setIsSettingsOpen(false)}
-                    className="px-5 py-3 border border-slate-800 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer"
-                  >
-                    Save Credentials
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
     </AdminLayout>
   );

@@ -18,11 +18,21 @@ class MainViewModel @Inject constructor(
 
     // Matches state subdivided for simple rendering
     val liveMatches: StateFlow<List<Match>> = repository.getMatches()
-        .map { list -> list.filter { it.status == "live" || it.status == "half_time" } }
+        .map { list -> 
+            list.filter { 
+                it.status == "live" || 
+                it.status == "half_time" || 
+                (it.status == "upcoming" && System.currentTimeMillis() >= (it.matchTimestamp - 10 * 60 * 1000))
+            } 
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val upcomingMatches: StateFlow<List<Match>> = repository.getMatches()
-        .map { list -> list.filter { it.status == "upcoming" } }
+        .map { list -> 
+            list.filter { 
+                it.status == "upcoming" && System.currentTimeMillis() < (it.matchTimestamp - 10 * 60 * 1000)
+            } 
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val finishedMatches: StateFlow<List<Match>> = repository.getMatches()

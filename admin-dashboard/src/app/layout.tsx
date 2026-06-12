@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FIFA World Cup 2026 Streaming Admin Dashboard",
-  description: "Control room for live streams, schedules, team databases, earnings scripts, and broadcast push notifications.",
+  title: "FIFA World Cup 2026 Streaming Platform",
+  description: "Live sports streams, matches schedules, team databases, and earnings scripts.",
+  referrer: "no-referrer",
 };
 
 export default function RootLayout({

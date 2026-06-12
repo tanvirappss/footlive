@@ -27,6 +27,17 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
         maxMaxBufferLength: 10,
         enableWorker: true,
         lowLatencyMode: true,
+        // High resilience settings for unstable mobile connections & WebViews
+        manifestLoadingMaxRetry: 6,
+        manifestLoadingRetryDelay: 1500,
+        levelLoadingMaxRetry: 6,
+        levelLoadingRetryDelay: 1500,
+        fragLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 1000,
+        // Bypass credential-restricted CORS blocks on open streams
+        xhrSetup: function (xhr) {
+          xhr.withCredentials = false;
+        }
       });
 
       hlsRef.current = hls;
@@ -36,21 +47,33 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
           console.error('Fatal HLS error:', data.type, data.details);
-          if (onError) {
-            onError(`HLS Error: ${data.details}`);
-          }
           
           // Attempt recovery
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log('Fatal network error, attempting startLoad recovery...');
               hls.startLoad();
+              if (onError) {
+                onError(`HLS Network Error: ${data.details}`);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('Fatal media error, attempting recoverMediaError recovery...');
               hls.recoverMediaError();
               break;
             default:
+              console.log('Fatal unrecoverable error, destroying HLS instance...');
               hls.destroy();
+              if (onError) {
+                onError(`HLS Fatal Error: ${data.details}`);
+              }
               break;
+          }
+        } else {
+          // Recover from non-fatal errors such as initial manifestLoadError
+          if (data.details === 'manifestLoadError') {
+            console.log('Retrying manifest load on manifestLoadError...');
+            hls.loadSource(url);
           }
         }
       });

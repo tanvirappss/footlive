@@ -135,6 +135,114 @@ export default function MatchesPage() {
     }
   });
 
+  // Run once when matches and teams load to clean up any legacy custom teams in existing matches
+  React.useEffect(() => {
+    if (matches.length > 0 && teams.length > 0) {
+      const migrateLegacyCustomTeams = async () => {
+        const legacyMatches = matches.filter(
+          m => m.home_team_custom_name || m.away_team_custom_name
+        );
+
+        if (legacyMatches.length === 0) return;
+
+        let migratedAny = false;
+
+        for (const match of legacyMatches) {
+          const updatedFields: any = {};
+
+          if (match.home_team_custom_name) {
+            const customName = match.home_team_custom_name.trim();
+            // Check if team already exists in teams list (case-insensitive)
+            let team = teams.find(t => t.name.toLowerCase() === customName.toLowerCase());
+            let teamId = team?.id;
+
+            if (!teamId) {
+              // Create it
+              const { data: created, error } = await supabase
+                .from('teams')
+                .insert([{
+                  name: customName,
+                  short_name: customName.substring(0, 3).toUpperCase(),
+                  country_name: customName,
+                  country_code: 'XX',
+                  flag_url: match.home_team_custom_flag || null,
+                  logo_url: match.home_team_custom_flag || null,
+                  region: 'Custom',
+                  is_enabled: true
+                }])
+                .select('id')
+                .single();
+
+              if (!error && created) {
+                teamId = created.id;
+              }
+            }
+
+            if (teamId) {
+              updatedFields.home_team_id = teamId;
+              updatedFields.home_team_custom_name = null;
+              updatedFields.home_team_custom_flag = null;
+              updatedFields.home_team_custom_logo = null;
+            }
+          }
+
+          if (match.away_team_custom_name) {
+            const customName = match.away_team_custom_name.trim();
+            // Check if team already exists in teams list (case-insensitive)
+            let team = teams.find(t => t.name.toLowerCase() === customName.toLowerCase());
+            let teamId = team?.id;
+
+            if (!teamId) {
+              // Create it
+              const { data: created, error } = await supabase
+                .from('teams')
+                .insert([{
+                  name: customName,
+                  short_name: customName.substring(0, 3).toUpperCase(),
+                  country_name: customName,
+                  country_code: 'XX',
+                  flag_url: match.away_team_custom_flag || null,
+                  logo_url: match.away_team_custom_flag || null,
+                  region: 'Custom',
+                  is_enabled: true
+                }])
+                .select('id')
+                .single();
+
+              if (!error && created) {
+                teamId = created.id;
+              }
+            }
+
+            if (teamId) {
+              updatedFields.away_team_id = teamId;
+              updatedFields.away_team_custom_name = null;
+              updatedFields.away_team_custom_flag = null;
+              updatedFields.away_team_custom_logo = null;
+            }
+          }
+
+          if (Object.keys(updatedFields).length > 0) {
+            const { error } = await supabase
+              .from('matches')
+              .update(updatedFields)
+              .eq('id', match.id);
+            if (!error) {
+              migratedAny = true;
+            }
+          }
+        }
+
+        if (migratedAny) {
+          queryClient.invalidateQueries({ queryKey: ['matches-admin'] });
+          queryClient.invalidateQueries({ queryKey: ['teams'] });
+        }
+      };
+
+      migrateLegacyCustomTeams();
+    }
+  }, [matches, teams, queryClient]);
+
   const handleAddClick = () => {
     setEditingMatch(null);
     setTournamentName('FIFA World Cup 2026');
@@ -221,16 +329,92 @@ export default function MatchesPage() {
       // Combine Date + Time to ISO string for timestamptz
       const timestampString = new Date(`${matchDate}T${matchTime}:00`).toISOString();
 
+      // Resolve Home Team
+      let resolvedHomeTeamId = null;
+      if (homeTeamType === 'custom' && homeCustomName.trim()) {
+        const customName = homeCustomName.trim();
+        const { data: existingTeam, error: searchError } = await supabase
+          .from('teams')
+          .select('id')
+          .eq('name', customName)
+          .maybeSingle();
+
+        if (searchError) throw searchError;
+
+        if (existingTeam) {
+          resolvedHomeTeamId = existingTeam.id;
+        } else {
+          const newTeamData = {
+            name: customName,
+            short_name: customName.substring(0, 3).toUpperCase(),
+            country_name: customName,
+            country_code: 'XX',
+            flag_url: homeCustomFlagUrl.trim() || null,
+            logo_url: homeCustomFlagUrl.trim() || null,
+            region: 'Custom',
+            is_enabled: true
+          };
+          const { data: createdTeam, error: insertError } = await supabase
+            .from('teams')
+            .insert([newTeamData])
+            .select('id')
+            .single();
+
+          if (insertError) throw insertError;
+          resolvedHomeTeamId = createdTeam.id;
+        }
+      } else if (homeTeamType === 'existing') {
+        resolvedHomeTeamId = homeTeamId || null;
+      }
+
+      // Resolve Away Team
+      let resolvedAwayTeamId = null;
+      if (awayTeamType === 'custom' && awayCustomName.trim()) {
+        const customName = awayCustomName.trim();
+        const { data: existingTeam, error: searchError } = await supabase
+          .from('teams')
+          .select('id')
+          .eq('name', customName)
+          .maybeSingle();
+
+        if (searchError) throw searchError;
+
+        if (existingTeam) {
+          resolvedAwayTeamId = existingTeam.id;
+        } else {
+          const newTeamData = {
+            name: customName,
+            short_name: customName.substring(0, 3).toUpperCase(),
+            country_name: customName,
+            country_code: 'XX',
+            flag_url: awayCustomFlagUrl.trim() || null,
+            logo_url: awayCustomFlagUrl.trim() || null,
+            region: 'Custom',
+            is_enabled: true
+          };
+          const { data: createdTeam, error: insertError } = await supabase
+            .from('teams')
+            .insert([newTeamData])
+            .select('id')
+            .single();
+
+          if (insertError) throw insertError;
+          resolvedAwayTeamId = createdTeam.id;
+        }
+      } else if (awayTeamType === 'existing') {
+        resolvedAwayTeamId = awayTeamId || null;
+      }
+
       const matchData = {
         tournament_name: tournamentName,
-        home_team_id: (homeTeamType === 'existing' && homeTeamId !== '') ? homeTeamId : null,
-        away_team_id: (awayTeamType === 'existing' && awayTeamId !== '') ? awayTeamId : null,
-        home_team_custom_name: homeTeamType === 'custom' ? homeCustomName : null,
-        home_team_custom_flag: homeTeamType === 'custom' ? homeCustomFlagUrl : null,
-        home_team_custom_logo: homeTeamType === 'custom' ? homeCustomFlagUrl : null,
-        away_team_custom_name: awayTeamType === 'custom' ? awayCustomName : null,
-        away_team_custom_flag: awayTeamType === 'custom' ? awayCustomFlagUrl : null,
-        away_team_custom_logo: awayTeamType === 'custom' ? awayCustomFlagUrl : null,
+        home_team_id: resolvedHomeTeamId,
+        away_team_id: resolvedAwayTeamId,
+        home_team_custom_name: null,
+        home_team_custom_flag: null,
+        home_team_custom_logo: null,
+        away_team_custom_name: null,
+        away_team_custom_flag: null,
+        away_team_custom_logo: null,
         match_date: matchDate,
         match_time: `${matchTime}:00`,
         match_timestamp: timestampString,

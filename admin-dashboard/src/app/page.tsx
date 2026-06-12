@@ -58,6 +58,7 @@ interface Announcement {
 export default function UserHomePage() {
   const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'finished' | 'channels'>('live');
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
+  const [showNotificationToast, setShowNotificationToast] = useState(false);
   const [selectedChannelUrl, setSelectedChannelUrl] = useState<string | null>(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string>('');
 
@@ -121,37 +122,6 @@ export default function UserHomePage() {
     enabled: activeTab === 'channels'
   });
 
-  // Query total views from analytics table
-  const { data: totalViews = 0 } = useQuery({
-    queryKey: ['total-views'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-          .from('analytics')
-          .select('*', { count: 'exact', head: true });
-      if (error) throw error;
-      return (count || 0) + 14820;
-    },
-    refetchInterval: 30000
-  });
-
-  const [liveCount, setLiveCount] = useState(740);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLiveCount(prev => {
-        const delta = Math.floor(Math.random() * 21) - 10;
-        const newCount = prev + delta;
-        return newCount < 100 ? 100 : newCount;
-      });
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'channels' && channels.length > 0 && !selectedChannelUrl) {
-      handleChannelSelect(channels[0]);
-    }
-  }, [activeTab, channels, selectedChannelUrl]);
-
   // Fetch ticker settings
   const { data: ticker } = useQuery({
     queryKey: ['user-ticker'],
@@ -164,6 +134,30 @@ export default function UserHomePage() {
       if (error) throw error;
       return data?.[0] || null;
     }
+  });
+
+  // Query total views from analytics table using optimized RPC
+  const { data: totalViews = 0 } = useQuery({
+    queryKey: ['total-views', ticker?.views_offset],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_total_views_count');
+      if (error) throw error;
+      const offset = ticker?.views_offset !== undefined ? ticker.views_offset : 0;
+      return (data || 0) + offset;
+    },
+    refetchInterval: 60000 // optimized to 60s for high traffic performance
+  });
+
+  // Query live concurrent viewers from analytics using optimized RPC
+  const { data: liveCount = 0 } = useQuery({
+    queryKey: ['live-viewers-count', ticker?.viewers_offset],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_active_viewers_count');
+      if (error) throw error;
+      const offset = ticker?.viewers_offset !== undefined ? ticker.viewers_offset : 0;
+      return (data || 0) + offset;
+    },
+    refetchInterval: 45000 // optimized to 45s for high traffic performance
   });
 
   // Fetch announcements
@@ -179,6 +173,108 @@ export default function UserHomePage() {
       return data || [];
     }
   });
+
+  // Auto-select first channel when tab changes to channels
+  useEffect(() => {
+    if (activeTab === 'channels' && channels.length > 0 && !selectedChannelUrl) {
+      handleChannelSelect(channels[0]);
+    }
+  }, [activeTab, channels, selectedChannelUrl]);
+
+  // Show direct slide-in notice after 1.5s if not already dismissed in this session
+  useEffect(() => {
+    if (announcements.length > 0) {
+      const dismissedId = sessionStorage.getItem('dismissed_announcement_id');
+      if (dismissedId !== announcements[0].id) {
+        const timer = setTimeout(() => {
+          setShowNotificationToast(true);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [announcements]);
+
+  // Audio announcement autoplay handler
+  useEffect(() => {
+    if (!ticker || !ticker.audio_enabled || !ticker.audio_url) return;
+
+    // Check if audio has already played in this client-side JS load context
+    if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
+      return;
+    }
+
+    let playCount = 0;
+    try {
+      const stored = sessionStorage.getItem('audio_play_count');
+      if (stored) {
+        playCount = parseInt(stored, 10);
+      }
+    } catch (e) {
+      console.error('Failed to read session storage', e);
+    }
+
+    if (playCount >= 2) return;
+
+    let audio: HTMLAudioElement | null = null;
+    let playTimeout: NodeJS.Timeout | null = null;
+
+    const startAudioPlay = () => {
+      if (audio) return; // already playing or trying to play
+
+      audio = new Audio(ticker.audio_url);
+      audio.preload = 'auto'; // load asynchronously in the background
+      
+      const playPromise = audio.play();
+
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            try {
+              sessionStorage.setItem('audio_play_count', String(playCount + 1));
+              (window as any).__audioPlayedInCurrentLoad = true;
+            } catch (e) {
+              console.error(e);
+            }
+            cleanupListeners();
+          })
+          .catch((err) => {
+            console.log('Autoplay blocked. Waiting for user interaction to trigger audio play.', err);
+            audio = null;
+          });
+      }
+    };
+
+    const interactionEvents = ['click', 'touchstart', 'mousedown', 'keydown', 'scroll'];
+
+    const handleUserInteraction = () => {
+      startAudioPlay();
+    };
+
+    const cleanupListeners = () => {
+      interactionEvents.forEach((event) => {
+        window.removeEventListener(event, handleUserInteraction);
+      });
+    };
+
+    // Delay start of play to ensure zero impact on initial page speed/interactive time
+    playTimeout = setTimeout(() => {
+      startAudioPlay();
+      
+      // Setup interaction listeners in case autoplay is blocked by default browser policies
+      interactionEvents.forEach((event) => {
+        window.addEventListener(event, handleUserInteraction, { passive: true });
+      });
+    }, 1500);
+
+    return () => {
+      if (playTimeout) clearTimeout(playTimeout);
+      cleanupListeners();
+      if (audio) {
+        audio.pause();
+        audio = null;
+      }
+    };
+  }, [ticker]);
 
   // Fetch matches
   const { data: matches = [], isLoading } = useQuery<Match[]>({
@@ -197,8 +293,23 @@ export default function UserHomePage() {
     }
   });
 
-  const liveList = matches.filter(m => m.status === 'live' || m.status === 'half_time');
-  const upcomingList = matches.filter(m => m.status === 'upcoming');
+  const isMatchLive = (m: Match) => {
+    if (m.status === 'live' || m.status === 'half_time') return true;
+    if (m.status === 'upcoming') {
+      const kickoff = new Date(m.match_timestamp).getTime();
+      return Date.now() >= (kickoff - 10 * 60 * 1000);
+    }
+    return false;
+  };
+
+  const isMatchUpcoming = (m: Match) => {
+    if (m.status !== 'upcoming') return false;
+    const kickoff = new Date(m.match_timestamp).getTime();
+    return Date.now() < (kickoff - 10 * 60 * 1000);
+  };
+
+  const liveList = matches.filter(m => isMatchLive(m));
+  const upcomingList = matches.filter(m => isMatchUpcoming(m));
   const finishedList = matches.filter(m => m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed');
 
   const currentList = whenTab(activeTab, liveList, upcomingList, finishedList);
@@ -757,6 +868,34 @@ export default function UserHomePage() {
                 Dismiss
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-in Notice Toast */}
+      {showNotificationToast && announcements.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-[#0d131f]/90 backdrop-blur-md border border-emerald-500/30 rounded-2xl shadow-2xl p-4 animate-slide-in flex gap-3 text-white">
+          <div className="h-9 w-9 shrink-0 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center text-emerald-accent">
+            <Bell className="h-4.5 w-4.5 animate-bounce" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="text-xs font-black uppercase tracking-wider truncate">
+                {announcements[0].title}
+              </h4>
+              <button 
+                onClick={() => {
+                  setShowNotificationToast(false);
+                  sessionStorage.setItem('dismissed_announcement_id', announcements[0].id);
+                }}
+                className="text-slate-400 hover:text-white p-0.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-300 font-medium mt-1.5 leading-relaxed line-clamp-3">
+              {announcements[0].message}
+            </p>
           </div>
         </div>
       )}

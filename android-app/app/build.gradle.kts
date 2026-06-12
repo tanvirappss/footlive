@@ -89,9 +89,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // OneSignal Push Notifications
-    implementation("com.onesignal:OneSignal:5.1.8")
-
     // Coil Image Loader (for SVG / PNG flags & logos)
     implementation("io.coil-kt:coil:2.5.0")
     implementation("io.coil-kt:coil-compose:2.5.0")

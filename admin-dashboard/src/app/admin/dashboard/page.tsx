@@ -13,7 +13,8 @@ import {
   TrendingDown, 
   BellRing,
   Upload,
-  Check
+  Check,
+  Volume2
 } from 'lucide-react';
 import {
   AreaChart,
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   });
 
   const [tickerText, setTickerText] = useState('');
+  const [isTickerEnabled, setIsTickerEnabled] = useState(true);
   const [updatingTicker, setUpdatingTicker] = useState(false);
   const [tickerSuccess, setTickerSuccess] = useState(false);
 
@@ -74,15 +76,106 @@ export default function DashboardPage() {
   const [updatingBranding, setUpdatingBranding] = useState(false);
   const [brandingSuccess, setBrandingSuccess] = useState(false);
 
+  // Visitor Offsets States
+  const [viewsOffset, setViewsOffset] = useState(0);
+  const [viewersOffset, setViewersOffset] = useState(0);
+  const [updatingCounts, setUpdatingCounts] = useState(false);
+  const [countsSuccess, setCountsSuccess] = useState(false);
+
+  // Audio Announcement States
+  const [audioUrl, setAudioUrl] = useState('');
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [updatingAudio, setUploadingAudio] = useState(false);
+  const [audioSuccess, setAudioSuccess] = useState(false);
+
+  // Fetch real database traffic statistics using optimized RPCs
+  const { data: trafficStats } = useQuery({
+    queryKey: ['dashboard-traffic-stats'],
+    queryFn: async () => {
+      // 1. Fetch total analytics rows
+      const { data: realViews, error: viewsErr } = await supabase.rpc('get_total_views_count');
+      if (viewsErr) throw viewsErr;
+
+      // 2. Fetch unique active viewers
+      const { data: realViewers, error: viewersErr } = await supabase.rpc('get_active_viewers_count');
+      if (viewersErr) throw viewersErr;
+
+      return {
+        realViews: realViews || 0,
+        realViewers: realViewers || 0
+      };
+    },
+    refetchInterval: 15000 // refetch every 15 seconds (optimized for high traffic)
+  });
+
   useEffect(() => {
     if (tickerData) {
       setTickerText(tickerData.ticker_text || '');
+      setIsTickerEnabled(tickerData.is_enabled !== false); // default to true
       setSiteName(tickerData.site_name || 'WORLD CUP 2026');
       setSiteLogoUrl(tickerData.logo_url || '');
       setSiteBannerUrl(tickerData.banner_url || '');
       setShowCounters(tickerData.show_counters !== false); // default to true
+      setViewsOffset(tickerData.views_offset || 0);
+      setViewersOffset(tickerData.viewers_offset || 0);
+      setAudioUrl(tickerData.audio_url || '');
+      setIsAudioEnabled(tickerData.audio_enabled !== false);
     }
   }, [tickerData]);
+
+  const handleAudioSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUploadingAudio(true);
+    setAudioSuccess(false);
+
+    try {
+      let uploadedUrl = audioUrl;
+
+      if (audioFile) {
+        const fileExt = audioFile.name.split('.').pop();
+        const fileName = `announcements/audio_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('teams')
+          .upload(fileName, audioFile, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from('teams').getPublicUrl(fileName);
+        uploadedUrl = data.publicUrl;
+        setAudioUrl(uploadedUrl);
+        setAudioFile(null);
+      }
+
+      const updateData = {
+        audio_url: uploadedUrl,
+        audio_enabled: isAudioEnabled,
+        updated_at: new Date().toISOString()
+      };
+
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update(updateData)
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([updateData]);
+        if (error) throw error;
+      }
+
+      setAudioSuccess(true);
+      refetchTicker();
+      setTimeout(() => setAudioSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update audio announcement settings');
+    } finally {
+      setUploadingAudio(false);
+    }
+  };
 
   const handleTickerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,16 +183,22 @@ export default function DashboardPage() {
     setTickerSuccess(false);
 
     try {
+      const updateData = { 
+        ticker_text: tickerText, 
+        is_enabled: isTickerEnabled,
+        updated_at: new Date().toISOString() 
+      };
+
       if (tickerData?.id) {
         const { error } = await supabase
           .from('ticker_settings')
-          .update({ ticker_text: tickerText, updated_at: new Date().toISOString() })
+          .update(updateData)
           .eq('id', tickerData.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('ticker_settings')
-          .insert([{ ticker_text: tickerText }]);
+          .insert([updateData]);
         if (error) throw error;
       }
       setTickerSuccess(true);
@@ -110,6 +209,42 @@ export default function DashboardPage() {
       alert('Failed to update ticker settings');
     } finally {
       setUpdatingTicker(false);
+    }
+  };
+
+  const handleCountSettingsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingCounts(true);
+    setCountsSuccess(false);
+
+    try {
+      const updateData = {
+        views_offset: Number(viewsOffset),
+        viewers_offset: Number(viewersOffset),
+        updated_at: new Date().toISOString()
+      };
+
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update(updateData)
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([updateData]);
+        if (error) throw error;
+      }
+
+      setCountsSuccess(true);
+      refetchTicker();
+      setTimeout(() => setCountsSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update visitor offset settings');
+    } finally {
+      setUpdatingCounts(false);
     }
   };
 
@@ -259,6 +394,25 @@ export default function DashboardPage() {
       iconColor: 'text-red-400',
       pulse: true
     },
+    { 
+      name: 'Total Views', 
+      value: ((trafficStats?.realViews || 0) + viewsOffset).toLocaleString(), 
+      desc: `Real: ${trafficStats?.realViews || 0} + Offset: ${viewsOffset}`, 
+      icon: Eye,
+      color: 'from-purple-500/20 to-fuchsia-500/5', 
+      border: 'border-purple-500/20',
+      iconColor: 'text-purple-400'
+    },
+    { 
+      name: 'Concurrent Viewers', 
+      value: ((trafficStats?.realViewers || 0) + viewersOffset).toLocaleString(), 
+      desc: `Real: ${trafficStats?.realViewers || 0} + Offset: ${viewersOffset}`, 
+      icon: Users,
+      color: 'from-sky-500/20 to-blue-500/5', 
+      border: 'border-sky-500/20',
+      iconColor: 'text-sky-400',
+      pulse: true
+    },
   ];
 
   return (
@@ -271,7 +425,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cards.map((card) => {
             const Icon = card.icon;
             return (
@@ -282,7 +436,7 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{card.name}</p>
-                    <h3 className="text-4xl font-black text-white mt-2 tracking-tight">
+                    <h3 className="text-3xl font-black text-white mt-2 tracking-tight">
                       {isLoading ? '...' : card.value}
                     </h3>
                   </div>
@@ -301,34 +455,186 @@ export default function DashboardPage() {
 
         {/* Headline Ticker Settings Form */}
         <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
-          <div>
-            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <BellRing className="h-5 w-5 text-emerald-accent" />
-              Animated TV Headline Ticker
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">Update the marquee text scrolling under the main header on the user homepage.</p>
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <BellRing className="h-5 w-5 text-emerald-accent" />
+                Animated TV Headline Ticker
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Update the marquee text scrolling under the main header on the user homepage and watch page.</p>
+            </div>
+
+            <div className="flex items-center gap-2.5 p-2 bg-slate-950/40 border border-slate-900 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setIsTickerEnabled(!isTickerEnabled)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isTickerEnabled ? 'bg-emerald-505 bg-emerald-500' : 'bg-slate-800'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    isTickerEnabled ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="text-[10px] font-extrabold text-white uppercase">Enable Ticker</span>
+            </div>
           </div>
           
-          <form onSubmit={handleTickerSubmit} className="flex flex-col sm:flex-row gap-4">
-            <input
-              type="text"
+          <form onSubmit={handleTickerSubmit} className="space-y-4">
+            <textarea
+              rows={3}
               required
               value={tickerText}
               onChange={(e) => setTickerText(e.target.value)}
-              className="flex-1 px-4 py-3.5 glass-input rounded-xl text-sm"
-              placeholder="e.g. 📢 Welcome to the FIFA World Cup 2026 Live Streaming Portal! Enjoy HD streams! 📢"
+              className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+              placeholder="e.g. 📢 Welcome to the FIFA World Cup 2026 Live Streaming Portal! Enjoy HD streams! 📢 (No word limitation)"
             />
-            <button
-              type="submit"
-              disabled={updatingTicker}
-              className="px-6 py-3.5 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {updatingTicker ? 'Saving...' : 'Save Ticker'}
-            </button>
+            <div className="flex justify-between items-center">
+              {tickerSuccess ? (
+                <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Ticker settings updated successfully!</p>
+              ) : <div />}
+              <button
+                type="submit"
+                disabled={updatingTicker}
+                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {updatingTicker ? 'Saving...' : 'Save Ticker'}
+              </button>
+            </div>
           </form>
-          {tickerSuccess && (
-            <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Ticker text updated successfully!</p>
-          )}
+        </div>
+
+        {/* Audio Announcement Settings Form */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Volume2 className="h-5 w-5 text-emerald-accent" />
+                Audio Announcement Settings
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Upload an audio announcement (.mp3, .wav) that will play automatically when users first enter or refresh the website.</p>
+            </div>
+
+            <div className="flex items-center gap-2.5 p-2 bg-slate-950/40 border border-slate-900 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setIsAudioEnabled(!isAudioEnabled)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isAudioEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    isAudioEnabled ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="text-[10px] font-extrabold text-white uppercase">Enable Audio</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleAudioSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Upload Audio File</label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-card-border text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl cursor-pointer transition-colors">
+                  <Upload className="h-4 w-4 text-emerald-accent" />
+                  <span>{audioFile ? audioFile.name : 'Choose Audio File'}</span>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setAudioFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </label>
+                {audioUrl && (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-400 truncate">
+                      Current: <a href={audioUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-accent underline decoration-dotted">{audioUrl.split('/').pop()}</a>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {audioUrl && (
+              <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-2">
+                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Preview Player:</span>
+                <audio src={audioUrl} controls className="h-8 max-w-full flex-1" />
+              </div>
+            )}
+
+            <div className="flex justify-between items-center">
+              {audioSuccess ? (
+                <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Audio settings saved successfully!</p>
+              ) : <div />}
+              <button
+                type="submit"
+                disabled={updatingAudio || (!audioFile && audioUrl === tickerData?.audio_url && isAudioEnabled === tickerData?.audio_enabled)}
+                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {updatingAudio ? 'Saving...' : 'Save Audio'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* User Count Settings */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+          <div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Users className="h-5 w-5 text-emerald-accent" />
+              Visitor Count & Viewers Offset
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Configure offset values to add to the authentic (real) view and viewer counters.</p>
+          </div>
+          
+          <form onSubmit={handleCountSettingsSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Total Views Offset</label>
+              <input
+                type="number"
+                min={0}
+                value={viewsOffset}
+                onChange={(e) => setViewsOffset(Number(e.target.value))}
+                className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                placeholder="0"
+              />
+              <p className="text-[10px] text-slate-500 font-medium">Added to real database analytics events count (currently {trafficStats?.realViews || 0})</p>
+            </div>
+            
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Live Viewers Offset</label>
+              <input
+                type="number"
+                min={0}
+                value={viewersOffset}
+                onChange={(e) => setViewersOffset(Number(e.target.value))}
+                className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                placeholder="0"
+              />
+              <p className="text-[10px] text-slate-500 font-medium">Added to real concurrent viewers count in last 5 mins (currently {trafficStats?.realViewers || 0})</p>
+            </div>
+            
+            <div className="sm:col-span-2 flex justify-between items-center border-t border-card-border pt-4">
+              {countsSuccess ? (
+                <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Visitor offsets saved successfully!</p>
+              ) : <div />}
+              <button
+                type="submit"
+                disabled={updatingCounts}
+                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {updatingCounts ? 'Saving...' : 'Save Offsets'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Website Identity & Branding Settings Form */}
