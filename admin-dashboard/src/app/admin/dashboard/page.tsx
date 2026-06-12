@@ -14,7 +14,9 @@ import {
   BellRing,
   Upload,
   Check,
-  Volume2
+  Volume2,
+  Trash2,
+  Clock
 } from 'lucide-react';
 import {
   AreaChart,
@@ -82,12 +84,34 @@ export default function DashboardPage() {
   const [updatingCounts, setUpdatingCounts] = useState(false);
   const [countsSuccess, setCountsSuccess] = useState(false);
 
+  // Logo toggle display state
+  const [useLogoImage, setUseLogoImage] = useState(false);
+
   // Audio Announcement States
   const [audioUrl, setAudioUrl] = useState('');
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [updatingAudio, setUploadingAudio] = useState(false);
   const [audioSuccess, setAudioSuccess] = useState(false);
+
+  // Multiple scheduled audio announcement states
+  const [newAudioFile, setNewAudioFile] = useState<File | null>(null);
+  const [playAtDate, setPlayAtDate] = useState('');
+  const [playAtTime, setPlayAtTime] = useState('');
+  const [addingAudio, setAddingAudio] = useState(false);
+
+  // Fetch scheduled audio announcements
+  const { data: audioAnnouncements = [], refetch: refetchAudios } = useQuery({
+    queryKey: ['audio-announcements'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audio_announcements')
+        .select('*')
+        .order('play_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+  });
 
   // Default Streams States
   const [defaultStreams, setDefaultStreams] = useState<{ label: string; url: string }[]>([]);
@@ -143,6 +167,7 @@ export default function DashboardPage() {
       setMetaTitle((tickerData as any).meta_title || '');
       setMetaDescription((tickerData as any).meta_description || '');
       setMetaImageUrl((tickerData as any).meta_image || '');
+      setUseLogoImage((tickerData as any).use_logo_image === true);
     }
   }, [tickerData]);
 
@@ -196,6 +221,89 @@ export default function DashboardPage() {
       alert('Failed to update audio announcement settings');
     } finally {
       setUploadingAudio(false);
+    }
+  };
+
+  const uploadScheduledAudio = async (file: File): Promise<string> => {
+    const filePath = `announcements/audio/${Date.now()}/${file.name}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('teams')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
+
+  const handleAddScheduledAudio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAudioFile) {
+      alert('Please choose an audio file first.');
+      return;
+    }
+    if (!playAtDate || !playAtTime) {
+      alert('Please select both date and time for scheduling.');
+      return;
+    }
+
+    setAddingAudio(true);
+
+    try {
+      const uploadedUrl = await uploadScheduledAudio(newAudioFile);
+      const scheduledDateTime = new Date(`${playAtDate}T${playAtTime}`).toISOString();
+
+      const { error } = await supabase
+        .from('audio_announcements')
+        .insert([{
+          name: newAudioFile.name,
+          audio_url: uploadedUrl,
+          play_at: scheduledDateTime
+        }]);
+
+      if (error) throw error;
+
+      setNewAudioFile(null);
+      setPlayAtDate('');
+      setPlayAtTime('');
+      refetchAudios();
+      alert('Audio announcement scheduled successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to schedule audio announcement.');
+    } finally {
+      setAddingAudio(false);
+    }
+  };
+
+  const handleDeleteScheduledAudio = async (id: string, audioUrl: string) => {
+    if (!confirm('Are you sure you want to delete this scheduled audio?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('audio_announcements')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      try {
+        const urlObj = new URL(audioUrl);
+        const pathParts = urlObj.pathname.split('/public/teams/');
+        if (pathParts.length > 1) {
+          const storagePath = decodeURIComponent(pathParts[1]);
+          await supabase.storage.from('teams').remove([storagePath]);
+        }
+      } catch (e) {
+        console.error('Failed to remove audio file from storage:', e);
+      }
+
+      refetchAudios();
+      alert('Audio announcement deleted successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete audio announcement.');
     }
   };
 
@@ -491,6 +599,7 @@ export default function DashboardPage() {
         logo_url: finalLogoUrl || null,
         banner_url: finalBannerUrl || null,
         show_counters: showCounters,
+        use_logo_image: useLogoImage,
         updated_at: new Date().toISOString()
       };
 
@@ -697,83 +806,131 @@ export default function DashboardPage() {
           </form>
         </div>
 
-        {/* Audio Announcement Settings Form */}
-        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
-          <div className="flex justify-between items-center flex-wrap gap-2">
-            <div>
-              <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Volume2 className="h-5 w-5 text-emerald-accent" />
-                Audio Announcement Settings
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Upload an audio announcement (.mp3, .wav) that will play automatically when users first enter or refresh the website.</p>
-            </div>
-
-            <div className="flex items-center gap-2.5 p-2 bg-slate-950/40 border border-slate-900 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setIsAudioEnabled(!isAudioEnabled)}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  isAudioEnabled ? 'bg-emerald-500' : 'bg-slate-800'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    isAudioEnabled ? 'translate-x-4' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-              <span className="text-[10px] font-extrabold text-white uppercase">Enable Audio</span>
-            </div>
+        {/* Scheduled Audio Announcements Form & List */}
+        <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-6">
+          <div>
+            <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Volume2 className="h-5 w-5 text-emerald-accent" />
+              Scheduled Audio Announcements (Alarm Style)
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Upload multiple audios, preserve their original file name, and schedule exactly when (date and time) they should play like an alarm on the user website.
+            </p>
           </div>
 
-          <form onSubmit={handleAudioSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Upload Audio File</label>
-              <div className="flex items-center gap-4">
+          {/* Form to add scheduled audio */}
+          <form onSubmit={handleAddScheduledAudio} className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-4">
+            <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">+ Schedule New Audio Announcement</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* File Uploader */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Choose Audio File</label>
                 <label className="flex items-center gap-2 px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-card-border text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl cursor-pointer transition-colors">
                   <Upload className="h-4 w-4 text-emerald-accent" />
-                  <span>{audioFile ? audioFile.name : 'Choose Audio File'}</span>
+                  <span className="truncate">{newAudioFile ? newAudioFile.name : 'Choose File'}</span>
                   <input
                     type="file"
                     accept="audio/*"
                     className="hidden"
+                    required
                     onChange={(e) => {
                       if (e.target.files?.[0]) {
-                        setAudioFile(e.target.files[0]);
+                        setNewAudioFile(e.target.files[0]);
                       }
                     }}
                   />
                 </label>
-                {audioUrl && (
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-slate-400 truncate">
-                      Current: <a href={audioUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-accent underline decoration-dotted">{audioUrl.split('/').pop()}</a>
-                    </p>
-                  </div>
-                )}
+              </div>
+
+              {/* Date Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Play Date</label>
+                <input
+                  type="date"
+                  required
+                  value={playAtDate}
+                  onChange={(e) => setPlayAtDate(e.target.value)}
+                  className="w-full px-4 py-2.5 glass-input rounded-xl text-xs"
+                />
+              </div>
+
+              {/* Time Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Play Time</label>
+                <input
+                  type="time"
+                  required
+                  value={playAtTime}
+                  onChange={(e) => setPlayAtTime(e.target.value)}
+                  className="w-full px-4 py-2.5 glass-input rounded-xl text-xs"
+                />
               </div>
             </div>
 
-            {audioUrl && (
-              <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center gap-2">
-                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Preview Player:</span>
-                <audio src={audioUrl} controls className="h-8 max-w-full flex-1" />
-              </div>
-            )}
-
-            <div className="flex justify-between items-center">
-              {audioSuccess ? (
-                <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Audio settings saved successfully!</p>
-              ) : <div />}
+            <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                disabled={updatingAudio || (!audioFile && audioUrl === tickerData?.audio_url && isAudioEnabled === tickerData?.audio_enabled)}
-                className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                disabled={addingAudio}
+                className="px-5 py-2.5 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {updatingAudio ? 'Saving...' : 'Save Audio'}
+                {addingAudio ? 'Uploading...' : 'Schedule Audio Announcement'}
               </button>
             </div>
           </form>
+
+          {/* List of scheduled audios */}
+          <div className="space-y-3">
+            <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Scheduled Alarms ({audioAnnouncements.length})</span>
+            
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              {audioAnnouncements.length === 0 ? (
+                <div className="text-center py-6 border border-dashed border-card-border rounded-xl">
+                  <p className="text-xs text-slate-500 font-medium">No scheduled audio announcements. Use the form above to add one.</p>
+                </div>
+              ) : (
+                audioAnnouncements.map((item: any, idx: number) => {
+                  const playDate = new Date(item.play_at);
+                  const isFuture = playDate.getTime() > Date.now();
+                  
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between p-3 bg-slate-950/40 border border-slate-900 rounded-xl"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-slate-500">#{idx + 1}</span>
+                          <span className="text-xs font-bold text-white truncate max-w-[200px]" title={item.name}>{item.name}</span>
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                            isFuture ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          }`}>
+                            {isFuture ? 'Scheduled' : 'Passed'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+                          <Clock className="h-3 w-3 text-emerald-accent" />
+                          <span>Plays at: {playDate.toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      {/* Audio Player and Delete */}
+                      <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                        <audio src={item.audio_url} controls className="h-7 max-w-[150px] sm:max-w-[180px] bg-slate-900 rounded-lg" />
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteScheduledAudio(item.id, item.audio_url)}
+                          className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer transition-colors"
+                          title="Delete Alarm"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
 
         {/* User Count Settings */}
@@ -1012,7 +1169,7 @@ export default function DashboardPage() {
                       value={siteLogoUrl}
                       onChange={(e) => {
                         setSiteLogoUrl(e.target.value);
-                        setSiteLogoFile(null); // Clear file upload if manually entering URL
+                        setSiteLogoFile(null); // Clear file uploader if typing manually
                       }}
                       placeholder="https://example.com/logo.png"
                       className="w-full px-4 py-3 glass-input rounded-xl text-sm"
@@ -1020,7 +1177,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="flex items-end justify-center">
-                    <div className="h-12 w-12 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                    <div className="h-12 w-32 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
                       {siteLogoFile ? (
                         <img
                           src={URL.createObjectURL(siteLogoFile)}
@@ -1041,23 +1198,62 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Logo Icon File</label>
-                  <label className="flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
-                    <Upload className="h-5 w-5 text-slate-500 shrink-0" />
-                    <span className="text-xs text-slate-400 font-semibold truncate">
-                      {siteLogoFile ? siteLogoFile.name : 'Upload logo file (PNG/SVG recommended)'}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setSiteLogoFile(file);
-                        if (file) setSiteLogoUrl(''); // Clear text input if uploading file
-                      }}
-                      className="hidden"
-                    />
-                  </label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Full Logo File (120px x 32px recommended)</label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
+                      <Upload className="h-5 w-5 text-slate-500 shrink-0" />
+                      <span className="text-xs text-slate-400 font-semibold truncate text-left">
+                        {siteLogoFile ? siteLogoFile.name : 'Upload logo image file'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setSiteLogoFile(file);
+                          if (file) setSiteLogoUrl(''); // Clear text input if uploading file
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {(siteLogoUrl || siteLogoFile) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSiteLogoUrl('');
+                          setSiteLogoFile(null);
+                        }}
+                        className="px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                      >
+                        Delete Logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Logo Display Method Toggle */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Logo Display Method</label>
+                  <div className="flex items-center gap-3 p-3 bg-slate-950/60 border border-slate-900 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setUseLogoImage(!useLogoImage)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-0 ${
+                        useLogoImage ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          useLogoImage ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <div>
+                      <span className="text-xs font-extrabold text-white block">Use Uploaded Logo Image</span>
+                      <span className="text-[10px] text-slate-500 block">Show the uploaded full logo image instead of the text brand</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

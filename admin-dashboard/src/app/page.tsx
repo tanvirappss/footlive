@@ -194,43 +194,72 @@ export default function UserHomePage() {
     }
   }, [announcements]);
 
-  // Audio announcement autoplay handler
+  // Fetch scheduled audio announcements
+  const { data: audioAnnouncements = [] } = useQuery({
+    queryKey: ['user-audio-announcements'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audio_announcements')
+        .select('*')
+        .order('play_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Scheduled Audio Alarm & Autoplay Handler
   useEffect(() => {
-    if (!ticker || !ticker.audio_enabled || !ticker.audio_url) return;
+    if (audioAnnouncements.length === 0) return;
 
     // Check if audio has already played in this client-side JS load context
     if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
       return;
     }
 
+    // Read session play count (max 2 plays per session)
     let playCount = 0;
     try {
       const stored = sessionStorage.getItem('audio_play_count');
-      if (stored) {
-        playCount = parseInt(stored, 10);
-      }
+      if (stored) playCount = parseInt(stored, 10);
     } catch (e) {
-      console.error('Failed to read session storage', e);
+      console.error(e);
     }
-
     if (playCount >= 2) return;
 
-    let audio: HTMLAudioElement | null = null;
+    const activeAudio = audioAnnouncements
+      .filter((a: any) => new Date(a.play_at).getTime() <= Date.now())
+      .pop(); // Get the most recently scheduled past audio
+
+    let currentAudioElement: HTMLAudioElement | null = null;
     let playTimeout: NodeJS.Timeout | null = null;
+    const futureTimeouts: NodeJS.Timeout[] = [];
 
-    const startAudioPlay = () => {
-      if (audio) return; // already playing or trying to play
+    const playAudioUrl = (url: string) => {
+      // Check play count limit again before playing
+      let currentPlayCount = 0;
+      try {
+        const stored = sessionStorage.getItem('audio_play_count');
+        if (stored) currentPlayCount = parseInt(stored, 10);
+      } catch (e) {
+        console.error(e);
+      }
+      if (currentPlayCount >= 2) return;
 
-      audio = new Audio(ticker.audio_url);
-      audio.preload = 'auto'; // load asynchronously in the background
-      
+      if (currentAudioElement) {
+        currentAudioElement.pause();
+        currentAudioElement = null;
+      }
+
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      currentAudioElement = audio;
+
       const playPromise = audio.play();
-
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
             try {
-              sessionStorage.setItem('audio_play_count', String(playCount + 1));
+              sessionStorage.setItem('audio_play_count', String(currentPlayCount + 1));
               (window as any).__audioPlayedInCurrentLoad = true;
             } catch (e) {
               console.error(e);
@@ -238,16 +267,15 @@ export default function UserHomePage() {
             cleanupListeners();
           })
           .catch((err) => {
-            console.log('Autoplay blocked. Waiting for user interaction to trigger audio play.', err);
-            audio = null;
+            console.log('Autoplay blocked. Waiting for user interaction.', err);
+            currentAudioElement = null;
           });
       }
     };
 
     const interactionEvents = ['click', 'touchstart', 'mousedown', 'keydown', 'scroll'];
-
     const handleUserInteraction = () => {
-      startAudioPlay();
+      if (activeAudio) playAudioUrl(activeAudio.audio_url);
     };
 
     const cleanupListeners = () => {
@@ -256,25 +284,41 @@ export default function UserHomePage() {
       });
     };
 
-    // Delay start of play to ensure zero impact on initial page speed/interactive time
-    playTimeout = setTimeout(() => {
-      startAudioPlay();
+    // 1. Play active past audio after a short delay on mount
+    if (activeAudio) {
+      playTimeout = setTimeout(() => {
+        playAudioUrl(activeAudio.audio_url);
+
+        // Add user interaction fallbacks in case of autoplay restrictions
+        interactionEvents.forEach((event) => {
+          window.addEventListener(event, handleUserInteraction, { passive: true });
+        });
+      }, 1500);
+    }
+
+    // 2. Set up alarms for future scheduled audios
+    audioAnnouncements.forEach((item: any) => {
+      const playTime = new Date(item.play_at).getTime();
+      const delay = playTime - Date.now();
       
-      // Setup interaction listeners in case autoplay is blocked by default browser policies
-      interactionEvents.forEach((event) => {
-        window.addEventListener(event, handleUserInteraction, { passive: true });
-      });
-    }, 1500);
+      if (delay > 0) {
+        const timeoutId = setTimeout(() => {
+          playAudioUrl(item.audio_url);
+        }, delay);
+        futureTimeouts.push(timeoutId);
+      }
+    });
 
     return () => {
       if (playTimeout) clearTimeout(playTimeout);
+      futureTimeouts.forEach((t) => clearTimeout(t));
       cleanupListeners();
-      if (audio) {
-        audio.pause();
-        audio = null;
+      if (currentAudioElement) {
+        currentAudioElement.pause();
+        currentAudioElement = null;
       }
     };
-  }, [ticker]);
+  }, [audioAnnouncements]);
 
   // Fetch matches
   const { data: matches = [], isLoading } = useQuery<Match[]>({
@@ -341,22 +385,32 @@ export default function UserHomePage() {
       {/* Header Bar */}
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {ticker?.logo_url ? (
+          <div className="flex items-center">
+            {ticker?.use_logo_image && ticker?.logo_url ? (
               <img 
                 src={ticker.logo_url} 
-                alt="Site Logo" 
-                className="h-8 w-8 object-contain rounded-lg border border-card-border" 
+                alt={ticker?.site_name || "Site Logo"} 
+                className="h-9 w-auto max-w-[200px] object-contain" 
               />
             ) : (
-              <span className="text-2xl">🏆</span>
+              <div className="flex items-center gap-3">
+                {ticker?.logo_url ? (
+                  <img 
+                    src={ticker.logo_url} 
+                    alt="Site Logo" 
+                    className="h-8 w-8 object-contain rounded-lg border border-card-border" 
+                  />
+                ) : (
+                  <span className="text-2xl">🏆</span>
+                )}
+                <div>
+                  <h1 className="font-black text-sm tracking-wider uppercase text-white">
+                    {ticker?.site_name || 'WORLD CUP 2026'}
+                  </h1>
+                  <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">Premium Streaming Portal</p>
+                </div>
+              </div>
             )}
-            <div>
-              <h1 className="font-black text-sm tracking-wider uppercase text-white">
-                {ticker?.site_name || 'WORLD CUP 2026'}
-              </h1>
-              <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">Premium Streaming Portal</p>
-            </div>
           </div>
 
           <button

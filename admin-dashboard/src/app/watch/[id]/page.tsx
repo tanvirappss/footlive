@@ -119,43 +119,72 @@ export default function UserWatchPage() {
     }
   }, [match, sessionId]);
 
-  // Audio announcement autoplay handler (shared session limit)
+  // Fetch scheduled audio announcements
+  const { data: audioAnnouncements = [] } = useQuery({
+    queryKey: ['user-audio-announcements'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audio_announcements')
+        .select('*')
+        .order('play_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Scheduled Audio Alarm & Autoplay Handler
   useEffect(() => {
-    if (!ticker || !ticker.audio_enabled || !ticker.audio_url) return;
+    if (audioAnnouncements.length === 0) return;
 
     // Check if audio has already played in this client-side JS load context
     if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
       return;
     }
 
+    // Read session play count (max 2 plays per session)
     let playCount = 0;
     try {
       const stored = sessionStorage.getItem('audio_play_count');
-      if (stored) {
-        playCount = parseInt(stored, 10);
-      }
+      if (stored) playCount = parseInt(stored, 10);
     } catch (e) {
-      console.error('Failed to read session storage', e);
+      console.error(e);
     }
-
     if (playCount >= 2) return;
 
-    let audio: HTMLAudioElement | null = null;
+    const activeAudio = audioAnnouncements
+      .filter((a: any) => new Date(a.play_at).getTime() <= Date.now())
+      .pop(); // Get the most recently scheduled past audio
+
+    let currentAudioElement: HTMLAudioElement | null = null;
     let playTimeout: NodeJS.Timeout | null = null;
+    const futureTimeouts: NodeJS.Timeout[] = [];
 
-    const startAudioPlay = () => {
-      if (audio) return;
+    const playAudioUrl = (url: string) => {
+      // Check play count limit again before playing
+      let currentPlayCount = 0;
+      try {
+        const stored = sessionStorage.getItem('audio_play_count');
+        if (stored) currentPlayCount = parseInt(stored, 10);
+      } catch (e) {
+        console.error(e);
+      }
+      if (currentPlayCount >= 2) return;
 
-      audio = new Audio(ticker.audio_url);
+      if (currentAudioElement) {
+        currentAudioElement.pause();
+        currentAudioElement = null;
+      }
+
+      const audio = new Audio(url);
       audio.preload = 'auto';
-      
-      const playPromise = audio.play();
+      currentAudioElement = audio;
 
+      const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
             try {
-              sessionStorage.setItem('audio_play_count', String(playCount + 1));
+              sessionStorage.setItem('audio_play_count', String(currentPlayCount + 1));
               (window as any).__audioPlayedInCurrentLoad = true;
             } catch (e) {
               console.error(e);
@@ -163,16 +192,15 @@ export default function UserWatchPage() {
             cleanupListeners();
           })
           .catch((err) => {
-            console.log('Autoplay blocked on watch page. Waiting for user interaction.', err);
-            audio = null;
+            console.log('Autoplay blocked. Waiting for user interaction.', err);
+            currentAudioElement = null;
           });
       }
     };
 
     const interactionEvents = ['click', 'touchstart', 'mousedown', 'keydown', 'scroll'];
-
     const handleUserInteraction = () => {
-      startAudioPlay();
+      if (activeAudio) playAudioUrl(activeAudio.audio_url);
     };
 
     const cleanupListeners = () => {
@@ -181,23 +209,41 @@ export default function UserWatchPage() {
       });
     };
 
-    playTimeout = setTimeout(() => {
-      startAudioPlay();
+    // 1. Play active past audio after a short delay on mount
+    if (activeAudio) {
+      playTimeout = setTimeout(() => {
+        playAudioUrl(activeAudio.audio_url);
+
+        // Add user interaction fallbacks in case of autoplay restrictions
+        interactionEvents.forEach((event) => {
+          window.addEventListener(event, handleUserInteraction, { passive: true });
+        });
+      }, 1500);
+    }
+
+    // 2. Set up alarms for future scheduled audios
+    audioAnnouncements.forEach((item: any) => {
+      const playTime = new Date(item.play_at).getTime();
+      const delay = playTime - Date.now();
       
-      interactionEvents.forEach((event) => {
-        window.addEventListener(event, handleUserInteraction, { passive: true });
-      });
-    }, 1500);
+      if (delay > 0) {
+        const timeoutId = setTimeout(() => {
+          playAudioUrl(item.audio_url);
+        }, delay);
+        futureTimeouts.push(timeoutId);
+      }
+    });
 
     return () => {
       if (playTimeout) clearTimeout(playTimeout);
+      futureTimeouts.forEach((t) => clearTimeout(t));
       cleanupListeners();
-      if (audio) {
-        audio.pause();
-        audio = null;
+      if (currentAudioElement) {
+        currentAudioElement.pause();
+        currentAudioElement = null;
       }
     };
-  }, [ticker]);
+  }, [audioAnnouncements]);
 
   if (isLoading) {
     return (
