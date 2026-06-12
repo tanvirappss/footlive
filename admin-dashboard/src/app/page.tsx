@@ -542,8 +542,8 @@ export default function UserHomePage() {
                   </div>
 
                   {/* Teams and scores */}
-                  <div className="flex items-center justify-between text-center">
-                    <div className="w-5/12 flex flex-col items-center gap-2">
+                  <div className="flex items-center justify-between text-center gap-1.5">
+                    <div className="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
                       <div className="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
                         {homeFlag ? (
                           <img src={homeFlag} alt={homeName} className="h-full w-full object-cover rounded-lg" />
@@ -551,18 +551,18 @@ export default function UserHomePage() {
                           <span className="text-xs text-slate-500 font-black">HOME</span>
                         )}
                       </div>
-                      <span className="font-extrabold text-white text-sm line-clamp-1">{homeName}</span>
+                      <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{homeName}</span>
                     </div>
 
-                    <div className="w-2/12 flex flex-col items-center justify-center">
+                    <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
                       {(isLive || match.status === 'finished') ? (
-                        <span className="text-3xl font-black text-white tracking-tight">{match.home_score} - {match.away_score}</span>
+                        <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
                       ) : (
-                        <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500">VS</span>
+                        <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>
                       )}
                     </div>
 
-                    <div className="w-5/12 flex flex-col items-center gap-2">
+                    <div className="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
                       <div className="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
                         {awayFlag ? (
                           <img src={awayFlag} alt={awayName} className="h-full w-full object-cover rounded-lg" />
@@ -570,7 +570,7 @@ export default function UserHomePage() {
                           <span className="text-xs text-slate-500 font-black">AWAY</span>
                         )}
                       </div>
-                      <span className="font-extrabold text-white text-sm line-clamp-1">{awayName}</span>
+                      <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{awayName}</span>
                     </div>
                   </div>
 

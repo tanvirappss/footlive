@@ -163,9 +163,9 @@ export default function MatchDetailsPage() {
             </div>
 
             {/* Teams Matchup display */}
-            <div className="w-full flex items-center justify-between">
+            <div className="w-full flex items-center justify-between gap-1.5">
               {/* Home Team */}
-              <div className="w-5/12 flex flex-col items-center gap-4 text-center">
+              <div className="w-[38%] shrink-0 flex flex-col items-center gap-4 text-center min-w-0">
                 <div className="h-20 w-28 bg-slate-900/80 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1.5 shadow-xl transition-transform hover:scale-[1.03]">
                   {homeFlag ? (
                     <img src={homeFlag} alt={homeName} className="h-full w-full object-cover rounded-lg" />
@@ -173,31 +173,31 @@ export default function MatchDetailsPage() {
                     <span className="text-xs text-slate-500 font-black">HOME</span>
                   )}
                 </div>
-                <h3 className="text-lg md:text-xl font-black text-white">{homeName}</h3>
+                <h3 className="text-base md:text-xl font-black text-white w-full truncate">{homeName}</h3>
               </div>
 
               {/* Score or VS */}
-              <div className="w-2/12 flex flex-col items-center justify-center">
+              <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
                 {(isLive || isFinished) ? (
                   <div className="flex flex-col items-center">
-                    <span className="text-4xl md:text-6xl font-black text-white tracking-tighter">
+                    <span className="text-2xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter whitespace-nowrap">
                       {match.home_score} - {match.away_score}
                     </span>
                     {isLive && (
-                      <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mt-2 animate-pulse">
+                      <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mt-2 animate-pulse whitespace-nowrap">
                         LIVE NOW
                       </span>
                     )}
                   </div>
                 ) : (
-                  <div className="px-4 py-2 bg-slate-950 border border-card-border text-sm font-black rounded-xl text-slate-400 shadow">
+                  <div className="px-4 py-2 bg-slate-950 border border-card-border text-sm font-black rounded-xl text-slate-400 shadow whitespace-nowrap">
                     VS
                   </div>
                 )}
               </div>
 
               {/* Away Team */}
-              <div className="w-5/12 flex flex-col items-center gap-4 text-center">
+              <div className="w-[38%] shrink-0 flex flex-col items-center gap-4 text-center min-w-0">
                 <div className="h-20 w-28 bg-slate-900/80 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1.5 shadow-xl transition-transform hover:scale-[1.03]">
                   {awayFlag ? (
                     <img src={awayFlag} alt={awayName} className="h-full w-full object-cover rounded-lg" />
@@ -205,7 +205,7 @@ export default function MatchDetailsPage() {
                     <span className="text-xs text-slate-500 font-black">AWAY</span>
                   )}
                 </div>
-                <h3 className="text-lg md:text-xl font-black text-white">{awayName}</h3>
+                <h3 className="text-base md:text-xl font-black text-white w-full truncate">{awayName}</h3>
               </div>
             </div>
 

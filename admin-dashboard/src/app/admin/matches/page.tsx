@@ -611,9 +611,9 @@ export default function MatchesPage() {
                   </div>
 
                   {/* Versus Display */}
-                  <div className="flex items-center justify-between py-2 text-center">
+                  <div className="flex items-center justify-between py-2 text-center gap-1.5">
                     {/* Home Team */}
-                    <div className="flex flex-col items-center gap-2 w-5/12">
+                    <div className="flex flex-col items-center gap-2 w-[38%] shrink-0 min-w-0">
                       <div className="h-12 w-18 bg-slate-900/60 rounded-xl overflow-hidden border border-card-border flex items-center justify-center shadow">
                         {homeFlag ? (
                           <img src={homeFlag} alt={homeName} className="h-full w-full object-cover" />
@@ -621,24 +621,24 @@ export default function MatchesPage() {
                           <span className="text-slate-500 text-sm font-bold">HOME</span>
                         )}
                       </div>
-                      <span className="font-extrabold text-white text-sm line-clamp-1">{homeName}</span>
+                      <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{homeName}</span>
                     </div>
 
                     {/* Score or VS */}
-                    <div className="w-2/12 flex flex-col items-center justify-center">
+                    <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
                       {(isLive || isFinished) ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <span className="text-2xl font-black text-white">{match.home_score}</span>
                           <span className="text-slate-600 font-bold">-</span>
                           <span className="text-2xl font-black text-white">{match.away_score}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-500 text-xs font-black uppercase bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800/80">VS</span>
+                        <span className="text-slate-500 text-xs font-black uppercase bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800/80 whitespace-nowrap">VS</span>
                       )}
                     </div>
 
                     {/* Away Team */}
-                    <div className="flex flex-col items-center gap-2 w-5/12">
+                    <div className="flex flex-col items-center gap-2 w-[38%] shrink-0 min-w-0">
                       <div className="h-12 w-18 bg-slate-900/60 rounded-xl overflow-hidden border border-card-border flex items-center justify-center shadow">
                         {awayFlag ? (
                           <img src={awayFlag} alt={awayName} className="h-full w-full object-cover" />
@@ -646,7 +646,7 @@ export default function MatchesPage() {
                           <span className="text-slate-500 text-sm font-bold">AWAY</span>
                         )}
                       </div>
-                      <span className="font-extrabold text-white text-sm line-clamp-1">{awayName}</span>
+                      <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{awayName}</span>
                     </div>
                   </div>
 
