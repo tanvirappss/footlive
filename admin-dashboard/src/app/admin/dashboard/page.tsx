@@ -271,47 +271,9 @@ export default function DashboardPage() {
   };
 
   // Drag and Drop Helpers for Default Stream List
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === index) return;
-
-    const list = [...defaultStreams];
-    const draggedItem = list[draggedIndex];
-    list.splice(draggedIndex, 1);
-    list.splice(index, 0, draggedItem);
-    
-    setDraggedIndex(index);
-    setDefaultStreams(list);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
-  const moveStreamItem = (index: number, direction: 'up' | 'down') => {
-    const list = [...defaultStreams];
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    
-    if (newIndex < 0 || newIndex >= list.length) return;
-    
-    const temp = list[index];
-    list[index] = list[newIndex];
-    list[newIndex] = temp;
-    
-    setDefaultStreams(list);
-  };
-
-  const handleDefaultStreamsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setUpdatingDefaultStreams(true);
-    setDefaultStreamsSuccess(false);
-
+  const saveAndSyncDefaultStreams = async (updatedStreams: { label: string; url: string }[]) => {
     try {
-      const filteredStreams = defaultStreams.filter(item => item.label.trim() && item.url.trim());
+      const filteredStreams = updatedStreams.filter(item => item.label.trim() && item.url.trim());
 
       const updateData = {
         default_streams: filteredStreams,
@@ -352,8 +314,62 @@ export default function DashboardPage() {
         await Promise.all(updatePromises);
       }
 
-      setDefaultStreamsSuccess(true);
       refetchTicker();
+    } catch (err) {
+      console.error('Failed to auto-sync default stream links:', err);
+    }
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const list = [...defaultStreams];
+    const draggedItem = list[draggedIndex];
+    list.splice(draggedIndex, 1);
+    list.splice(index, 0, draggedItem);
+    
+    setDraggedIndex(index);
+    setDefaultStreams(list);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    saveAndSyncDefaultStreams(defaultStreams);
+  };
+
+  const moveStreamItem = (index: number, direction: 'up' | 'down') => {
+    const list = [...defaultStreams];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    if (newIndex < 0 || newIndex >= list.length) return;
+    
+    const temp = list[index];
+    list[index] = list[newIndex];
+    list[newIndex] = temp;
+    
+    setDefaultStreams(list);
+    saveAndSyncDefaultStreams(list);
+  };
+
+  const deleteStreamItem = (index: number) => {
+    const list = defaultStreams.filter((_, i) => i !== index);
+    setDefaultStreams(list);
+    saveAndSyncDefaultStreams(list);
+  };
+
+  const handleDefaultStreamsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingDefaultStreams(true);
+    setDefaultStreamsSuccess(false);
+
+    try {
+      await saveAndSyncDefaultStreams(defaultStreams);
+      setDefaultStreamsSuccess(true);
       setTimeout(() => setDefaultStreamsSuccess(false), 3000);
     } catch (err) {
       console.error(err);
@@ -869,6 +885,7 @@ export default function DashboardPage() {
                         list[idx].label = e.target.value;
                         setDefaultStreams(list);
                       }}
+                      onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
                       placeholder="Label (e.g. Server 1)"
                       className="w-1/3 px-3 py-2 glass-input rounded-xl text-xs"
                     />
@@ -881,6 +898,7 @@ export default function DashboardPage() {
                         list[idx].url = e.target.value;
                         setDefaultStreams(list);
                       }}
+                      onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
                       placeholder="M3U8 Streaming URL"
                       className="flex-1 px-3 py-2 glass-input rounded-xl text-xs"
                     />
@@ -907,7 +925,7 @@ export default function DashboardPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDefaultStreams(defaultStreams.filter((_, i) => i !== idx))}
+                        onClick={() => deleteStreamItem(idx)}
                         className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer"
                         title="Delete Link"
                       >
