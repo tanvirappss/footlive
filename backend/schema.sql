@@ -104,6 +104,30 @@ create table if not exists analytics (
     created_at timestamptz default now()
 );
 
+-- 8. Ticker & Site Settings Table
+create table if not exists ticker_settings (
+    id uuid primary key default gen_random_uuid(),
+    ticker_text text,
+    is_enabled boolean default true,
+    site_name text default 'WORLD CUP 2026',
+    logo_url text,
+    banner_url text,
+    show_counters boolean default true,
+    views_offset integer default 0,
+    viewers_offset integer default 0,
+    audio_url text,
+    audio_enabled boolean default true,
+    default_streams jsonb default '[]'::jsonb,
+    meta_title text,
+    meta_description text,
+    meta_image text,
+    use_logo_image boolean default false,
+    no_matches_title text default 'NO MATCHES BROADCASTS',
+    no_matches_desc text default 'There are no active matches in this tab. Tune in during kickoff schedules.',
+    updated_at timestamptz default now(),
+    created_at timestamptz default now()
+);
+
 -- Indexing for performance
 create index if not exists idx_matches_timestamp on matches(match_timestamp);
 create index if not exists idx_matches_status on matches(status);
@@ -118,6 +142,7 @@ alter table announcements enable row level security;
 alter table ad_networks enable row level security;
 alter table app_updates enable row level security;
 alter table analytics enable row level security;
+alter table ticker_settings enable row level security;
 
 -- drop existing policies if they exist to prevent errors
 drop policy if exists "Allow public read teams" on teams;
@@ -127,6 +152,7 @@ drop policy if exists "Allow public read announcements" on announcements;
 drop policy if exists "Allow public read ad_networks" on ad_networks;
 drop policy if exists "Allow public read app_updates" on app_updates;
 drop policy if exists "Allow public insert analytics" on analytics;
+drop policy if exists "Allow public read ticker_settings" on ticker_settings;
 
 drop policy if exists "Allow admin write teams" on teams;
 drop policy if exists "Allow admin write matches" on matches;
@@ -143,9 +169,15 @@ create policy "Allow public read streams" on streams for select using (true);
 create policy "Allow public read announcements" on announcements for select using (true);
 create policy "Allow public read ad_networks" on ad_networks for select using (true);
 create policy "Allow public read app_updates" on app_updates for select using (true);
+create policy "Allow public read ticker_settings" on ticker_settings for select using (true);
 
 -- Policies for public insert analytics
 create policy "Allow public insert analytics" on analytics for insert with check (true);
+
+-- Policies for public write access to settings (since admin dashboard uses anon client)
+create policy "Allow public insert ticker_settings" on ticker_settings for insert with check (true);
+create policy "Allow public update ticker_settings" on ticker_settings for update using (true);
+create policy "Allow public delete ticker_settings" on ticker_settings for delete using (true);
 
 -- Policies for authenticated admin write access
 create policy "Allow admin write teams" on teams for all to authenticated using (true) with check (true);
@@ -170,3 +202,4 @@ alter publication supabase_realtime add table streams;
 alter publication supabase_realtime add table announcements;
 alter publication supabase_realtime add table ad_networks;
 alter publication supabase_realtime add table app_updates;
+alter publication supabase_realtime add table ticker_settings;

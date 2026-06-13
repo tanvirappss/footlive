@@ -14,7 +14,8 @@ import {
   LogOut, 
   Loader2,
   Menu,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'TV Channels', href: '/admin/channels', icon: Tv },
     { name: 'Earnings', href: '/admin/earnings', icon: DollarSign },
     { name: 'Announcements', href: '/admin/announcements', icon: Megaphone },
+    { name: 'Settings', href: '/admin/settings', icon: Settings },
   ];
 
   if (loading) {

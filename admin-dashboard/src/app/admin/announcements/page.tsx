@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import AdminLayout from '@/components/AdminLayout';
@@ -10,7 +10,11 @@ import {
   Check, 
   X, 
   Loader2, 
-  Megaphone
+  Megaphone,
+  Volume2,
+  Upload,
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 
 interface Announcement {
@@ -26,11 +30,12 @@ interface Announcement {
 
 export default function AnnouncementsPage() {
   const queryClient = useQueryClient();
+  const [announcementTab, setAnnouncementTab] = useState<'text' | 'audio'>('text');
   
-  // Modals state
+  // Modal state - Text Announcement
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Form states - Announcement
+  // Form states - Text Announcement
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [icon, setIcon] = useState('bell');
@@ -39,8 +44,14 @@ export default function AnnouncementsPage() {
   const [scheduledFor, setScheduledFor] = useState('');
   const [mutationError, setMutationError] = useState<string | null>(null);
 
-  // Queries
-  const { data: announcements = [], isLoading } = useQuery<Announcement[]>({
+  // Form states - Audio Alarms
+  const [newAudioFile, setNewAudioFile] = useState<File | null>(null);
+  const [playAtDate, setPlayAtDate] = useState('');
+  const [playAtTime, setPlayAtTime] = useState('');
+  const [addingAudio, setAddingAudio] = useState(false);
+
+  // Query Text Announcements
+  const { data: announcements = [], isLoading: isLoadingText } = useQuery<Announcement[]>({
     queryKey: ['announcements-admin'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -52,6 +63,20 @@ export default function AnnouncementsPage() {
     }
   });
 
+  // Query Audio Alarms
+  const { data: audioAnnouncements = [], refetch: refetchAudios, isLoading: isLoadingAudio } = useQuery({
+    queryKey: ['audio-announcements'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audio_announcements')
+        .select('*')
+        .order('play_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // Add Click - Text
   const handleAddClick = () => {
     setTitle('');
     setMessage('');
@@ -63,7 +88,7 @@ export default function AnnouncementsPage() {
     setIsModalOpen(true);
   };
 
-  // Create Announcement Mutation
+  // Create Announcement Mutation - Text
   const saveMutation = useMutation({
     mutationFn: async () => {
       const data = {
@@ -74,7 +99,6 @@ export default function AnnouncementsPage() {
         status,
         scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : null,
       };
-
       const { error } = await supabase
         .from('announcements')
         .insert([data]);
@@ -89,7 +113,7 @@ export default function AnnouncementsPage() {
     }
   });
 
-  // Delete Announcement Mutation
+  // Delete Announcement Mutation - Text
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -103,10 +127,85 @@ export default function AnnouncementsPage() {
     }
   });
 
-  // Submit announcement
+  // Submit announcement - Text
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     saveMutation.mutate();
+  };
+
+  // Upload Scheduled Audio file
+  const uploadScheduledAudio = async (file: File): Promise<string> => {
+    const filePath = `announcements/audio/${Date.now()}/${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from('teams')
+      .upload(filePath, file);
+    if (uploadError) throw uploadError;
+    const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
+
+  // Submit Scheduled Audio Alarm
+  const handleAddScheduledAudio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAudioFile) {
+      alert('Please choose an audio file first.');
+      return;
+    }
+    if (!playAtDate || !playAtTime) {
+      alert('Please select both date and time for scheduling.');
+      return;
+    }
+    setAddingAudio(true);
+    try {
+      const uploadedUrl = await uploadScheduledAudio(newAudioFile);
+      const scheduledDateTime = new Date(`${playAtDate}T${playAtTime}`).toISOString();
+      const { error } = await supabase
+        .from('audio_announcements')
+        .insert([{
+          name: newAudioFile.name,
+          audio_url: uploadedUrl,
+          play_at: scheduledDateTime
+        }]);
+      if (error) throw error;
+      setNewAudioFile(null);
+      setPlayAtDate('');
+      setPlayAtTime('');
+      refetchAudios();
+      alert('Audio announcement scheduled successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to schedule audio announcement.');
+    } finally {
+      setAddingAudio(false);
+    }
+  };
+
+  // Delete Scheduled Audio Alarm
+  const handleDeleteScheduledAudio = async (id: string, audioUrl: string) => {
+    if (!confirm('Are you sure you want to delete this scheduled audio?')) return;
+    try {
+      const { error } = await supabase
+        .from('audio_announcements')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+
+      try {
+        const urlObj = new URL(audioUrl);
+        const pathParts = urlObj.pathname.split('/public/teams/');
+        if (pathParts.length > 1) {
+          const storagePath = decodeURIComponent(pathParts[1]);
+          await supabase.storage.from('teams').remove([storagePath]);
+        }
+      } catch (e) {
+        console.error('Failed to remove audio file from storage:', e);
+      }
+      refetchAudios();
+      alert('Audio announcement deleted successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete audio announcement.');
+    }
   };
 
   return (
@@ -116,9 +215,9 @@ export default function AnnouncementsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-extrabold text-white uppercase tracking-tight">Announcement Center</h1>
-            <p className="text-slate-400 text-sm mt-1">Publish notices, update app maintenance, and send push alerts.</p>
+            <p className="text-slate-400 text-sm mt-1">Publish notices, update app maintenance, and schedule alarm notifications.</p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          {announcementTab === 'text' && (
             <button
               onClick={handleAddClick}
               className="flex items-center gap-2 px-4 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-500/10"
@@ -126,70 +225,237 @@ export default function AnnouncementsPage() {
               <Plus className="h-4.5 w-4.5" />
               New Announcement
             </button>
-          </div>
+          )}
         </div>
 
-        {/* Announcements List */}
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-24">
-            <Loader2 className="h-8 w-8 text-emerald-accent animate-spin" />
-            <p className="text-slate-400 text-sm mt-4">Loading announcements feed...</p>
-          </div>
-        ) : announcements.length === 0 ? (
-          <div className="glass-panel p-12 text-center rounded-2xl border border-card-border">
-            <Megaphone className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-white uppercase">No Announcements</h3>
-            <p className="text-slate-400 text-sm mt-1">Create updates or maintenance alerts to broadcast them on the mobile app.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {announcements.map((ann) => (
-              <div 
-                key={ann.id} 
-                className="glass-panel p-6 rounded-2xl border border-card-border flex flex-col justify-between gap-4 hover:border-slate-700 transition-all duration-150"
-              >
-                <div>
-                  <div className="flex justify-between items-start gap-4">
-                    <span className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold ${
-                      ann.priority === 'high' 
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/25'
-                        : ann.priority === 'medium'
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
-                          : 'bg-blue-500/10 text-blue-400 border border-blue-500/25'
-                    }`}>
-                      {ann.priority} Priority
-                    </span>
-                    
-                    <span className="text-slate-500 text-[10px] uppercase font-bold">
-                      {ann.status}
-                    </span>
-                  </div>
+        {/* Tab Selector */}
+        <div className="flex border-b border-card-border overflow-x-auto gap-2">
+          <button
+            onClick={() => setAnnouncementTab('text')}
+            className={`flex items-center gap-2 px-5 py-3 font-bold uppercase text-[11px] tracking-wider border-b-2 transition-all cursor-pointer shrink-0 ${
+              announcementTab === 'text'
+                ? 'border-emerald-accent text-emerald-accent bg-emerald-500/5'
+                : 'border-transparent text-slate-500 hover:text-white'
+            }`}
+          >
+            <MessageSquare className="h-4 w-4" />
+            Text Notices ({announcements.length})
+          </button>
+          <button
+            onClick={() => setAnnouncementTab('audio')}
+            className={`flex items-center gap-2 px-5 py-3 font-bold uppercase text-[11px] tracking-wider border-b-2 transition-all cursor-pointer shrink-0 ${
+              announcementTab === 'audio'
+                ? 'border-emerald-accent text-emerald-accent bg-emerald-500/5'
+                : 'border-transparent text-slate-500 hover:text-white'
+            }`}
+          >
+            <Volume2 className="h-4 w-4" />
+            Audio Alarms ({audioAnnouncements.length})
+          </button>
+        </div>
 
-                  <h3 className="font-extrabold text-white text-lg mt-3">{ann.title}</h3>
-                  <p className="text-slate-300 text-sm mt-1.5 font-medium line-clamp-3 whitespace-pre-wrap">{ann.message}</p>
-                </div>
-
-                <div className="border-t border-card-border pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
-                  <span>
-                    Posted: {new Date(ann.created_at).toLocaleDateString()}
-                  </span>
-                  <button
-                    onClick={() => {
-                      if (confirm('Delete this announcement?')) {
-                        deleteMutation.mutate(ann.id);
-                      }
-                    }}
-                    className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-xl transition-all cursor-pointer"
-                  >
-                    <Trash2 className="h-4.5 w-4.5" />
-                  </button>
-                </div>
+        {/* TEXT NOTICES TAB */}
+        {announcementTab === 'text' && (
+          <div>
+            {isLoadingText ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <Loader2 className="h-8 w-8 text-emerald-accent animate-spin" />
+                <p className="text-slate-400 text-sm mt-4">Loading announcements feed...</p>
               </div>
-            ))}
+            ) : announcements.length === 0 ? (
+              <div className="glass-panel p-12 text-center rounded-2xl border border-card-border">
+                <Megaphone className="h-12 w-12 text-slate-600 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-white uppercase">No Announcements</h3>
+                <p className="text-slate-400 text-sm mt-1">Create updates or maintenance alerts to broadcast them on the mobile app.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {announcements.map((ann) => (
+                  <div 
+                    key={ann.id} 
+                    className="glass-panel p-6 rounded-2xl border border-card-border flex flex-col justify-between gap-4 hover:border-slate-700 transition-all duration-150"
+                  >
+                    <div>
+                      <div className="flex justify-between items-start gap-4">
+                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold ${
+                          ann.priority === 'high' 
+                            ? 'bg-red-500/10 text-red-400 border border-red-500/25'
+                            : ann.priority === 'medium'
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                              : 'bg-blue-500/10 text-blue-400 border border-blue-500/25'
+                        }`}>
+                          {ann.priority} Priority
+                        </span>
+                        
+                        <span className="text-slate-500 text-[10px] uppercase font-bold">
+                          {ann.status}
+                        </span>
+                      </div>
+
+                      <h3 className="font-extrabold text-white text-lg mt-3">{ann.title}</h3>
+                      <p className="text-slate-300 text-sm mt-1.5 font-medium line-clamp-3 whitespace-pre-wrap">{ann.message}</p>
+                    </div>
+
+                    <div className="border-t border-card-border pt-4 flex justify-between items-center text-xs text-slate-500 font-bold">
+                      <span>
+                        Posted: {new Date(ann.created_at).toLocaleDateString()}
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (confirm('Delete this announcement?')) {
+                            deleteMutation.mutate(ann.id);
+                          }
+                        }}
+                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-xl transition-all cursor-pointer"
+                      >
+                        <Trash2 className="h-4.5 w-4.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Announcement Modal */}
+        {/* AUDIO ALARMS TAB */}
+        {announcementTab === 'audio' && (
+          <div className="space-y-6">
+            {/* Form to add scheduled audio */}
+            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Volume2 className="h-5 w-5 text-emerald-accent" />
+                  Schedule Audio Announcement (Alarm Style)
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Upload audio files and set the exact date/time they should trigger as an alert on the client app.
+                </p>
+              </div>
+
+              <form onSubmit={handleAddScheduledAudio} className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-4">
+                <h4 className="text-xs font-black text-slate-300 uppercase tracking-widest">+ Schedule New Audio Announcement</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* File Uploader */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Choose Audio File</label>
+                    <label className="flex items-center gap-2 px-4 py-3 bg-slate-900 hover:bg-slate-800 border border-card-border text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl cursor-pointer transition-colors">
+                      <Upload className="h-4 w-4 text-emerald-accent animate-pulse" />
+                      <span className="truncate">{newAudioFile ? newAudioFile.name : 'Choose File'}</span>
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        required
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) {
+                            setNewAudioFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Date Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Play Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={playAtDate}
+                      onChange={(e) => setPlayAtDate(e.target.value)}
+                      className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white"
+                    />
+                  </div>
+
+                  {/* Time Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Play Time</label>
+                    <input
+                      type="time"
+                      required
+                      value={playAtTime}
+                      onChange={(e) => setPlayAtTime(e.target.value)}
+                      className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={addingAudio}
+                    className="px-5 py-2.5 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {addingAudio ? 'Uploading...' : 'Schedule Audio Announcement'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* List of scheduled alarms */}
+            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+              <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Scheduled Alarms ({audioAnnouncements.length})</span>
+              
+              {isLoadingAudio ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                  {audioAnnouncements.length === 0 ? (
+                    <div className="text-center py-6 border border-dashed border-card-border rounded-xl">
+                      <p className="text-xs text-slate-500 font-medium">No scheduled audio announcements. Use the form above to add one.</p>
+                    </div>
+                  ) : (
+                    audioAnnouncements.map((item: any, idx: number) => {
+                      const playDate = new Date(item.play_at);
+                      const isFuture = playDate.getTime() > Date.now();
+                      
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between p-3 bg-slate-950/40 border border-slate-900 rounded-xl"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black text-slate-500">#{idx + 1}</span>
+                              <span className="text-xs font-bold text-white truncate max-w-[200px]" title={item.name}>{item.name}</span>
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                isFuture ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              }`}>
+                                {isFuture ? 'Scheduled' : 'Passed'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+                              <Clock className="h-3 w-3 text-emerald-accent" />
+                              <span>Plays at: {playDate.toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          {/* Audio Player and Delete */}
+                          <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                            <audio src={item.audio_url} controls className="h-7 max-w-[150px] sm:max-w-[180px] bg-slate-900 rounded-lg" />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteScheduledAudio(item.id, item.audio_url)}
+                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer transition-colors"
+                              title="Delete Alarm"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Text Announcement Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="w-full max-w-lg glass-panel p-8 rounded-3xl space-y-6">
@@ -229,7 +495,7 @@ export default function AnnouncementsPage() {
                     required
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Provide details about app updates, scheduled downtimes, or general matches news..."
+                    placeholder="Provide details..."
                     className="w-full px-4 py-3 glass-input rounded-xl text-sm"
                   />
                 </div>

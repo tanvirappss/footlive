@@ -380,6 +380,9 @@ export default function UserHomePage() {
     }
   };
 
+  const noMatchesTitle = (ticker as any)?.no_matches_title || "No Matches Broadcasts";
+  const noMatchesDesc = (ticker as any)?.no_matches_desc || "There are no active matches in this tab. Tune in during kickoff schedules.";
+
   return (
     <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans">
       {/* Header Bar */}
@@ -507,8 +510,8 @@ export default function UserHomePage() {
           ) : currentList.length === 0 ? (
             <div className="glass-panel p-16 text-center rounded-3xl border border-card-border">
               <Tv className="h-12 w-12 text-slate-700 mx-auto mb-4" />
-              <h3 className="text-lg font-black text-white uppercase">No Matches Broadcasts</h3>
-              <p className="text-sm text-slate-400 mt-1">There are no active matches in this tab. Tune in during kickoff schedules.</p>
+              <h3 className="text-lg font-black text-white uppercase">{noMatchesTitle}</h3>
+              <p className="text-sm text-slate-400 mt-1">{noMatchesDesc}</p>
             </div>
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
