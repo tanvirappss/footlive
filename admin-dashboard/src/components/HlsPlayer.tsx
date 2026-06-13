@@ -99,6 +99,43 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
     };
   }, [url, onError]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let playTimeoutId: NodeJS.Timeout | null = null;
+    let hasStarted = false;
+
+    const onTimeUpdate = () => {
+      if (video.currentTime > 0 && !hasStarted) {
+        hasStarted = true;
+        if (playTimeoutId) {
+          clearTimeout(playTimeoutId);
+          playTimeoutId = null;
+        }
+      }
+    };
+
+    video.addEventListener('timeupdate', onTimeUpdate);
+
+    // Set a 3-second playback check timeout
+    playTimeoutId = setTimeout(() => {
+      if (!hasStarted) {
+        console.warn(`HlsPlayer: Playback failed to start within 3s for ${url}. Triggering fallback.`);
+        if (onError) {
+          onError('Playback timeout: stream failed to play within 3 seconds');
+        }
+      }
+    }, 3000);
+
+    return () => {
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      if (playTimeoutId) {
+        clearTimeout(playTimeoutId);
+      }
+    };
+  }, [url, onError]);
+
   return (
     <div className="w-full h-full bg-black relative flex items-center justify-center rounded-2xl overflow-hidden border border-card-border">
       <video

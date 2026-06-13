@@ -253,12 +253,15 @@ export default function UserWatchPage() {
     );
   }
 
+  const noStreamsTitle = (ticker as any)?.no_streams_title || 'No Streams Configured';
+  const noStreamsDesc = (ticker as any)?.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.';
+
   if (streams.length === 0) {
     return (
       <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col items-center justify-center p-6 text-center">
         <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
-        <h3 className="text-xl font-black uppercase">No Streams Configured</h3>
-        <p className="text-sm text-slate-400 mt-1 max-w-md">There are no active video links bound to this match yet. Check back closer to game kickoff.</p>
+        <h3 className="text-xl font-black uppercase">{noStreamsTitle}</h3>
+        <p className="text-sm text-slate-400 mt-1 max-w-md">{noStreamsDesc}</p>
         <Link href="/" className="mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-all">
           Back to Home
         </Link>
@@ -286,7 +289,7 @@ export default function UserWatchPage() {
     setIsReconnecting(true);
     setBufferState('Stalled');
 
-    // Automatic Fallback Loop: switch to next backup stream after 3 seconds
+    // Switch to next backup stream immediately (100ms for state refresh)
     setTimeout(() => {
       if (currentUrlIndex < streamUrls.length - 1) {
         setCurrentUrlIndex(prev => prev + 1);
@@ -300,7 +303,7 @@ export default function UserWatchPage() {
         setIsReconnecting(false);
         setBufferState('Healthy');
       }
-    }, 3000);
+    }, 100);
   };
 
   const getMatchTitle = () => {
@@ -332,11 +335,11 @@ export default function UserWatchPage() {
       {ticker && ticker.is_enabled && (
         <div className="bg-gradient-to-r from-red-950/80 via-[#0f1422] to-red-950/80 border-b border-card-border py-2 relative overflow-hidden flex items-center h-9 z-40">
           <div className="absolute left-0 top-0 bottom-0 px-3.5 bg-red-600 text-white font-black uppercase tracking-wider text-[9px] flex items-center justify-center z-10 shadow-md">
-            ⚡ NEWS TICKER
+            {(ticker as any)?.ticker_badge || '⚡ NEWS TICKER'}
           </div>
           
           <div className="w-full whitespace-nowrap overflow-hidden">
-            <span className="animate-marquee text-xs font-extrabold text-white tracking-wide">
+            <span className="animate-marquee text-xs font-bold text-white tracking-wide font-bangla">
               {ticker.ticker_text}
             </span>
           </div>

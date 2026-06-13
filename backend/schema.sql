@@ -124,6 +124,14 @@ create table if not exists ticker_settings (
     use_logo_image boolean default false,
     no_matches_title text default 'NO MATCHES BROADCASTS',
     no_matches_desc text default 'There are no active matches in this tab. Tune in during kickoff schedules.',
+    ticker_badge text default '⚡ NEWS TICKER',
+    header_subtitle text default 'Premium Streaming Portal',
+    tab_live_name text default '🔴 Live Now',
+    tab_upcoming_name text default '📅 Upcoming Fixtures',
+    tab_finished_name text default '🏁 Finished Matches',
+    tab_channels_name text default '📺 Live Channels',
+    no_streams_title text default 'No Streams Configured',
+    no_streams_desc text default 'There are no active video links bound to this match yet. Check back closer to game kickoff.',
     updated_at timestamptz default now(),
     created_at timestamptz default now()
 );

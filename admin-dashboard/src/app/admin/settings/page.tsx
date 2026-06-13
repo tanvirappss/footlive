@@ -11,19 +11,17 @@ import {
   Users, 
   BellRing,
   Globe,
-  Settings,
   Sliders,
   Sparkles,
-  Search,
   MessageSquareCode
 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'branding' | 'seo' | 'ticker' | 'offsets' | 'streams' | 'emptybox'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'seo' | 'ticker' | 'offsets' | 'streams' | 'apptexts'>('branding');
 
   // Fetch ticker settings
   const { data: tickerData, refetch: refetchTicker } = useQuery({
-    queryKey: ['ticker-settings-full'],
+    queryKey: ['ticker-settings-full-v2'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ticker_settings')
@@ -72,11 +70,19 @@ export default function SettingsPage() {
   const [updatingMeta, setUpdatingMeta] = useState(false);
   const [metaSuccess, setMetaSuccess] = useState(false);
 
-  // Empty Box Texts States
+  // App UI Texts States
+  const [tickerBadge, setTickerBadge] = useState('⚡ NEWS TICKER');
+  const [headerSubtitle, setHeaderSubtitle] = useState('Premium Streaming Portal');
+  const [tabLiveName, setTabLiveName] = useState('🔴 Live Now');
+  const [tabUpcomingName, setTabUpcomingName] = useState('📅 Upcoming Fixtures');
+  const [tabFinishedName, setTabFinishedName] = useState('🏁 Finished Matches');
+  const [tabChannelsName, setTabChannelsName] = useState('📺 Live Channels');
   const [noMatchesTitle, setNoMatchesTitle] = useState('NO MATCHES BROADCASTS');
   const [noMatchesDesc, setNoMatchesDesc] = useState('There are no active matches in this tab. Tune in during kickoff schedules.');
-  const [updatingNoMatches, setUpdatingNoMatches] = useState(false);
-  const [noMatchesSuccess, setNoMatchesSuccess] = useState(false);
+  const [noStreamsTitle, setNoStreamsTitle] = useState('No Streams Configured');
+  const [noStreamsDesc, setNoStreamsDesc] = useState('There are no active video links bound to this match yet. Check back closer to game kickoff.');
+  const [updatingAppTexts, setUpdatingAppTexts] = useState(false);
+  const [appTextsSuccess, setAppTextsSuccess] = useState(false);
 
   useEffect(() => {
     if (tickerData) {
@@ -97,8 +103,18 @@ export default function SettingsPage() {
       setMetaDescription((tickerData as any).meta_description || '');
       setMetaImageUrl((tickerData as any).meta_image || '');
       setUseLogoImage((tickerData as any).use_logo_image === true);
+
+      // App UI Texts
+      setTickerBadge((tickerData as any).ticker_badge || '⚡ NEWS TICKER');
+      setHeaderSubtitle((tickerData as any).header_subtitle || 'Premium Streaming Portal');
+      setTabLiveName((tickerData as any).tab_live_name || '🔴 Live Now');
+      setTabUpcomingName((tickerData as any).tab_upcoming_name || '📅 Upcoming Fixtures');
+      setTabFinishedName((tickerData as any).tab_finished_name || '🏁 Finished Matches');
+      setTabChannelsName((tickerData as any).tab_channels_name || '📺 Live Channels');
       setNoMatchesTitle((tickerData as any).no_matches_title || 'NO MATCHES BROADCASTS');
       setNoMatchesDesc((tickerData as any).no_matches_desc || 'There are no active matches in this tab. Tune in during kickoff schedules.');
+      setNoStreamsTitle((tickerData as any).no_streams_title || 'No Streams Configured');
+      setNoStreamsDesc((tickerData as any).no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.');
     }
   }, [tickerData]);
 
@@ -170,7 +186,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Drag & Drop Default Streams priority helpers
+  // Default stream priorities priority syncing
   const saveAndSyncDefaultStreams = async (updatedStreams: { label: string; url: string }[]) => {
     try {
       const filteredStreams = updatedStreams.filter(item => item.label.trim() && item.url.trim());
@@ -269,7 +285,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Upload SEO preview image helper
+  // SEO metadata logo upload
   const uploadMetaImage = async (file: File): Promise<string> => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}_meta_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -282,7 +298,7 @@ export default function SettingsPage() {
     return data.publicUrl;
   };
 
-  // Submit SEO Settings
+  // Submit SEO Meta Settings
   const handleMetaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUpdatingMeta(true);
@@ -323,7 +339,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Upload Branding Images helpers
+  // Branding images uploads
   const uploadSiteLogo = async (file: File): Promise<string> => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}_logo_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -395,15 +411,23 @@ export default function SettingsPage() {
     }
   };
 
-  // Submit No Matches Live State Texts
-  const handleNoMatchesSubmit = async (e: React.FormEvent) => {
+  // Submit App UI Texts (Dynamic UI options)
+  const handleAppTextsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUpdatingNoMatches(true);
-    setNoMatchesSuccess(false);
+    setUpdatingAppTexts(true);
+    setAppTextsSuccess(false);
     try {
       const updateData = {
+        ticker_badge: tickerBadge,
+        header_subtitle: headerSubtitle,
+        tab_live_name: tabLiveName,
+        tab_upcoming_name: tabUpcomingName,
+        tab_finished_name: tabFinishedName,
+        tab_channels_name: tabChannelsName,
         no_matches_title: noMatchesTitle,
         no_matches_desc: noMatchesDesc,
+        no_streams_title: noStreamsTitle,
+        no_streams_desc: noStreamsDesc,
         updated_at: new Date().toISOString()
       };
       if (tickerData?.id) {
@@ -418,25 +442,25 @@ export default function SettingsPage() {
           .insert([updateData]);
         if (error) throw error;
       }
-      setNoMatchesSuccess(true);
+      setAppTextsSuccess(true);
       refetchTicker();
-      setTimeout(() => setNoMatchesSuccess(false), 3000);
+      setTimeout(() => setAppTextsSuccess(false), 3000);
     } catch (err) {
       console.error(err);
-      alert('Failed to update Live Now empty box text settings. Make sure database migrations are run.');
+      alert('Failed to save UI texts settings. Ensure that you have run the latest database migration SQL.');
     } finally {
-      setUpdatingNoMatches(false);
+      setUpdatingAppTexts(false);
     }
   };
 
-  // Navigation tab bar details
+  // Tab configurations
   const tabs = [
     { id: 'branding', label: 'Branding & Info', icon: Sparkles },
     { id: 'seo', label: 'SEO & Metadata', icon: Globe },
     { id: 'ticker', label: 'News Ticker', icon: BellRing },
     { id: 'offsets', label: 'Telemetry Offsets', icon: Users },
     { id: 'streams', label: 'Stream Priorities', icon: Tv },
-    { id: 'emptybox', label: 'Empty Live Text', icon: MessageSquareCode },
+    { id: 'apptexts', label: 'App UI Texts', icon: MessageSquareCode },
   ] as const;
 
   return (
@@ -802,7 +826,7 @@ export default function SettingsPage() {
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Share Image File</label>
-                      <label className="flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
+                      <label className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
                         <Upload className="h-5 w-5 text-slate-500 shrink-0" />
                         <span className="text-xs text-slate-400 font-semibold truncate">
                           {metaImageFile ? metaImageFile.name : 'Upload preview image file (1200x630 recommended)'}
@@ -1073,54 +1097,157 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* EMPTY LIVE BOX TEXT TAB */}
-          {activeTab === 'emptybox' && (
-            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+          {/* APP UI TEXTS TAB */}
+          {activeTab === 'apptexts' && (
+            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-6">
               <div>
                 <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <MessageSquareCode className="h-5 w-5 text-emerald-accent" />
-                  Empty State Live Box Message
+                  Website App UI Dynamic Texts
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">Configure the texts displayed inside the "Live Now" tab when there are no matches broadcasting currently.</p>
+                <p className="text-xs text-slate-400 mt-1">Configure all main placeholder messages, subtitles, and labels shown on the user-facing site.</p>
               </div>
 
-              <form onSubmit={handleNoMatchesSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Empty State Box Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={noMatchesTitle}
-                    onChange={(e) => setNoMatchesTitle(e.target.value)}
-                    placeholder="e.g. NO ACTIVE MATCHES"
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                  />
-                  <p className="text-[10px] text-slate-500">Standard Heading in the center of the box layout.</p>
+              <form onSubmit={handleAppTextsSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* General Header Subtitle and Ticker Badge */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest border-b border-card-border pb-1.5">1. Header & Marquee Titles</h4>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Header Bar Subtitle</label>
+                      <input
+                        type="text"
+                        required
+                        value={headerSubtitle}
+                        onChange={(e) => setHeaderSubtitle(e.target.value)}
+                        placeholder="e.g. Premium Streaming Portal"
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">News Ticker Prefix/Badge</label>
+                      <input
+                        type="text"
+                        required
+                        value={tickerBadge}
+                        onChange={(e) => setTickerBadge(e.target.value)}
+                        placeholder="e.g. ⚡ NEWS TICKER"
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fixtures Tab Labels */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest border-b border-card-border pb-1.5">2. Match Tab Labels</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Now Tab</label>
+                        <input
+                          type="text"
+                          required
+                          value={tabLiveName}
+                          onChange={(e) => setTabLiveName(e.target.value)}
+                          className="w-full px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Upcoming Tab</label>
+                        <input
+                          type="text"
+                          required
+                          value={tabUpcomingName}
+                          onChange={(e) => setTabUpcomingName(e.target.value)}
+                          className="w-full px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Finished Tab</label>
+                        <input
+                          type="text"
+                          required
+                          value={tabFinishedName}
+                          onChange={(e) => setTabFinishedName(e.target.value)}
+                          className="w-full px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Channels Tab</label>
+                        <input
+                          type="text"
+                          required
+                          value={tabChannelsName}
+                          onChange={(e) => setTabChannelsName(e.target.value)}
+                          className="w-full px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Empty State Box Description</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={noMatchesDesc}
-                    onChange={(e) => setNoMatchesDesc(e.target.value)}
-                    placeholder="e.g. There are no live streams active at the moment. Please consult the match schedule below."
-                    className="w-full px-4 py-3 glass-input rounded-xl text-sm resize-none"
-                  />
-                  <p className="text-[10px] text-slate-500">Longer descriptive subtitle guiding users when kickoff schedules are active.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-card-border pt-6">
+                  {/* Empty Match Placeholders */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest border-b border-card-border pb-1.5">3. Empty Matches Placeholder (Home)</h4>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Empty Matches Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={noMatchesTitle}
+                        onChange={(e) => setNoMatchesTitle(e.target.value)}
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Empty Matches Description</label>
+                      <textarea
+                        rows={3}
+                        required
+                        value={noMatchesDesc}
+                        onChange={(e) => setNoMatchesDesc(e.target.value)}
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Empty Stream Placeholders */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest border-b border-card-border pb-1.5">4. Empty Streams Placeholder (Watch Page)</h4>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Empty Streams Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={noStreamsTitle}
+                        onChange={(e) => setNoStreamsTitle(e.target.value)}
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Empty Streams Description</label>
+                      <textarea
+                        rows={3}
+                        required
+                        value={noStreamsDesc}
+                        onChange={(e) => setNoStreamsDesc(e.target.value)}
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm resize-none"
+                      />
+                    </div>
+                  </div>
                 </div>
 
+                {/* Form Footer */}
                 <div className="flex justify-between items-center border-t border-card-border pt-4">
-                  {noMatchesSuccess ? (
-                    <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Live Box texts updated successfully!</p>
+                  {appTextsSuccess ? (
+                    <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ All UI texts saved successfully!</p>
                   ) : <div />}
                   <button
                     type="submit"
-                    disabled={updatingNoMatches}
+                    disabled={updatingAppTexts}
                     className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    {updatingNoMatches ? 'Saving...' : 'Save Empty State Text'}
+                    {updatingAppTexts ? 'Saving...' : 'Save App UI Texts'}
                   </button>
                 </div>
               </form>

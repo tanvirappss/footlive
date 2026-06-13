@@ -410,7 +410,9 @@ export default function UserHomePage() {
                   <h1 className="font-black text-sm tracking-wider uppercase text-white">
                     {ticker?.site_name || 'WORLD CUP 2026'}
                   </h1>
-                  <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">Premium Streaming Portal</p>
+                  <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">
+                    {(ticker as any)?.header_subtitle || 'Premium Streaming Portal'}
+                  </p>
                 </div>
               </div>
             )}
@@ -435,11 +437,11 @@ export default function UserHomePage() {
       {ticker && ticker.is_enabled && (
         <div className="bg-gradient-to-r from-red-950/80 via-[#0f1422] to-red-950/80 border-b border-card-border py-2 relative overflow-hidden flex items-center h-9 z-40">
           <div className="absolute left-0 top-0 bottom-0 px-3.5 bg-red-600 text-white font-black uppercase tracking-wider text-[9px] flex items-center justify-center z-10 shadow-md">
-            ⚡ NEWS TICKER
+            {(ticker as any)?.ticker_badge || '⚡ NEWS TICKER'}
           </div>
           
           <div className="w-full whitespace-nowrap overflow-hidden">
-            <span className="animate-marquee text-xs font-extrabold text-white tracking-wide">
+            <span className="animate-marquee text-xs font-bold text-white tracking-wide font-bangla">
               {ticker.ticker_text}
             </span>
           </div>
@@ -490,12 +492,12 @@ export default function UserHomePage() {
               }`}
             >
               {tab === 'live' 
-                ? '🔴 Live Now' 
+                ? ((ticker as any)?.tab_live_name || '🔴 Live Now')
                 : tab === 'upcoming' 
-                  ? '📅 Upcoming Fixtures' 
+                  ? ((ticker as any)?.tab_upcoming_name || '📅 Upcoming Fixtures') 
                   : tab === 'finished'
-                    ? '🏁 Finished Matches'
-                    : '📺 Live Channels'}
+                    ? ((ticker as any)?.tab_finished_name || '🏁 Finished Matches')
+                    : ((ticker as any)?.tab_channels_name || '📺 Live Channels')}
             </button>
           ))}
         </div>
