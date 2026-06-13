@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
+import AdsterraAd from '@/components/AdsterraAd';
 
 interface Match {
   id: string;
@@ -102,6 +103,20 @@ export default function UserWatchPage() {
         .limit(1);
       if (error) throw error;
       return data?.[0] || null;
+    }
+  });
+
+  // Fetch Adsterra configuration settings
+  const { data: adsterra } = useQuery({
+    queryKey: ['adsterra-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'Adsterra')
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
     }
   });
 
@@ -315,6 +330,16 @@ export default function UserWatchPage() {
 
   return (
     <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col">
+      {/* Adsterra Popunder & Social Bar (Watch Page) */}
+      <AdsterraAd 
+        htmlCode={adsterra?.popunder_script} 
+        enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.watchPage?.popunder !== false} 
+      />
+      <AdsterraAd 
+        htmlCode={adsterra?.social_bar_script} 
+        enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.watchPage?.socialBar !== false} 
+      />
+
       {/* Header bar */}
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
@@ -363,6 +388,12 @@ export default function UserWatchPage() {
               </div>
             )}
           </div>
+
+          {/* Adsterra Standard Banner (Watch Page) */}
+          <AdsterraAd 
+            htmlCode={adsterra?.banner_script} 
+            enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.watchPage?.standardBanner !== false} 
+          />
 
           {/* Feedback alerts */}
           {playError && (
@@ -417,6 +448,12 @@ export default function UserWatchPage() {
               })}
             </div>
           </div>
+
+          {/* Adsterra Native Banner (Watch Page) */}
+          <AdsterraAd 
+            htmlCode={adsterra?.native_script} 
+            enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.watchPage?.nativeBanner !== false} 
+          />
         </div>
 
         {/* Telemetry log cards */}

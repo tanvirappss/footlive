@@ -17,6 +17,7 @@ import {
   Search
 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
+import AdsterraAd from '@/components/AdsterraAd';
 
 interface Team {
   id: string;
@@ -171,6 +172,20 @@ export default function UserHomePage() {
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
+    }
+  });
+
+  // Fetch Adsterra configuration settings
+  const { data: adsterra } = useQuery({
+    queryKey: ['adsterra-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'Adsterra')
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
     }
   });
 
@@ -385,6 +400,16 @@ export default function UserHomePage() {
 
   return (
     <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans">
+      {/* Adsterra Popunder & Social Bar (Homepage) */}
+      <AdsterraAd 
+        htmlCode={adsterra?.popunder_script} 
+        enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.homepage?.popunder !== false} 
+      />
+      <AdsterraAd 
+        htmlCode={adsterra?.social_bar_script} 
+        enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.homepage?.socialBar !== false} 
+      />
+
       {/* Header Bar */}
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -479,6 +504,12 @@ export default function UserHomePage() {
           />
         </section>
 
+        {/* Adsterra Standard Banner (Homepage) */}
+        <AdsterraAd 
+          htmlCode={adsterra?.banner_script} 
+          enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.homepage?.standardBanner !== false} 
+        />
+
         {/* Tab Row */}
         <div className="flex border-b border-card-border overflow-x-auto">
           {(['live', 'upcoming', 'finished', 'channels'] as const).map((tab) => (
@@ -501,6 +532,12 @@ export default function UserHomePage() {
             </button>
           ))}
         </div>
+
+        {/* Adsterra Native Banner (Homepage) */}
+        <AdsterraAd 
+          htmlCode={adsterra?.native_script} 
+          enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.homepage?.nativeBanner !== false} 
+        />
 
         {/* Tab Content */}
         {activeTab !== 'channels' ? (

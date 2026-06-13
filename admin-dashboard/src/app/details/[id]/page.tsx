@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import AdsterraAd from '@/components/AdsterraAd';
 import { 
   ArrowLeft, 
   Tv, 
@@ -69,6 +70,20 @@ export default function MatchDetailsPage() {
     }
   });
 
+  // Fetch Adsterra configuration settings
+  const { data: adsterra } = useQuery({
+    queryKey: ['adsterra-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'Adsterra')
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
+    }
+  });
+
   const getTeamName = (side: 'home' | 'away') => {
     if (!match) return '';
     if (side === 'home') {
@@ -120,6 +135,16 @@ export default function MatchDetailsPage() {
 
   return (
     <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans">
+      {/* Adsterra Popunder & Social Bar (Details Page) */}
+      <AdsterraAd 
+        htmlCode={adsterra?.popunder_script} 
+        enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.detailsPage?.popunder !== false} 
+      />
+      <AdsterraAd 
+        htmlCode={adsterra?.social_bar_script} 
+        enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.detailsPage?.socialBar !== false} 
+      />
+
       {/* Header bar */}
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -281,6 +306,12 @@ export default function MatchDetailsPage() {
             </div>
           </div>
         </div>
+
+        {/* Adsterra Standard Banner (Match Details Page) */}
+        <AdsterraAd 
+          htmlCode={adsterra?.banner_script} 
+          enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.detailsPage?.standardBanner !== false} 
+        />
 
         {/* Rich Text Match description section */}
         {match.description && (

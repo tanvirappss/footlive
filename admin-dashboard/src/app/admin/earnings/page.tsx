@@ -49,6 +49,25 @@ export default function EarningsPage() {
   const [adsterraNative, setAdsterraNative] = useState('');
   const [adsterraSocial, setAdsterraSocial] = useState('');
   const [adsterraPopunder, setAdsterraPopunder] = useState('');
+  const [adsterraPagesConfig, setAdsterraPagesConfig] = useState({
+    homepage: {
+      popunder: true,
+      socialBar: true,
+      standardBanner: true,
+      nativeBanner: true,
+    },
+    watchPage: {
+      popunder: true,
+      socialBar: true,
+      standardBanner: true,
+      nativeBanner: true,
+    },
+    detailsPage: {
+      popunder: true,
+      socialBar: true,
+      standardBanner: true,
+    }
+  });
 
   // Form states for Custom Networks
   const [customNetworks, setCustomNetworks] = useState<AdNetwork[]>([]);
@@ -86,6 +105,12 @@ export default function EarningsPage() {
         setAdsterraNative(adsterra.native_script || '');
         setAdsterraSocial(adsterra.social_bar_script || '');
         setAdsterraPopunder(adsterra.popunder_script || '');
+        if (adsterra.custom_scripts) {
+          setAdsterraPagesConfig(prev => ({
+            ...prev,
+            ...adsterra.custom_scripts
+          }));
+        }
       }
 
       const customs = networks.filter(n => n.network_name !== 'Google AdSense' && n.network_name !== 'Adsterra');
@@ -206,8 +231,22 @@ export default function EarningsPage() {
         banner_script: adsterraBanner,
         native_script: adsterraNative,
         social_bar_script: adsterraSocial,
-        popunder_script: adsterraPopunder
+        popunder_script: adsterraPopunder,
+        custom_scripts: adsterraPagesConfig
       }
+    });
+  };
+
+  const handleToggle = (page: 'homepage' | 'watchPage' | 'detailsPage', placement: string) => {
+    setAdsterraPagesConfig(prev => {
+      const pageData = (prev as any)[page];
+      return {
+        ...prev,
+        [page]: {
+          ...pageData,
+          [placement]: !pageData[placement]
+        }
+      };
     });
   };
 
@@ -426,7 +465,259 @@ export default function EarningsPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                {/* Page Placement Settings */}
+                <div className="border-t border-card-border pt-6 mt-6">
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-2">📺 Page-by-Page Placement Controls</h4>
+                  <p className="text-xs text-slate-400 mb-6">Specify exactly which Adsterra ad types should run on each page layout.</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Homepage Placements */}
+                    <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4 bg-slate-900/10">
+                      <div className="border-b border-card-border pb-3">
+                        <span className="text-xs font-bold text-emerald-accent uppercase tracking-wider block">🏠 Homepage Layout</span>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Popunder Ads</span>
+                            <span className="text-[10px] text-slate-500 block">Trigger full screen popunder</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('homepage', 'popunder')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.homepage.popunder ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.homepage.popunder ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Social Bar</span>
+                            <span className="text-[10px] text-slate-500 block">Show dynamic widgets</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('homepage', 'socialBar')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.homepage.socialBar ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.homepage.socialBar ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Standard Banner</span>
+                            <span className="text-[10px] text-slate-500 block">Under Hero banner</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('homepage', 'standardBanner')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.homepage.standardBanner ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.homepage.standardBanner ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Native Banner</span>
+                            <span className="text-[10px] text-slate-500 block">Above Match grid</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('homepage', 'nativeBanner')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.homepage.nativeBanner ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.homepage.nativeBanner ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Watch Page Placements */}
+                    <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4 bg-slate-900/10">
+                      <div className="border-b border-card-border pb-3">
+                        <span className="text-xs font-bold text-emerald-accent uppercase tracking-wider block">📺 Streaming Watch Page</span>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Popunder Ads</span>
+                            <span className="text-[10px] text-slate-500 block">Trigger full screen popunder</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('watchPage', 'popunder')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.watchPage.popunder ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.watchPage.popunder ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Social Bar</span>
+                            <span className="text-[10px] text-slate-500 block">Show dynamic widgets</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('watchPage', 'socialBar')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.watchPage.socialBar ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.watchPage.socialBar ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Standard Banner</span>
+                            <span className="text-[10px] text-slate-500 block">Under Video player</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('watchPage', 'standardBanner')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.watchPage.standardBanner ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.watchPage.standardBanner ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Native Banner</span>
+                            <span className="text-[10px] text-slate-500 block">Below fallback stream buttons</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('watchPage', 'nativeBanner')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.watchPage.nativeBanner ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.watchPage.nativeBanner ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Details Page Placements */}
+                    <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4 bg-slate-900/10">
+                      <div className="border-b border-card-border pb-3">
+                        <span className="text-xs font-bold text-emerald-accent uppercase tracking-wider block">ℹ Match Details Page</span>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Popunder Ads</span>
+                            <span className="text-[10px] text-slate-500 block">Trigger full screen popunder</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('detailsPage', 'popunder')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.detailsPage.popunder ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.detailsPage.popunder ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Social Bar</span>
+                            <span className="text-[10px] text-slate-500 block">Show dynamic widgets</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('detailsPage', 'socialBar')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.detailsPage.socialBar ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.detailsPage.socialBar ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-extrabold text-white block">Standard Banner</span>
+                            <span className="text-[10px] text-slate-500 block">Below match info grid</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggle('detailsPage', 'standardBanner')}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              adsterraPagesConfig.detailsPage.standardBanner ? 'bg-emerald-500' : 'bg-slate-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                adsterraPagesConfig.detailsPage.standardBanner ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-card-border/60">
                   <button
                     type="submit"
                     disabled={saving}

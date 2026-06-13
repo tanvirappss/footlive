@@ -187,6 +187,11 @@ create policy "Allow public insert ticker_settings" on ticker_settings for inser
 create policy "Allow public update ticker_settings" on ticker_settings for update using (true);
 create policy "Allow public delete ticker_settings" on ticker_settings for delete using (true);
 
+-- Policies for public write access to ad_networks (since admin dashboard uses anon client)
+create policy "Allow public insert ad_networks" on ad_networks for insert with check (true);
+create policy "Allow public update ad_networks" on ad_networks for update using (true);
+create policy "Allow public delete ad_networks" on ad_networks for delete using (true);
+
 -- Policies for authenticated admin write access
 create policy "Allow admin write teams" on teams for all to authenticated using (true) with check (true);
 create policy "Allow admin write matches" on matches for all to authenticated using (true) with check (true);
