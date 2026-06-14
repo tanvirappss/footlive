@@ -5,9 +5,12 @@ import React, { useEffect, useRef } from 'react';
 interface AdsterraAdProps {
   htmlCode: string | null | undefined;
   enabled: boolean;
+  maxWidth?: string;
+  maxHeight?: string;
+  className?: string;
 }
 
-export default function AdsterraAd({ htmlCode, enabled }: AdsterraAdProps) {
+export default function AdsterraAd({ htmlCode, enabled, maxWidth, maxHeight, className }: AdsterraAdProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,7 +57,11 @@ export default function AdsterraAd({ htmlCode, enabled }: AdsterraAdProps) {
   return (
     <div 
       ref={containerRef} 
-      className="flex justify-center items-center my-4 overflow-hidden min-h-[50px] w-full" 
+      className={`ad-container ${className || ''}`}
+      style={{
+        maxWidth: maxWidth || '100%',
+        maxHeight: maxHeight || 'none',
+      }}
     />
   );
 }

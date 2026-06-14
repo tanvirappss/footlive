@@ -84,6 +84,51 @@ export default function MatchDetailsPage() {
     }
   });
 
+  const getAdForPlacement = (placementKey: string) => {
+    const config = adsterra?.custom_scripts?.placements?.[placementKey];
+    if (!config || !config.enabled || !adsterra?.is_enabled) return null;
+
+    const type = config.type;
+    
+    if (type === 'banner') {
+      return <AdsterraAd htmlCode={adsterra?.banner_script} enabled={true} />;
+    }
+    if (type === 'banner_2') {
+      return <AdsterraAd htmlCode={adsterra?.custom_scripts?.banner_2_script} enabled={true} />;
+    }
+    if (type === 'native') {
+      return <AdsterraAd htmlCode={adsterra?.native_script} enabled={true} />;
+    }
+    if (type === 'social_bar') {
+      return <AdsterraAd htmlCode={adsterra?.social_bar_script} enabled={true} />;
+    }
+    if (type === 'popunder') {
+      return <AdsterraAd htmlCode={adsterra?.popunder_script} enabled={true} />;
+    }
+    if (type === 'interstitial') {
+      return <AdsterraAd htmlCode={adsterra?.custom_scripts?.interstitial_script} enabled={true} />;
+    }
+    if (type === 'display_link') {
+      const url = adsterra?.custom_scripts?.display_link;
+      if (!url) return null;
+      return (
+        <div className="w-full flex justify-center py-2">
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="w-full max-w-[468px] py-4 bg-slate-900/40 hover:bg-slate-900/60 border border-emerald-500/25 rounded-2xl flex flex-col items-center justify-center text-center gap-1 hover:border-emerald-500/50 transition-all duration-200"
+          >
+            <span className="text-[10px] text-emerald-accent font-black tracking-widest uppercase">SPONSORED FEED AD</span>
+            <span className="text-sm text-white font-extrabold px-4">⚡ Click here to watch backup stream in 1080p Ultra HD</span>
+          </a>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const getTeamName = (side: 'home' | 'away') => {
     if (!match) return '';
     if (side === 'home') {
@@ -307,11 +352,8 @@ export default function MatchDetailsPage() {
           </div>
         </div>
 
-        {/* Adsterra Standard Banner (Match Details Page) */}
-        <AdsterraAd 
-          htmlCode={adsterra?.banner_script} 
-          enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.detailsPage?.standardBanner !== false} 
-        />
+        {/* Details Page Middle Ad */}
+        {getAdForPlacement('detailsMiddle')}
 
         {/* Rich Text Match description section */}
         {match.description && (

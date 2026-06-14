@@ -15,8 +15,11 @@ import {
   Loader2, 
   Calendar as CalendarIcon, 
   Info,
-  Tv
+  Tv,
+  Zap,
+  Sparkles
 } from 'lucide-react';
+import { wc2026Schedule, getStadiumForTeam } from '@/lib/wc2026-schedule';
 
 interface Team {
   id: string;
@@ -104,6 +107,13 @@ export default function MatchesPage() {
   const [uploading, setUploading] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
+  // SystemConfig States
+  const [systemConfigId, setSystemConfigId] = useState<string | null>(null);
+  const [forceAllLive, setForceAllLive] = useState(false);
+  const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
+  const [populating, setPopulating] = useState(false);
+  const [populateSuccess, setPopulateSuccess] = useState<string | null>(null);
+
   // Queries
   const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ['teams'],
@@ -134,6 +144,298 @@ export default function MatchesPage() {
       return (data || []) as Match[];
     }
   });
+
+  // SystemConfig queries & mutations
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setSystemConfigId(data.id);
+        setForceAllLive(!!data.custom_scripts?.force_all_live);
+        setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
+      } else {
+        // Create default SystemConfig
+        const { data: created, error: createError } = await supabase
+          .from('ad_networks')
+          .insert([{
+            network_name: 'SystemConfig',
+            is_enabled: true,
+            custom_scripts: {
+              force_all_live: false,
+              auto_schedule_enabled: false
+            }
+          }])
+          .select()
+          .single();
+        if (!createError && created) {
+          setSystemConfigId(created.id);
+        }
+      }
+      return data;
+    }
+  });
+
+  const updateSystemConfigMutation = useMutation({
+    mutationFn: async (updatedScripts: any) => {
+      if (systemConfigId) {
+        const { error } = await supabase
+          .from('ad_networks')
+          .update({
+            custom_scripts: updatedScripts
+          })
+          .eq('id', systemConfigId);
+        if (error) throw error;
+      } else {
+        const { data: created, error } = await supabase
+          .from('ad_networks')
+          .insert([{
+            network_name: 'SystemConfig',
+            is_enabled: true,
+            custom_scripts: updatedScripts
+          }])
+          .select()
+          .single();
+        if (error) throw error;
+        if (created) setSystemConfigId(created.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+    }
+  });
+
+  const handleToggleForceAllLive = () => {
+    const nextVal = !forceAllLive;
+    setForceAllLive(nextVal);
+    updateSystemConfigMutation.mutate({
+      force_all_live: nextVal,
+      auto_schedule_enabled: autoScheduleEnabled
+    });
+  };
+
+  const handleToggleAutoSchedule = () => {
+    const nextVal = !autoScheduleEnabled;
+    setAutoScheduleEnabled(nextVal);
+    updateSystemConfigMutation.mutate({
+      force_all_live: forceAllLive,
+      auto_schedule_enabled: nextVal
+    });
+  };
+
+  const handleBulkPopulate = async () => {
+    setPopulating(true);
+    setPopulateSuccess(null);
+    setMutationError(null);
+
+    try {
+      // 1. Fetch current teams
+      const { data: dbTeams, error: teamsError } = await supabase
+        .from('teams')
+        .select('*');
+      if (teamsError) throw teamsError;
+
+      const teamsList = dbTeams || [];
+
+      // Helper to find team by name
+      const findTeamByName = (name: string) => {
+        const normalized = name.toLowerCase().trim();
+        return teamsList.find(t => {
+          const tName = t.name.toLowerCase().trim();
+          if (tName === normalized) return true;
+          // Aliases
+          if (normalized === 'usa' && tName === 'united states') return true;
+          if (normalized === 'united states' && tName === 'usa') return true;
+          if (normalized === 'turkey' && tName === 'türkiye') return true;
+          if (normalized === 'türkiye' && tName === 'turkey') return true;
+          if (normalized === 'cape verde' && tName === 'cabo verde') return true;
+          if (normalized === 'cabo verde' && tName === 'cape verde') return true;
+          return false;
+        });
+      };
+
+      // 2. Fetch current matches
+      const { data: dbMatches, error: matchesError } = await supabase
+        .from('matches')
+        .select('*');
+      if (matchesError) throw matchesError;
+
+      const matchesList = dbMatches || [];
+
+      let insertedCount = 0;
+      let skippedCount = 0;
+
+      // 3. Country code map
+      const countryCodeMap: Record<string, { code: string; region: string; short: string }> = {
+        'iraq': { code: 'iq', region: 'AFC', short: 'IRQ' },
+        'norway': { code: 'no', region: 'UEFA', short: 'NOR' },
+        'jordan': { code: 'jo', region: 'AFC', short: 'JOR' },
+        'dr congo': { code: 'cd', region: 'CAF', short: 'COD' },
+        'uzbekistan': { code: 'uz', region: 'AFC', short: 'UZB' },
+        'haiti': { code: 'ht', region: 'CONCACAF', short: 'HAI' },
+        'usa': { code: 'us', region: 'CONCACAF', short: 'USA' },
+        'united states': { code: 'us', region: 'CONCACAF', short: 'USA' },
+        'turkey': { code: 'tr', region: 'UEFA', short: 'TUR' },
+        'türkiye': { code: 'tr', region: 'UEFA', short: 'TUR' },
+        'cape verde': { code: 'cv', region: 'CAF', short: 'CPV' },
+        'cabo verde': { code: 'cv', region: 'CAF', short: 'CPV' },
+      };
+
+      for (const m of wc2026Schedule) {
+        // Resolve home team
+        let homeTeam = findTeamByName(m.home_team);
+        if (!homeTeam) {
+          const normHome = m.home_team.toLowerCase();
+          const mapInfo = countryCodeMap[normHome] || { code: 'XX', region: 'Custom', short: m.home_team.substring(0, 3).toUpperCase() };
+          const flagUrl = mapInfo.code !== 'XX' ? `https://flagcdn.com/w320/${mapInfo.code}.png` : null;
+          
+          const newTeam = {
+            name: m.home_team,
+            short_name: mapInfo.short,
+            country_name: m.home_team,
+            country_code: mapInfo.code.toUpperCase(),
+            flag_url: flagUrl,
+            logo_url: flagUrl,
+            region: mapInfo.region,
+            is_enabled: true
+          };
+
+          const { data: created, error } = await supabase
+            .from('teams')
+            .insert([newTeam])
+            .select()
+            .single();
+
+          if (error) throw error;
+          homeTeam = created;
+          teamsList.push(created);
+        }
+
+        // Resolve away team
+        let awayTeam = findTeamByName(m.away_team);
+        if (!awayTeam) {
+          const normAway = m.away_team.toLowerCase();
+          const mapInfo = countryCodeMap[normAway] || { code: 'XX', region: 'Custom', short: m.away_team.substring(0, 3).toUpperCase() };
+          const flagUrl = mapInfo.code !== 'XX' ? `https://flagcdn.com/w320/${mapInfo.code}.png` : null;
+
+          const newTeam = {
+            name: m.away_team,
+            short_name: mapInfo.short,
+            country_name: m.away_team,
+            country_code: mapInfo.code.toUpperCase(),
+            flag_url: flagUrl,
+            logo_url: flagUrl,
+            region: mapInfo.region,
+            is_enabled: true
+          };
+
+          const { data: created, error } = await supabase
+            .from('teams')
+            .insert([newTeam])
+            .select()
+            .single();
+
+          if (error) throw error;
+          awayTeam = created;
+          teamsList.push(created);
+        }
+
+        // Check if match already exists
+        const timestampString = new Date(`${m.match_date}T${m.match_time}:00`).toISOString();
+        const duplicate = matchesList.find(dm => {
+          const homeMatch = dm.home_team_id === homeTeam?.id;
+          const awayMatch = dm.away_team_id === awayTeam?.id;
+          const timeMatch = dm.match_date === m.match_date;
+          return homeMatch && awayMatch && timeMatch;
+        });
+
+        if (duplicate) {
+          skippedCount++;
+          continue;
+        }
+
+        // Insert Match
+        const matchData = {
+          tournament_name: m.tournament_name,
+          home_team_id: homeTeam.id,
+          away_team_id: awayTeam.id,
+          match_date: m.match_date,
+          match_time: `${m.match_time}:00`,
+          match_timestamp: timestampString,
+          stadium_name: getStadiumForTeam(m.tournament_name),
+          status: 'upcoming',
+          home_score: 0,
+          away_score: 0,
+          description: `FIFA World Cup 2026 Group Stage match between ${m.home_team} and ${m.away_team}.`
+        };
+
+        const { data: createdMatch, error: insertMatchError } = await supabase
+          .from('matches')
+          .insert([matchData])
+          .select()
+          .single();
+
+        if (insertMatchError) throw insertMatchError;
+
+        // Auto-create stream record
+        if (createdMatch) {
+          const { error: streamError } = await supabase
+            .from('streams')
+            .insert([{
+              match_id: createdMatch.id,
+              stream_name: 'Main Server',
+              primary_url: '',
+              backup_url_1: '',
+              backup_url_2: '',
+              backup_url_3: '',
+              is_enabled: true,
+              urls: []
+            }]);
+          if (streamError) console.error('Auto stream creation failed:', streamError);
+        }
+
+        insertedCount++;
+      }
+
+      setPopulateSuccess(`Successfully populated ${insertedCount} matches! (Skipped ${skippedCount} duplicates)`);
+      queryClient.invalidateQueries({ queryKey: ['matches-admin'] });
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+    } catch (err: any) {
+      setMutationError(err.message || 'An error occurred during auto-population.');
+    } finally {
+      setPopulating(false);
+    }
+  };
+
+  const handleClearAutoScheduled = async () => {
+    if (!confirm('Are you sure you want to clear all auto-scheduled WC 2026 matches starting from June 15?')) return;
+    setPopulating(true);
+    setPopulateSuccess(null);
+    setMutationError(null);
+
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .delete()
+        .like('tournament_name', 'FIFA WORLD CUP 2026, GROUP-%')
+        .gte('match_date', '2026-06-15');
+
+      if (error) throw error;
+      setPopulateSuccess('Successfully cleared auto-scheduled matches!');
+      queryClient.invalidateQueries({ queryKey: ['matches-admin'] });
+    } catch (err: any) {
+      setMutationError(err.message || 'An error occurred during clearing.');
+    } finally {
+      setPopulating(false);
+    }
+  };
 
   // Run once when matches and teams load to clean up any legacy custom teams in existing matches
   React.useEffect(() => {
@@ -548,6 +850,108 @@ export default function MatchesPage() {
             Schedule Match
           </button>
         </div>
+
+        {/* System & Populate Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Force All Live Toggle Card */}
+          <div className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-4 bg-slate-900/10 hover:border-slate-800 transition-all duration-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Zap className={`h-5 w-5 ${forceAllLive ? 'text-amber-400 fill-amber-400/20' : 'text-slate-500'}`} />
+                  <span className="text-sm font-extrabold text-white uppercase tracking-wider">⚡ Force All Live Now</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-2 font-medium">
+                  Forces all scheduled upcoming matches to immediately appear in the user-facing "Live Now" tab, bypassing time constraints.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleForceAllLive}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  forceAllLive ? 'bg-amber-500' : 'bg-slate-800'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    forceAllLive ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-950/40 border border-slate-900 rounded-xl text-[10px] text-slate-400 font-semibold">
+              <Info className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+              <span>Status: {forceAllLive ? 'ACTIVE (ALL LIVE)' : 'NORMAL OPERATION'}</span>
+            </div>
+          </div>
+
+          {/* Auto Schedule Settings Card */}
+          <div className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-4 bg-slate-900/10 hover:border-slate-800 transition-all duration-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className={`h-5 w-5 ${autoScheduleEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span className="text-sm font-extrabold text-white uppercase tracking-wider">📅 Auto-Schedule WC 2026</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-2 font-medium">
+                  Enable auto-scheduled World Cup matches (June 15-28) in Bangladesh Time (BST).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleAutoSchedule}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  autoScheduleEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    autoScheduleEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {autoScheduleEnabled && (
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-900/60">
+                <button
+                  type="button"
+                  disabled={populating}
+                  onClick={handleBulkPopulate}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
+                >
+                  {populating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Populate Fixtures
+                </button>
+                <button
+                  type="button"
+                  disabled={populating}
+                  onClick={handleClearAutoScheduled}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-850 hover:bg-red-950/20 hover:border-red-500/30 text-slate-400 hover:text-red-400 font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
+                >
+                  Clear Auto-Scheduled
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Feedback alerts for auto-populate actions */}
+        {(populateSuccess || mutationError) && (
+          <div className="space-y-4">
+            {populateSuccess && (
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-bold rounded-2xl flex items-center gap-2">
+                <Check className="h-5 w-5" />
+                {populateSuccess}
+              </div>
+            )}
+            {mutationError && (
+              <div className="p-4 bg-red-950/20 border border-red-500/25 text-red-400 text-sm font-bold rounded-2xl">
+                {mutationError}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Filter bar */}
         <div className="relative">

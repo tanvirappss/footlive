@@ -189,6 +189,65 @@ export default function UserHomePage() {
     }
   });
 
+  // Fetch SystemConfig settings
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
+    }
+  });
+
+  const getAdForPlacement = (placementKey: string) => {
+    const config = adsterra?.custom_scripts?.placements?.[placementKey];
+    if (!config || !config.enabled || !adsterra?.is_enabled) return null;
+
+    const type = config.type;
+    
+    if (type === 'banner') {
+      return <AdsterraAd htmlCode={adsterra?.banner_script} enabled={true} />;
+    }
+    if (type === 'banner_2') {
+      return <AdsterraAd htmlCode={adsterra?.custom_scripts?.banner_2_script} enabled={true} />;
+    }
+    if (type === 'native') {
+      return <AdsterraAd htmlCode={adsterra?.native_script} enabled={true} />;
+    }
+    if (type === 'social_bar') {
+      return <AdsterraAd htmlCode={adsterra?.social_bar_script} enabled={true} />;
+    }
+    if (type === 'popunder') {
+      return <AdsterraAd htmlCode={adsterra?.popunder_script} enabled={true} />;
+    }
+    if (type === 'interstitial') {
+      return <AdsterraAd htmlCode={adsterra?.custom_scripts?.interstitial_script} enabled={true} />;
+    }
+    if (type === 'display_link') {
+      const url = adsterra?.custom_scripts?.display_link;
+      if (!url) return null;
+      return (
+        <div className="w-full flex justify-center py-2">
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="w-full max-w-[468px] py-4 bg-slate-900/40 hover:bg-slate-900/60 border border-emerald-500/25 rounded-2xl flex flex-col items-center justify-center text-center gap-1 hover:border-emerald-500/50 transition-all duration-200"
+          >
+            <span className="text-[10px] text-emerald-accent font-black tracking-widest uppercase">SPONSORED FEED AD</span>
+            <span className="text-sm text-white font-extrabold px-4">⚡ Click here to watch backup stream in 1080p Ultra HD</span>
+          </a>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   // Auto-select first channel when tab changes to channels
   useEffect(() => {
     if (activeTab === 'channels' && channels.length > 0 && !selectedChannelUrl) {
@@ -353,6 +412,7 @@ export default function UserHomePage() {
   });
 
   const isMatchLive = (m: Match) => {
+    if (systemConfig?.custom_scripts?.force_all_live && m.status === 'upcoming') return true;
     if (m.status === 'live' || m.status === 'half_time') return true;
     if (m.status === 'upcoming') {
       const kickoff = new Date(m.match_timestamp).getTime();
@@ -362,6 +422,7 @@ export default function UserHomePage() {
   };
 
   const isMatchUpcoming = (m: Match) => {
+    if (systemConfig?.custom_scripts?.force_all_live && m.status === 'upcoming') return false;
     if (m.status !== 'upcoming') return false;
     const kickoff = new Date(m.match_timestamp).getTime();
     return Date.now() < (kickoff - 10 * 60 * 1000);
@@ -495,6 +556,9 @@ export default function UserHomePage() {
       {/* Main Container */}
       <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 space-y-8">
         
+        {/* Header Top Ad */}
+        {getAdForPlacement('headerTop')}
+        
         {/* Banner Section */}
         <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
           <img 
@@ -504,11 +568,8 @@ export default function UserHomePage() {
           />
         </section>
 
-        {/* Adsterra Standard Banner (Homepage) */}
-        <AdsterraAd 
-          htmlCode={adsterra?.banner_script} 
-          enabled={!!adsterra?.is_enabled && adsterra?.custom_scripts?.homepage?.standardBanner !== false} 
-        />
+        {/* Ad after Hero Banner */}
+        {getAdForPlacement('afterBanner')}
 
         {/* Tab Row */}
         <div className="flex border-b border-card-border overflow-x-auto">
@@ -554,16 +615,16 @@ export default function UserHomePage() {
             </div>
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {currentList.map((match) => {
+            {currentList.flatMap((match, index) => {
               const homeFlag = getTeamFlag(match, 'home');
               const awayFlag = getTeamFlag(match, 'away');
               const homeName = getTeamName(match, 'home') || 'Home Team';
               const awayName = getTeamName(match, 'away') || 'Away Team';
               
-              const isLive = match.status === 'live' || match.status === 'half_time';
-              const isUpcoming = match.status === 'upcoming';
+              const isLive = match.status === 'live' || match.status === 'half_time' || (systemConfig?.custom_scripts?.force_all_live && match.status === 'upcoming');
+              const isUpcoming = match.status === 'upcoming' && !(systemConfig?.custom_scripts?.force_all_live);
 
-              return (
+              const elements = [
                 <div 
                   key={match.id} 
                   className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-6 hover:border-slate-800 transition-all duration-200"
@@ -579,7 +640,7 @@ export default function UserHomePage() {
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
                           : 'bg-slate-800 text-slate-500 border-slate-700'
                     }`}>
-                      {match.status}
+                      {isLive ? 'live' : match.status}
                     </span>
                   </div>
 
@@ -651,7 +712,19 @@ export default function UserHomePage() {
                     )}
                   </div>
                 </div>
-              );
+              ];
+
+              if ((index + 1) % 4 === 0) {
+                const ad = getAdForPlacement('betweenMatches');
+                if (ad) {
+                  elements.push(
+                    <div key={`ad-${index}`} className="md:col-span-2 w-full flex justify-center py-4">
+                      {ad}
+                    </div>
+                  );
+                }
+              }
+              return elements;
             })}
           </div>
         )
@@ -867,6 +940,9 @@ export default function UserHomePage() {
         </div>
       )}
       </main>
+
+      {/* Before Footer Ad */}
+      {getAdForPlacement('beforeFooter')}
 
       {/* Real-time counters panel */}
       {ticker && ticker.show_counters && (
