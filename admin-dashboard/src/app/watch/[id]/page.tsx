@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -43,10 +43,20 @@ export default function UserWatchPage() {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [playerKey, setPlayerKey] = useState(0);
   const [sessionId, setSessionId] = useState('web_session');
+  const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Health stats
   const [latency, setLatency] = useState('80ms');
   const [bufferState, setBufferState] = useState('Healthy');
+
+  // Cleanup fallback timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Initialize unique session ID
   useEffect(() => {
@@ -349,8 +359,13 @@ export default function UserWatchPage() {
     setIsReconnecting(true);
     setBufferState('Stalled');
 
-    // Switch to next backup stream immediately (100ms for state refresh)
-    setTimeout(() => {
+    // Clear any pending switch
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+    }
+
+    // Switch to next backup stream after 3 seconds (giving stream time to try loaded fallback internally)
+    fallbackTimeoutRef.current = setTimeout(() => {
       if (currentUrlIndex < streamUrls.length - 1) {
         setCurrentUrlIndex(prev => prev + 1);
         setPlayError(null);
@@ -363,7 +378,19 @@ export default function UserWatchPage() {
         setIsReconnecting(false);
         setBufferState('Healthy');
       }
-    }, 100);
+      fallbackTimeoutRef.current = null;
+    }, 3000);
+  };
+
+  const handlePlaying = () => {
+    // Clear any pending fallback timeout since the stream is playing successfully!
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
+    }
+    setPlayError(null);
+    setIsReconnecting(false);
+    setBufferState('Healthy');
   };
 
   const getMatchTitle = () => {
@@ -429,6 +456,7 @@ export default function UserWatchPage() {
               key={playerKey}
               url={activeUrl} 
               onError={handleStreamError} 
+              onPlaying={handlePlaying}
             />
             {isReconnecting && (
               <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">

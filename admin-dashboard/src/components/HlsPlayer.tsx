@@ -6,9 +6,10 @@ import Hls from 'hls.js';
 interface HlsPlayerProps {
   url: string;
   onError?: (errorMsg: string) => void;
+  onPlaying?: () => void;
 }
 
-export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
+export default function HlsPlayer({ url, onError, onPlaying }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
@@ -109,6 +110,9 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
     const onTimeUpdate = () => {
       if (video.currentTime > 0 && !hasStarted) {
         hasStarted = true;
+        if (onPlaying) {
+          onPlaying();
+        }
         if (playTimeoutId) {
           clearTimeout(playTimeoutId);
           playTimeoutId = null;
