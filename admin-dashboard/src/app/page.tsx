@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { 
@@ -57,6 +57,7 @@ interface Announcement {
 }
 
 export default function UserHomePage() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'finished' | 'channels'>('live');
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
   const [showNotificationToast, setShowNotificationToast] = useState(false);
@@ -412,25 +413,64 @@ export default function UserHomePage() {
   });
 
   const isMatchLive = (m: Match) => {
+    if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
+    const kickoff = new Date(m.match_timestamp).getTime();
+    if (Date.now() >= (kickoff + 105 * 60 * 1000)) return false; // Finished dynamically after 105 mins
+
     if (systemConfig?.custom_scripts?.force_all_live && m.status === 'upcoming') return true;
     if (m.status === 'live' || m.status === 'half_time') return true;
     if (m.status === 'upcoming') {
-      const kickoff = new Date(m.match_timestamp).getTime();
       return Date.now() >= (kickoff - 10 * 60 * 1000);
     }
     return false;
   };
 
   const isMatchUpcoming = (m: Match) => {
-    if (systemConfig?.custom_scripts?.force_all_live && m.status === 'upcoming') return false;
     if (m.status !== 'upcoming') return false;
+    if (systemConfig?.custom_scripts?.force_all_live) return false;
     const kickoff = new Date(m.match_timestamp).getTime();
     return Date.now() < (kickoff - 10 * 60 * 1000);
   };
 
   const liveList = matches.filter(m => isMatchLive(m));
   const upcomingList = matches.filter(m => isMatchUpcoming(m));
-  const finishedList = matches.filter(m => m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed');
+  const finishedList = matches.filter(m => 
+    m.status === 'finished' || 
+    m.status === 'cancelled' || 
+    m.status === 'postponed' ||
+    (m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + 105 * 60 * 1000))
+  );
+
+  // Auto-finish matches that have been playing for more than 105 minutes
+  useEffect(() => {
+    if (matches && matches.length > 0) {
+      const autoFinishOldMatches = async () => {
+        const now = Date.now();
+        const matchDuration = 105 * 60 * 1000; // 105 minutes
+        const matchesToFinish = matches.filter(m => {
+          if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
+          const kickoff = new Date(m.match_timestamp).getTime();
+          return now >= (kickoff + matchDuration);
+        });
+
+        if (matchesToFinish.length > 0) {
+          let updatedAny = false;
+          for (const m of matchesToFinish) {
+            const { error } = await supabase
+              .from('matches')
+              .update({ status: 'finished' })
+              .eq('id', m.id);
+            if (!error) updatedAny = true;
+          }
+          if (updatedAny) {
+            queryClient.invalidateQueries({ queryKey: ['user-matches'] });
+          }
+        }
+      };
+
+      autoFinishOldMatches();
+    }
+  }, [matches, queryClient]);
 
   const currentList = whenTab(activeTab, liveList, upcomingList, finishedList);
 
@@ -621,8 +661,8 @@ export default function UserHomePage() {
               const homeName = getTeamName(match, 'home') || 'Home Team';
               const awayName = getTeamName(match, 'away') || 'Away Team';
               
-              const isLive = match.status === 'live' || match.status === 'half_time' || (systemConfig?.custom_scripts?.force_all_live && match.status === 'upcoming');
-              const isUpcoming = match.status === 'upcoming' && !(systemConfig?.custom_scripts?.force_all_live);
+              const isLive = isMatchLive(match);
+              const isUpcoming = isMatchUpcoming(match);
 
               const elements = [
                 <div 
@@ -658,7 +698,7 @@ export default function UserHomePage() {
                     </div>
 
                     <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
-                      {(isLive || match.status === 'finished') ? (
+                      {(isLive || (match.status === 'finished' && (match.home_score > 0 || match.away_score > 0))) ? (
                         <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
                       ) : (
                         <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>

@@ -248,7 +248,7 @@ export default function MatchDetailsPage() {
 
               {/* Score or VS */}
               <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
-                {(isLive || isFinished) ? (
+                {(isLive || (isFinished && (match.home_score > 0 || match.away_score > 0))) ? (
                   <div className="flex flex-col items-center">
                     <span className="text-2xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter whitespace-nowrap">
                       {match.home_score} - {match.away_score}

@@ -153,7 +153,15 @@ fun MatchDetailsScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.width(60.dp)
                             ) {
-                                if (activeMatch.status == "live" || activeMatch.status == "half_time" || activeMatch.status == "finished") {
+                                val isMatchLive = (activeMatch.status == "live" || activeMatch.status == "half_time" ||
+                                                   (activeMatch.status == "upcoming" && System.currentTimeMillis() >= (activeMatch.matchTimestamp - 10 * 60 * 1000))) &&
+                                                  System.currentTimeMillis() < (activeMatch.matchTimestamp + 105 * 60 * 1000)
+                                val isMatchFinished = activeMatch.status == "finished" ||
+                                                      ((activeMatch.status == "live" || activeMatch.status == "half_time" || activeMatch.status == "upcoming") &&
+                                                       System.currentTimeMillis() >= (activeMatch.matchTimestamp + 105 * 60 * 1000))
+                                val isMatchFinishedWithScore = isMatchFinished && (activeMatch.homeScore > 0 || activeMatch.awayScore > 0)
+
+                                if (isMatchLive || isMatchFinishedWithScore) {
                                     Text(
                                         text = "${activeMatch.homeScore} - ${activeMatch.awayScore}",
                                         fontSize = 24.sp,
@@ -161,7 +169,7 @@ fun MatchDetailsScreen(
                                         color = Color.White
                                     )
                                     Text(
-                                        text = activeMatch.status.uppercase(),
+                                        text = if (isMatchLive && activeMatch.status == "upcoming") "LIVE" else activeMatch.status.uppercase(),
                                         fontSize = 8.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = PrimaryEmerald

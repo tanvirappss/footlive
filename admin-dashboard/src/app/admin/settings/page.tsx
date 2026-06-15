@@ -62,6 +62,12 @@ export default function SettingsPage() {
   const [defaultStreamsSuccess, setDefaultStreamsSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  // SystemConfig States for Auto-Populate Toggle
+  const [systemConfigId, setSystemConfigId] = useState<string | null>(null);
+  const [autoPopulateDefaultStreams, setAutoPopulateDefaultStreams] = useState(true);
+  const [forceAllLive, setForceAllLive] = useState(false);
+  const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
+
   // Social Share & SEO Meta States
   const [metaTitle, setMetaTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
@@ -117,6 +123,64 @@ export default function SettingsPage() {
       setNoStreamsDesc((tickerData as any).no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.');
     }
   }, [tickerData]);
+
+  // Load SystemConfig for Default Stream Auto-Populate Toggle
+  useEffect(() => {
+    const fetchSystemConfig = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ad_networks')
+          .select('*')
+          .eq('network_name', 'SystemConfig')
+          .maybeSingle();
+        if (!error && data) {
+          setSystemConfigId(data.id);
+          setForceAllLive(!!data.custom_scripts?.force_all_live);
+          setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
+          setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
+        }
+      } catch (err) {
+        console.error('Failed to load SystemConfig:', err);
+      }
+    };
+    fetchSystemConfig();
+  }, []);
+
+  const handleToggleAutoPopulateDefaultStreams = async () => {
+    const nextVal = !autoPopulateDefaultStreams;
+    setAutoPopulateDefaultStreams(nextVal);
+    try {
+      if (systemConfigId) {
+        await supabase
+          .from('ad_networks')
+          .update({
+            custom_scripts: {
+              force_all_live: forceAllLive,
+              auto_schedule_enabled: autoScheduleEnabled,
+              auto_populate_default_streams: nextVal
+            }
+          })
+          .eq('id', systemConfigId);
+      } else {
+        const { data: created } = await supabase
+          .from('ad_networks')
+          .insert([{
+            network_name: 'SystemConfig',
+            is_enabled: true,
+            custom_scripts: {
+              force_all_live: forceAllLive,
+              auto_schedule_enabled: autoScheduleEnabled,
+              auto_populate_default_streams: nextVal
+            }
+          }])
+          .select()
+          .single();
+        if (created) setSystemConfigId(created.id);
+      }
+    } catch (err) {
+      console.error('Failed to update SystemConfig:', err);
+    }
+  };
 
   // Submit Headline Ticker Settings
   const handleTickerSubmit = async (e: React.FormEvent) => {
@@ -985,6 +1049,28 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-400 mt-1">
                   Configure default streaming fallbacks. Drag-and-drop or use the arrows to set their priority list order.
                 </p>
+              </div>
+
+              <div className="flex justify-between items-center p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+                <div>
+                  <span className="text-xs font-extrabold text-white uppercase tracking-wider block">🔗 Auto-Populate Streams</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                    Automatically link 'Default m3u8 Stream Links' when creating auto-scheduled matches.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleAutoPopulateDefaultStreams}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autoPopulateDefaultStreams ? 'bg-emerald-500' : 'bg-slate-800'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      autoPopulateDefaultStreams ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               <form onSubmit={handleDefaultStreamsSubmit} className="space-y-4">

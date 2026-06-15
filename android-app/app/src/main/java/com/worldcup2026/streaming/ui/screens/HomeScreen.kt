@@ -235,8 +235,13 @@ fun MatchCard(
     onWatch: () -> Unit,
     onDetails: () -> Unit
 ) {
-    val isLive = match.status == "live" || match.status == "half_time"
-    val isUpcoming = match.status == "upcoming"
+    val isLive = (match.status == "live" || match.status == "half_time" ||
+                  (match.status == "upcoming" && System.currentTimeMillis() >= (match.matchTimestamp - 10 * 60 * 1000))) &&
+                 System.currentTimeMillis() < (match.matchTimestamp + 105 * 60 * 1000)
+    val isUpcoming = match.status == "upcoming" && System.currentTimeMillis() < (match.matchTimestamp - 10 * 60 * 1000)
+    val isFinished = match.status == "finished" ||
+                     ((match.status == "live" || match.status == "half_time" || match.status == "upcoming") &&
+                      System.currentTimeMillis() >= (match.matchTimestamp + 105 * 60 * 1000))
 
     Card(
         colors = CardDefaults.cardColors(containerColor = CardColor),
@@ -326,7 +331,7 @@ fun MatchCard(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.width(80.dp)
                 ) {
-                    if (isLive || match.status == "finished") {
+                    if (isLive || (isFinished && (match.homeScore > 0 || match.awayScore > 0))) {
                         Text(
                             text = "${match.homeScore} - ${match.awayScore}",
                             fontSize = 28.sp,

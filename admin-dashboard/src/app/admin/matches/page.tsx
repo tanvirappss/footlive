@@ -111,6 +111,7 @@ export default function MatchesPage() {
   const [systemConfigId, setSystemConfigId] = useState<string | null>(null);
   const [forceAllLive, setForceAllLive] = useState(false);
   const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
+  const [autoPopulateDefaultStreams, setAutoPopulateDefaultStreams] = useState(true);
   const [populating, setPopulating] = useState(false);
   const [populateSuccess, setPopulateSuccess] = useState<string | null>(null);
 
@@ -161,6 +162,7 @@ export default function MatchesPage() {
         setSystemConfigId(data.id);
         setForceAllLive(!!data.custom_scripts?.force_all_live);
         setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
+        setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
       } else {
         // Create default SystemConfig
         const { data: created, error: createError } = await supabase
@@ -170,7 +172,8 @@ export default function MatchesPage() {
             is_enabled: true,
             custom_scripts: {
               force_all_live: false,
-              auto_schedule_enabled: false
+              auto_schedule_enabled: false,
+              auto_populate_default_streams: true
             }
           }])
           .select()
@@ -217,7 +220,8 @@ export default function MatchesPage() {
     setForceAllLive(nextVal);
     updateSystemConfigMutation.mutate({
       force_all_live: nextVal,
-      auto_schedule_enabled: autoScheduleEnabled
+      auto_schedule_enabled: autoScheduleEnabled,
+      auto_populate_default_streams: autoPopulateDefaultStreams
     });
   };
 
@@ -226,7 +230,18 @@ export default function MatchesPage() {
     setAutoScheduleEnabled(nextVal);
     updateSystemConfigMutation.mutate({
       force_all_live: forceAllLive,
-      auto_schedule_enabled: nextVal
+      auto_schedule_enabled: nextVal,
+      auto_populate_default_streams: autoPopulateDefaultStreams
+    });
+  };
+
+  const handleToggleAutoPopulateDefaultStreams = () => {
+    const nextVal = !autoPopulateDefaultStreams;
+    setAutoPopulateDefaultStreams(nextVal);
+    updateSystemConfigMutation.mutate({
+      force_all_live: forceAllLive,
+      auto_schedule_enabled: autoScheduleEnabled,
+      auto_populate_default_streams: nextVal
     });
   };
 
@@ -243,6 +258,19 @@ export default function MatchesPage() {
       if (teamsError) throw teamsError;
 
       const teamsList = dbTeams || [];
+
+      // Fetch default streams if auto-populating
+      let defaultStreamsList: any[] = [];
+      if (autoPopulateDefaultStreams) {
+        const { data: tickerData } = await supabase
+          .from('ticker_settings')
+          .select('default_streams')
+          .limit(1)
+          .maybeSingle();
+        if (tickerData && Array.isArray(tickerData.default_streams)) {
+          defaultStreamsList = tickerData.default_streams;
+        }
+      }
 
       // Helper to find team by name
       const findTeamByName = (name: string) => {
@@ -386,18 +414,19 @@ export default function MatchesPage() {
 
         // Auto-create stream record
         if (createdMatch) {
+          const streamData = {
+            match_id: createdMatch.id,
+            stream_name: 'Main Server',
+            primary_url: autoPopulateDefaultStreams ? (defaultStreamsList[0]?.url || '') : '',
+            backup_url_1: autoPopulateDefaultStreams ? (defaultStreamsList[1]?.url || null) : null,
+            backup_url_2: autoPopulateDefaultStreams ? (defaultStreamsList[2]?.url || null) : null,
+            backup_url_3: autoPopulateDefaultStreams ? (defaultStreamsList[3]?.url || null) : null,
+            is_enabled: true,
+            urls: autoPopulateDefaultStreams ? defaultStreamsList : []
+          };
           const { error: streamError } = await supabase
             .from('streams')
-            .insert([{
-              match_id: createdMatch.id,
-              stream_name: 'Main Server',
-              primary_url: '',
-              backup_url_1: '',
-              backup_url_2: '',
-              backup_url_3: '',
-              is_enabled: true,
-              urls: []
-            }]);
+            .insert([streamData]);
           if (streamError) console.error('Auto stream creation failed:', streamError);
         }
 
@@ -544,6 +573,37 @@ export default function MatchesPage() {
       migrateLegacyCustomTeams();
     }
   }, [matches, teams, queryClient]);
+
+  // Auto-finish matches that have been playing for more than 105 minutes
+  React.useEffect(() => {
+    if (matches.length > 0) {
+      const autoFinishOldMatches = async () => {
+        const now = Date.now();
+        const matchDuration = 105 * 60 * 1000; // 105 minutes
+        const matchesToFinish = matches.filter(m => {
+          if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
+          const kickoff = new Date(m.match_timestamp).getTime();
+          return now >= (kickoff + matchDuration);
+        });
+
+        if (matchesToFinish.length > 0) {
+          let updatedAny = false;
+          for (const m of matchesToFinish) {
+            const { error } = await supabase
+              .from('matches')
+              .update({ status: 'finished' })
+              .eq('id', m.id);
+            if (!error) updatedAny = true;
+          }
+          if (updatedAny) {
+            queryClient.invalidateQueries({ queryKey: ['matches-admin'] });
+          }
+        }
+      };
+
+      autoFinishOldMatches();
+    }
+  }, [matches, queryClient]);
 
   const handleAddClick = () => {
     setEditingMatch(null);
@@ -913,24 +973,48 @@ export default function MatchesPage() {
             </div>
 
             {autoScheduleEnabled && (
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-900/60">
-                <button
-                  type="button"
-                  disabled={populating}
-                  onClick={handleBulkPopulate}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
-                >
-                  {populating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  Populate Fixtures
-                </button>
-                <button
-                  type="button"
-                  disabled={populating}
-                  onClick={handleClearAutoScheduled}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-850 hover:bg-red-950/20 hover:border-red-500/30 text-slate-400 hover:text-red-400 font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
-                >
-                  Clear Auto-Scheduled
-                </button>
+              <div className="space-y-4 border-t border-slate-900/60 pt-4 mt-2">
+                <div className="flex justify-between items-center bg-slate-950/20 border border-slate-900/60 p-3 rounded-2xl">
+                  <div>
+                    <span className="text-xs font-extrabold text-white uppercase tracking-wider block">🔗 Auto-Populate Streams</span>
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                      Automatically link 'Default m3u8 Stream Links' when creating auto-scheduled matches.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleToggleAutoPopulateDefaultStreams}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      autoPopulateDefaultStreams ? 'bg-emerald-500' : 'bg-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        autoPopulateDefaultStreams ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-900/40">
+                  <button
+                    type="button"
+                    disabled={populating}
+                    onClick={handleBulkPopulate}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
+                  >
+                    {populating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Populate Fixtures
+                  </button>
+                  <button
+                    type="button"
+                    disabled={populating}
+                    onClick={handleClearAutoScheduled}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-950 border border-slate-850 hover:bg-red-950/20 hover:border-red-500/30 text-slate-400 hover:text-red-400 font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all duration-150 cursor-pointer disabled:opacity-50"
+                  >
+                    Clear Auto-Scheduled
+                  </button>
+                </div>
               </div>
             )}
           </div>

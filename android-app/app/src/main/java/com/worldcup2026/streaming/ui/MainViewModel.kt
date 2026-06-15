@@ -20,9 +20,10 @@ class MainViewModel @Inject constructor(
     val liveMatches: StateFlow<List<Match>> = repository.getMatches()
         .map { list -> 
             list.filter { 
-                it.status == "live" || 
-                it.status == "half_time" || 
-                (it.status == "upcoming" && System.currentTimeMillis() >= (it.matchTimestamp - 10 * 60 * 1000))
+                (it.status == "live" || 
+                 it.status == "half_time" || 
+                 (it.status == "upcoming" && System.currentTimeMillis() >= (it.matchTimestamp - 10 * 60 * 1000))) &&
+                System.currentTimeMillis() < (it.matchTimestamp + 105 * 60 * 1000)
             } 
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -36,7 +37,15 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val finishedMatches: StateFlow<List<Match>> = repository.getMatches()
-        .map { list -> list.filter { it.status == "finished" || it.status == "cancelled" || it.status == "postponed" } }
+        .map { list -> 
+            list.filter { 
+                it.status == "finished" || 
+                it.status == "cancelled" || 
+                it.status == "postponed" ||
+                ((it.status == "live" || it.status == "half_time" || it.status == "upcoming") && 
+                 System.currentTimeMillis() >= (it.matchTimestamp + 105 * 60 * 1000))
+            } 
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Announcements
