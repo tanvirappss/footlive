@@ -17,6 +17,7 @@ import {
   Search
 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
+import PremiumPlayer from '@/components/PremiumPlayer';
 import AdsterraAd from '@/components/AdsterraAd';
 
 interface Team {
@@ -412,15 +413,26 @@ export default function UserHomePage() {
     }
   });
 
+  const liveOffsetMins = systemConfig?.custom_scripts?.match_live_before_minutes !== undefined 
+    ? Number(systemConfig.custom_scripts.match_live_before_minutes) 
+    : 10;
+  const durationHours = systemConfig?.custom_scripts?.match_duration_hours !== undefined 
+    ? Number(systemConfig.custom_scripts.match_duration_hours) 
+    : 1;
+  const durationMins = systemConfig?.custom_scripts?.match_duration_minutes !== undefined 
+    ? Number(systemConfig.custom_scripts.match_duration_minutes) 
+    : 45;
+  const matchDurationMins = durationHours * 60 + durationMins;
+
   const isMatchLive = (m: Match) => {
     if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
     const kickoff = new Date(m.match_timestamp).getTime();
-    if (Date.now() >= (kickoff + 105 * 60 * 1000)) return false; // Finished dynamically after 105 mins
+    if (Date.now() >= (kickoff + matchDurationMins * 60 * 1000)) return false; // Finished dynamically
 
     if (systemConfig?.custom_scripts?.force_all_live && m.status === 'upcoming') return true;
     if (m.status === 'live' || m.status === 'half_time') return true;
     if (m.status === 'upcoming') {
-      return Date.now() >= (kickoff - 10 * 60 * 1000);
+      return Date.now() >= (kickoff - liveOffsetMins * 60 * 1000);
     }
     return false;
   };
@@ -429,7 +441,7 @@ export default function UserHomePage() {
     if (m.status !== 'upcoming') return false;
     if (systemConfig?.custom_scripts?.force_all_live) return false;
     const kickoff = new Date(m.match_timestamp).getTime();
-    return Date.now() < (kickoff - 10 * 60 * 1000);
+    return Date.now() < (kickoff - liveOffsetMins * 60 * 1000);
   };
 
   const liveList = matches.filter(m => isMatchLive(m));
@@ -438,15 +450,15 @@ export default function UserHomePage() {
     m.status === 'finished' || 
     m.status === 'cancelled' || 
     m.status === 'postponed' ||
-    (m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + 105 * 60 * 1000))
+    (m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + matchDurationMins * 60 * 1000))
   );
 
-  // Auto-finish matches that have been playing for more than 105 minutes
+  // Auto-finish matches that have been playing for more than configured duration
   useEffect(() => {
     if (matches && matches.length > 0) {
       const autoFinishOldMatches = async () => {
         const now = Date.now();
-        const matchDuration = 105 * 60 * 1000; // 105 minutes
+        const matchDuration = matchDurationMins * 60 * 1000;
         const matchesToFinish = matches.filter(m => {
           if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
           const kickoff = new Date(m.match_timestamp).getTime();
@@ -496,8 +508,15 @@ export default function UserHomePage() {
     }
   };
 
-  const noMatchesTitle = (ticker as any)?.no_matches_title || "No Matches Broadcasts";
-  const noMatchesDesc = (ticker as any)?.no_matches_desc || "There are no active matches in this tab. Tune in during kickoff schedules.";
+  const uiTexts = systemConfig?.custom_scripts?.app_ui_texts || {};
+  const noMatchesTitle = uiTexts.no_matches_title || (ticker as any)?.no_matches_title || "No Matches Broadcasts";
+  const noMatchesDesc = uiTexts.no_matches_desc || (ticker as any)?.no_matches_desc || "There are no active matches in this tab. Tune in during kickoff schedules.";
+  const headerSubtitle = uiTexts.header_subtitle || (ticker as any)?.header_subtitle || 'Premium Streaming Portal';
+  const tickerBadge = uiTexts.ticker_badge || (ticker as any)?.ticker_badge || '⚡ NEWS TICKER';
+  const tabLiveName = uiTexts.tab_live_name || (ticker as any)?.tab_live_name || '🔴 Live Now';
+  const tabUpcomingName = uiTexts.tab_upcoming_name || (ticker as any)?.tab_upcoming_name || '📅 Upcoming Fixtures';
+  const tabFinishedName = uiTexts.tab_finished_name || (ticker as any)?.tab_finished_name || '🏁 Finished Matches';
+  const tabChannelsName = uiTexts.tab_channels_name || (ticker as any)?.tab_channels_name || '📺 Live Channels';
 
   return (
     <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans">
@@ -537,7 +556,7 @@ export default function UserHomePage() {
                     {ticker?.site_name || 'WORLD CUP 2026'}
                   </h1>
                   <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">
-                    {(ticker as any)?.header_subtitle || 'Premium Streaming Portal'}
+                    {headerSubtitle}
                   </p>
                 </div>
               </div>
@@ -563,7 +582,7 @@ export default function UserHomePage() {
       {ticker && ticker.is_enabled && (
         <div className="bg-gradient-to-r from-red-950/80 via-[#0f1422] to-red-950/80 border-b border-card-border py-2 relative overflow-hidden flex items-center h-9 z-40">
           <div className="absolute left-0 top-0 bottom-0 px-3.5 bg-red-600 text-white font-black uppercase tracking-wider text-[9px] flex items-center justify-center z-10 shadow-md">
-            {(ticker as any)?.ticker_badge || '⚡ NEWS TICKER'}
+            {tickerBadge}
           </div>
           
           <div className="w-full whitespace-nowrap overflow-hidden">
@@ -624,12 +643,12 @@ export default function UserHomePage() {
               }`}
             >
               {tab === 'live' 
-                ? ((ticker as any)?.tab_live_name || '🔴 Live Now')
+                ? tabLiveName
                 : tab === 'upcoming' 
-                  ? ((ticker as any)?.tab_upcoming_name || '📅 Upcoming Fixtures') 
+                  ? tabUpcomingName 
                   : tab === 'finished'
-                    ? ((ticker as any)?.tab_finished_name || '🏁 Finished Matches')
-                    : ((ticker as any)?.tab_channels_name || '📺 Live Channels')}
+                    ? tabFinishedName
+                    : tabChannelsName}
             </button>
           ))}
         </div>
@@ -774,10 +793,17 @@ export default function UserHomePage() {
           <div className="lg:col-span-2 space-y-4">
             <div className="aspect-video w-full relative bg-black rounded-3xl overflow-hidden border border-card-border shadow-2xl">
               {selectedChannelUrl ? (
-                <HlsPlayer 
-                  url={selectedChannelUrl} 
-                  onError={(err) => console.error(err)} 
-                />
+                systemConfig?.custom_scripts?.active_player === 'player_2' ? (
+                  <PremiumPlayer 
+                    url={selectedChannelUrl} 
+                    onError={(err) => console.error(err)} 
+                  />
+                ) : (
+                  <HlsPlayer 
+                    url={selectedChannelUrl} 
+                    onError={(err) => console.error(err)} 
+                  />
+                )
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
                   <Tv className="h-12 w-12 mb-3 animate-pulse text-slate-600" />

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
+import PremiumPlayer from '@/components/PremiumPlayer';
 import AdsterraAd from '@/components/AdsterraAd';
 
 interface Match {
@@ -124,6 +125,20 @@ export default function UserWatchPage() {
         .from('ad_networks')
         .select('*')
         .eq('network_name', 'Adsterra')
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
+    }
+  });
+
+  // Fetch SystemConfig settings
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
         .maybeSingle();
       if (error) throw error;
       return data || null;
@@ -323,8 +338,9 @@ export default function UserWatchPage() {
     );
   }
 
-  const noStreamsTitle = (ticker as any)?.no_streams_title || 'No Streams Configured';
-  const noStreamsDesc = (ticker as any)?.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.';
+  const uiTexts = systemConfig?.custom_scripts?.app_ui_texts || {};
+  const noStreamsTitle = uiTexts.no_streams_title || (ticker as any)?.no_streams_title || 'No Streams Configured';
+  const noStreamsDesc = uiTexts.no_streams_desc || (ticker as any)?.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.';
 
   if (streams.length === 0) {
     return (
@@ -452,12 +468,21 @@ export default function UserWatchPage() {
           {getAdForPlacement('watchAbovePlayer')}
 
           <div className="aspect-video w-full relative">
-            <HlsPlayer 
-              key={playerKey}
-              url={activeUrl} 
-              onError={handleStreamError} 
-              onPlaying={handlePlaying}
-            />
+            {systemConfig?.custom_scripts?.active_player === 'player_2' ? (
+              <PremiumPlayer 
+                key={playerKey}
+                url={activeUrl} 
+                onError={handleStreamError} 
+                onPlaying={handlePlaying}
+              />
+            ) : (
+              <HlsPlayer 
+                key={playerKey}
+                url={activeUrl} 
+                onError={handleStreamError} 
+                onPlaying={handlePlaying}
+              />
+            )}
             {isReconnecting && (
               <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">
                 <LoaderComponent message="Reconnecting stream feed..." />

@@ -2,6 +2,7 @@ package com.worldcup2026.streaming.ui.screens
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
@@ -46,7 +47,17 @@ fun StreamingScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = remember(context) {
+        var ctx = context
+        while (ctx is android.content.ContextWrapper) {
+            if (ctx is Activity) {
+                return@remember ctx
+            }
+            ctx = ctx.baseContext
+        }
+        ctx as? Activity
+    }
+    val componentActivity = activity as? androidx.activity.ComponentActivity
     val scope = rememberCoroutineScope()
 
     // Query active streams for this match
@@ -54,6 +65,19 @@ fun StreamingScreen(
     val streams by streamsFlow.collectAsState(initial = emptyList())
 
     var isFullscreen by remember { mutableStateOf(false) }
+    var isInPipMode by remember { mutableStateOf(false) }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        DisposableEffect(componentActivity) {
+            val listener = androidx.core.util.Consumer<androidx.core.app.PictureInPictureModeChangedInfo> { info ->
+                isInPipMode = info.isInPictureInPictureMode
+            }
+            componentActivity?.addOnPictureInPictureModeChangedListener(listener)
+            onDispose {
+                componentActivity?.removeOnPictureInPictureModeChangedListener(listener)
+            }
+        }
+    }
 
     // Lock landscape on fullscreen toggle
     LaunchedEffect(isFullscreen) {
@@ -104,6 +128,13 @@ fun StreamingScreen(
         var bufferState by remember { mutableStateOf("Healthy") }
         var resolution by remember { mutableStateOf("1080p") }
 
+        // Player 2 controls state
+        val activePlayer = remember { viewModel.getActivePlayer() }
+        var currentSpeed by remember { mutableStateOf(1.0f) }
+        var currentQuality by remember { mutableStateOf("HD") }
+        var speedMenuExpanded by remember { mutableStateOf(false) }
+        var qualityMenuExpanded by remember { mutableStateOf(false) }
+
         // ExoPlayer instance initialization
         val exoPlayer = remember {
             ExoPlayer.Builder(context).build().apply {
@@ -117,6 +148,29 @@ fun StreamingScreen(
             val mediaItem = MediaItem.fromUri(url)
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
+        }
+
+        fun setQuality(quality: String) {
+            currentQuality = quality
+            val parametersBuilder = exoPlayer.trackSelectionParameters.buildUpon()
+            when (quality) {
+                "HD" -> {
+                    parametersBuilder
+                        .setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE)
+                        .setMaxVideoBitrate(Integer.MAX_VALUE)
+                }
+                "SD" -> {
+                    parametersBuilder
+                        .setMaxVideoSize(854, 480)
+                        .setMaxVideoBitrate(1_000_000)
+                }
+                "Low" -> {
+                    parametersBuilder
+                        .setMaxVideoSize(426, 240)
+                        .setMaxVideoBitrate(300_000)
+                }
+            }
+            exoPlayer.trackSelectionParameters = parametersBuilder.build()
         }
 
         // Listener for player events
@@ -175,7 +229,23 @@ fun StreamingScreen(
             }
         }
 
-        if (isFullscreen) {
+        if (isInPipMode) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = false
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        } else if (isFullscreen) {
             // Fullscreen Landscape Player
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                 AndroidView(
@@ -192,19 +262,109 @@ fun StreamingScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Fullscreen toggles
-                IconButton(
-                    onClick = { isFullscreen = false },
+                // Fullscreen controls
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), shape = RoundedCornerShape(8.dp))
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FullscreenExit,
-                        contentDescription = "Exit Fullscreen",
-                        tint = Color.White
-                    )
+                    if (activePlayer == "player_2") {
+                        // Playback Speed button
+                        Box {
+                            Button(
+                                onClick = { speedMenuExpanded = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black.copy(alpha = 0.6f),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(36.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text(text = "Speed: ${currentSpeed}x", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            DropdownMenu(
+                                expanded = speedMenuExpanded,
+                                onDismissRequest = { speedMenuExpanded = false },
+                                modifier = Modifier.background(SurfaceColor)
+                            ) {
+                                listOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                    DropdownMenuItem(
+                                        text = { Text("${speed}x", color = Color.White) },
+                                        onClick = {
+                                            currentSpeed = speed
+                                            exoPlayer.setPlaybackSpeed(speed)
+                                            speedMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Quality selector button
+                        Box {
+                            Button(
+                                onClick = { qualityMenuExpanded = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black.copy(alpha = 0.6f),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(36.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text(text = "Quality: $currentQuality", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            DropdownMenu(
+                                expanded = qualityMenuExpanded,
+                                onDismissRequest = { qualityMenuExpanded = false },
+                                modifier = Modifier.background(SurfaceColor)
+                            ) {
+                                listOf("HD", "SD", "Low").forEach { q ->
+                                    DropdownMenuItem(
+                                        text = { Text(q, color = Color.White) },
+                                        onClick = {
+                                            setQuality(q)
+                                            qualityMenuExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // PiP button
+                        Button(
+                            onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    activity?.enterPictureInPictureMode()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                contentColor = PrimaryEmerald
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text(text = "PiP", fontSize = 10.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+
+                    // Exit Fullscreen
+                    IconButton(
+                        onClick = { isFullscreen = false },
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(8.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FullscreenExit,
+                            contentDescription = "Exit Fullscreen",
+                            tint = Color.White
+                        )
+                    }
                 }
 
                 // Health telemetry overlay
@@ -388,6 +548,113 @@ fun StreamingScreen(
                                         fontWeight = FontWeight.Black,
                                         fontSize = 11.sp
                                     )
+                                }
+                            }
+                        }
+                    }
+
+                    // Player 2 Controls (Speed & Quality & PiP)
+                    if (activePlayer == "player_2") {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(SurfaceColor, shape = RoundedCornerShape(16.dp))
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = "PLAYER 2 HIGH-SPEED CONTROLS",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = SecondaryGold,
+                                letterSpacing = 1.sp
+                            )
+                            HorizontalDivider(color = SlateDark.copy(alpha = 0.5f))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Playback Speed Button/Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    Button(
+                                        onClick = { speedMenuExpanded = true },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CardColor,
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                    ) {
+                                        Text(text = "Speed: ${currentSpeed}x", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    DropdownMenu(
+                                        expanded = speedMenuExpanded,
+                                        onDismissRequest = { speedMenuExpanded = false },
+                                        modifier = Modifier.background(SurfaceColor)
+                                    ) {
+                                        listOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                            DropdownMenuItem(
+                                                text = { Text("${speed}x", color = Color.White) },
+                                                onClick = {
+                                                    currentSpeed = speed
+                                                    exoPlayer.setPlaybackSpeed(speed)
+                                                    speedMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Quality selector Button/Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    Button(
+                                        onClick = { qualityMenuExpanded = true },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CardColor,
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                    ) {
+                                        Text(text = "Quality: $currentQuality", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    DropdownMenu(
+                                        expanded = qualityMenuExpanded,
+                                        onDismissRequest = { qualityMenuExpanded = false },
+                                        modifier = Modifier.background(SurfaceColor)
+                                    ) {
+                                        listOf("HD", "SD", "Low").forEach { q ->
+                                            DropdownMenuItem(
+                                                text = { Text(q, color = Color.White) },
+                                                onClick = {
+                                                    setQuality(q)
+                                                    qualityMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Picture-in-Picture Button
+                                Button(
+                                    onClick = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                            activity?.enterPictureInPictureMode()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = PrimaryEmerald,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).height(40.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
+                                ) {
+                                    Text(text = "PiP Mode", fontSize = 11.sp, fontWeight = FontWeight.Black)
                                 }
                             }
                         }

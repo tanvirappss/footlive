@@ -10,6 +10,10 @@ interface AppRepository {
     fun getAnnouncements(): Flow<List<Announcement>>
     fun getAdConfigs(): Flow<List<AdConfig>>
     
+    fun getActivePlayer(): String
+    fun getMatchDurationMins(): Int
+    fun getMatchLiveBeforeMins(): Int
+
     suspend fun syncAllData()
     suspend fun recordAnalyticsEvent(eventName: String, metadata: Map<String, Any> = emptyMap())
 }

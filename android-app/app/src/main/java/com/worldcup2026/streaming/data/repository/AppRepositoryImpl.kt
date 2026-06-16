@@ -78,6 +78,22 @@ class AppRepositoryImpl @Inject constructor(
             dao.clearAdConfigs()
             dao.insertAdConfigs(ads.map { it.toEntity() })
 
+            // Check SystemConfig active player and duration parameters
+            ads.find { it.networkName == "SystemConfig" }?.let { config ->
+                config.customScripts?.let { scripts ->
+                    if (scripts.has("active_player")) {
+                        activePlayer = scripts.get("active_player").asString
+                    }
+                    val durationHours = if (scripts.has("match_duration_hours")) scripts.get("match_duration_hours").asInt else 1
+                    val durationMins = if (scripts.has("match_duration_minutes")) scripts.get("match_duration_minutes").asInt else 45
+                    matchDurationMins = durationHours * 60 + durationMins
+                    
+                    if (scripts.has("match_live_before_minutes")) {
+                        matchLiveBeforeMins = scripts.get("match_live_before_minutes").asInt
+                    }
+                }
+            }
+
         } catch (e: Exception) {
             e.printStackTrace()
             // In case of error (e.g. offline), app continues running on Room cache
@@ -199,4 +215,14 @@ class AppRepositoryImpl @Inject constructor(
         nativeScript = nativeScript, socialBarScript = socialBarScript,
         popunderScript = popunderScript
     )
+
+    override fun getActivePlayer(): String = activePlayer
+    override fun getMatchDurationMins(): Int = matchDurationMins
+    override fun getMatchLiveBeforeMins(): Int = matchLiveBeforeMins
+
+    companion object {
+        private var activePlayer: String = "player_1"
+        private var matchDurationMins: Int = 105
+        private var matchLiveBeforeMins: Int = 10
+    }
 }

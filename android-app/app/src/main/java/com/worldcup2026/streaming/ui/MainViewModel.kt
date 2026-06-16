@@ -19,31 +19,35 @@ class MainViewModel @Inject constructor(
     // Matches state subdivided for simple rendering
     val liveMatches: StateFlow<List<Match>> = repository.getMatches()
         .map { list -> 
+            val liveBeforeMins = repository.getMatchLiveBeforeMins()
+            val durationMins = repository.getMatchDurationMins()
             list.filter { 
                 (it.status == "live" || 
                  it.status == "half_time" || 
-                 (it.status == "upcoming" && System.currentTimeMillis() >= (it.matchTimestamp - 10 * 60 * 1000))) &&
-                System.currentTimeMillis() < (it.matchTimestamp + 105 * 60 * 1000)
+                 (it.status == "upcoming" && System.currentTimeMillis() >= (it.matchTimestamp - liveBeforeMins * 60 * 1000L))) &&
+                System.currentTimeMillis() < (it.matchTimestamp + durationMins * 60 * 1000L)
             } 
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val upcomingMatches: StateFlow<List<Match>> = repository.getMatches()
         .map { list -> 
+            val liveBeforeMins = repository.getMatchLiveBeforeMins()
             list.filter { 
-                it.status == "upcoming" && System.currentTimeMillis() < (it.matchTimestamp - 10 * 60 * 1000)
+                it.status == "upcoming" && System.currentTimeMillis() < (it.matchTimestamp - liveBeforeMins * 60 * 1000L)
             } 
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val finishedMatches: StateFlow<List<Match>> = repository.getMatches()
         .map { list -> 
+            val durationMins = repository.getMatchDurationMins()
             list.filter { 
                 it.status == "finished" || 
                 it.status == "cancelled" || 
                 it.status == "postponed" ||
                 ((it.status == "live" || it.status == "half_time" || it.status == "upcoming") && 
-                 System.currentTimeMillis() >= (it.matchTimestamp + 105 * 60 * 1000))
+                 System.currentTimeMillis() >= (it.matchTimestamp + durationMins * 60 * 1000L))
             } 
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -76,6 +80,8 @@ class MainViewModel @Inject constructor(
     fun getStreamsForMatch(matchId: String): Flow<List<Stream>> {
         return repository.getStreamsForMatch(matchId)
     }
+
+    fun getActivePlayer(): String = repository.getActivePlayer()
 
     fun recordViewEvent(matchId: String, matchTitle: String) {
         viewModelScope.launch {

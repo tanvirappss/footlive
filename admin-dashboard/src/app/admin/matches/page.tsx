@@ -17,7 +17,8 @@ import {
   Info,
   Tv,
   Zap,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { wc2026Schedule, getStadiumForTeam } from '@/lib/wc2026-schedule';
 
@@ -112,6 +113,9 @@ export default function MatchesPage() {
   const [forceAllLive, setForceAllLive] = useState(false);
   const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
   const [autoPopulateDefaultStreams, setAutoPopulateDefaultStreams] = useState(true);
+  const [matchDurationHours, setMatchDurationHours] = useState(1);
+  const [matchDurationMinutes, setMatchDurationMinutes] = useState(45);
+  const [matchLiveBeforeMinutes, setMatchLiveBeforeMinutes] = useState(10);
   const [populating, setPopulating] = useState(false);
   const [populateSuccess, setPopulateSuccess] = useState<string | null>(null);
 
@@ -163,6 +167,9 @@ export default function MatchesPage() {
         setForceAllLive(!!data.custom_scripts?.force_all_live);
         setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
         setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
+        setMatchDurationHours(data.custom_scripts?.match_duration_hours !== undefined ? data.custom_scripts.match_duration_hours : 1);
+        setMatchDurationMinutes(data.custom_scripts?.match_duration_minutes !== undefined ? data.custom_scripts.match_duration_minutes : 45);
+        setMatchLiveBeforeMinutes(data.custom_scripts?.match_live_before_minutes !== undefined ? data.custom_scripts.match_live_before_minutes : 10);
       } else {
         // Create default SystemConfig
         const { data: created, error: createError } = await supabase
@@ -188,11 +195,17 @@ export default function MatchesPage() {
 
   const updateSystemConfigMutation = useMutation({
     mutationFn: async (updatedScripts: any) => {
+      const existingScripts = systemConfig?.custom_scripts || {};
+      const mergedScripts = {
+        ...existingScripts,
+        ...updatedScripts
+      };
+
       if (systemConfigId) {
         const { error } = await supabase
           .from('ad_networks')
           .update({
-            custom_scripts: updatedScripts
+            custom_scripts: mergedScripts
           })
           .eq('id', systemConfigId);
         if (error) throw error;
@@ -202,7 +215,7 @@ export default function MatchesPage() {
           .insert([{
             network_name: 'SystemConfig',
             is_enabled: true,
-            custom_scripts: updatedScripts
+            custom_scripts: mergedScripts
           }])
           .select()
           .single();
@@ -243,6 +256,16 @@ export default function MatchesPage() {
       auto_schedule_enabled: autoScheduleEnabled,
       auto_populate_default_streams: nextVal
     });
+  };
+
+  const handleSaveLifecycleSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSystemConfigMutation.mutate({
+      match_duration_hours: matchDurationHours,
+      match_duration_minutes: matchDurationMinutes,
+      match_live_before_minutes: matchLiveBeforeMinutes
+    });
+    alert('Match lifecycle settings saved successfully!');
   };
 
   const handleBulkPopulate = async () => {
@@ -574,12 +597,13 @@ export default function MatchesPage() {
     }
   }, [matches, teams, queryClient]);
 
-  // Auto-finish matches that have been playing for more than 105 minutes
+  // Auto-finish matches that have been playing for more than configured duration
   React.useEffect(() => {
     if (matches.length > 0) {
       const autoFinishOldMatches = async () => {
         const now = Date.now();
-        const matchDuration = 105 * 60 * 1000; // 105 minutes
+        const durationMins = matchDurationHours * 60 + matchDurationMinutes;
+        const matchDuration = durationMins * 60 * 1000;
         const matchesToFinish = matches.filter(m => {
           if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
           const kickoff = new Date(m.match_timestamp).getTime();
@@ -912,7 +936,7 @@ export default function MatchesPage() {
         </div>
 
         {/* System & Populate Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Force All Live Toggle Card */}
           <div className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-4 bg-slate-900/10 hover:border-slate-800 transition-all duration-200">
             <div className="flex justify-between items-start">
@@ -1017,6 +1041,66 @@ export default function MatchesPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Match Lifecycle Settings Card */}
+          <div className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-4 bg-slate-900/10 hover:border-slate-800 transition-all duration-200">
+            <div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-emerald-400" />
+                <span className="text-sm font-extrabold text-white uppercase tracking-wider">⏱️ Match Lifecycle Settings</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-2 font-medium">
+                Set how long matches remain active before moving to Finished, and when upcoming matches go Live.
+              </p>
+
+              <form onSubmit={handleSaveLifecycleSettings} className="space-y-3 mt-4">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wide block">Duration Hours</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="12"
+                      value={matchDurationHours}
+                      onChange={(e) => setMatchDurationHours(parseInt(e.target.value) || 0)}
+                      className="w-full bg-slate-950 border border-card-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-accent"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wide block">Duration Mins</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={matchDurationMinutes}
+                      onChange={(e) => setMatchDurationMinutes(parseInt(e.target.value) || 0)}
+                      className="w-full bg-slate-950 border border-card-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-accent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wide block">Live offset before kickoff (Mins)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="180"
+                    value={matchLiveBeforeMinutes}
+                    onChange={(e) => setMatchLiveBeforeMinutes(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-card-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-accent"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={updateSystemConfigMutation.isPending}
+                  className="w-full py-2 bg-emerald-accent hover:bg-emerald-500 text-black text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  {updateSystemConfigMutation.isPending ? 'Saving...' : 'Save Durations'}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 

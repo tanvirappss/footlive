@@ -1,5 +1,6 @@
 package com.worldcup2026.streaming.data.remote
 
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import retrofit2.http.*
 
@@ -68,7 +69,8 @@ data class AdNetworkDto(
     @SerializedName("banner_script") val bannerScript: String?,
     @SerializedName("native_script") val nativeScript: String?,
     @SerializedName("social_bar_script") val socialBarScript: String?,
-    @SerializedName("popunder_script") val popunderScript: String?
+    @SerializedName("popunder_script") val popunderScript: String?,
+    @SerializedName("custom_scripts") val customScripts: JsonObject?
 )
 
 data class AnalyticsPayload(

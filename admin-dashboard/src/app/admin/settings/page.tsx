@@ -64,6 +64,7 @@ export default function SettingsPage() {
 
   // SystemConfig States for Auto-Populate Toggle
   const [systemConfigId, setSystemConfigId] = useState<string | null>(null);
+  const [systemConfigData, setSystemConfigData] = useState<any>(null);
   const [autoPopulateDefaultStreams, setAutoPopulateDefaultStreams] = useState(true);
   const [forceAllLive, setForceAllLive] = useState(false);
   const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
@@ -110,39 +111,58 @@ export default function SettingsPage() {
       setMetaImageUrl((tickerData as any).meta_image || '');
       setUseLogoImage((tickerData as any).use_logo_image === true);
 
-      // App UI Texts
-      setTickerBadge((tickerData as any).ticker_badge || '⚡ NEWS TICKER');
-      setHeaderSubtitle((tickerData as any).header_subtitle || 'Premium Streaming Portal');
-      setTabLiveName((tickerData as any).tab_live_name || '🔴 Live Now');
-      setTabUpcomingName((tickerData as any).tab_upcoming_name || '📅 Upcoming Fixtures');
-      setTabFinishedName((tickerData as any).tab_finished_name || '🏁 Finished Matches');
-      setTabChannelsName((tickerData as any).tab_channels_name || '📺 Live Channels');
-      setNoMatchesTitle((tickerData as any).no_matches_title || 'NO MATCHES BROADCASTS');
-      setNoMatchesDesc((tickerData as any).no_matches_desc || 'There are no active matches in this tab. Tune in during kickoff schedules.');
-      setNoStreamsTitle((tickerData as any).no_streams_title || 'No Streams Configured');
-      setNoStreamsDesc((tickerData as any).no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.');
+      // Only fall back to tickerData for App UI Texts if SystemConfig doesn't have them yet
+      const hasSystemUiTexts = !!systemConfigData?.custom_scripts?.app_ui_texts;
+      if (!hasSystemUiTexts) {
+        setTickerBadge((tickerData as any).ticker_badge || '⚡ NEWS TICKER');
+        setHeaderSubtitle((tickerData as any).header_subtitle || 'Premium Streaming Portal');
+        setTabLiveName((tickerData as any).tab_live_name || '🔴 Live Now');
+        setTabUpcomingName((tickerData as any).tab_upcoming_name || '📅 Upcoming Fixtures');
+        setTabFinishedName((tickerData as any).tab_finished_name || '🏁 Finished Matches');
+        setTabChannelsName((tickerData as any).tab_channels_name || '📺 Live Channels');
+        setNoMatchesTitle((tickerData as any).no_matches_title || 'NO MATCHES BROADCASTS');
+        setNoMatchesDesc((tickerData as any).no_matches_desc || 'There are no active matches in this tab. Tune in during kickoff schedules.');
+        setNoStreamsTitle((tickerData as any).no_streams_title || 'No Streams Configured');
+        setNoStreamsDesc((tickerData as any).no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.');
+      }
     }
-  }, [tickerData]);
+  }, [tickerData, systemConfigData]);
 
   // Load SystemConfig for Default Stream Auto-Populate Toggle
-  useEffect(() => {
-    const fetchSystemConfig = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('ad_networks')
-          .select('*')
-          .eq('network_name', 'SystemConfig')
-          .maybeSingle();
-        if (!error && data) {
-          setSystemConfigId(data.id);
-          setForceAllLive(!!data.custom_scripts?.force_all_live);
-          setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
-          setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
+  const fetchSystemConfig = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
+        .maybeSingle();
+      if (!error && data) {
+        setSystemConfigId(data.id);
+        setSystemConfigData(data);
+        setForceAllLive(!!data.custom_scripts?.force_all_live);
+        setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
+        setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
+        
+        const uiTexts = data.custom_scripts?.app_ui_texts;
+        if (uiTexts) {
+          setTickerBadge(uiTexts.ticker_badge || '⚡ NEWS TICKER');
+          setHeaderSubtitle(uiTexts.header_subtitle || 'Premium Streaming Portal');
+          setTabLiveName(uiTexts.tab_live_name || '🔴 Live Now');
+          setTabUpcomingName(uiTexts.tab_upcoming_name || '📅 Upcoming Fixtures');
+          setTabFinishedName(uiTexts.tab_finished_name || '🏁 Finished Matches');
+          setTabChannelsName(uiTexts.tab_channels_name || '📺 Live Channels');
+          setNoMatchesTitle(uiTexts.no_matches_title || 'NO MATCHES BROADCASTS');
+          setNoMatchesDesc(uiTexts.no_matches_desc || 'There are no active matches in this tab. Tune in during kickoff schedules.');
+          setNoStreamsTitle(uiTexts.no_streams_title || 'No Streams Configured');
+          setNoStreamsDesc(uiTexts.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.');
         }
-      } catch (err) {
-        console.error('Failed to load SystemConfig:', err);
       }
-    };
+    } catch (err) {
+      console.error('Failed to load SystemConfig:', err);
+    }
+  };
+
+  useEffect(() => {
     fetchSystemConfig();
   }, []);
 
@@ -150,15 +170,18 @@ export default function SettingsPage() {
     const nextVal = !autoPopulateDefaultStreams;
     setAutoPopulateDefaultStreams(nextVal);
     try {
+      const existingScripts = systemConfigData?.custom_scripts || {};
+      const updatedScripts = {
+        ...existingScripts,
+        force_all_live: forceAllLive,
+        auto_schedule_enabled: autoScheduleEnabled,
+        auto_populate_default_streams: nextVal
+      };
       if (systemConfigId) {
         await supabase
           .from('ad_networks')
           .update({
-            custom_scripts: {
-              force_all_live: forceAllLive,
-              auto_schedule_enabled: autoScheduleEnabled,
-              auto_populate_default_streams: nextVal
-            }
+            custom_scripts: updatedScripts
           })
           .eq('id', systemConfigId);
       } else {
@@ -167,16 +190,13 @@ export default function SettingsPage() {
           .insert([{
             network_name: 'SystemConfig',
             is_enabled: true,
-            custom_scripts: {
-              force_all_live: forceAllLive,
-              auto_schedule_enabled: autoScheduleEnabled,
-              auto_populate_default_streams: nextVal
-            }
+            custom_scripts: updatedScripts
           }])
           .select()
           .single();
         if (created) setSystemConfigId(created.id);
       }
+      await fetchSystemConfig();
     } catch (err) {
       console.error('Failed to update SystemConfig:', err);
     }
@@ -481,7 +501,7 @@ export default function SettingsPage() {
     setUpdatingAppTexts(true);
     setAppTextsSuccess(false);
     try {
-      const updateData = {
+      const uiTexts = {
         ticker_badge: tickerBadge,
         header_subtitle: headerSubtitle,
         tab_live_name: tabLiveName,
@@ -491,27 +511,77 @@ export default function SettingsPage() {
         no_matches_title: noMatchesTitle,
         no_matches_desc: noMatchesDesc,
         no_streams_title: noStreamsTitle,
-        no_streams_desc: noStreamsDesc,
-        updated_at: new Date().toISOString()
+        no_streams_desc: noStreamsDesc
       };
-      if (tickerData?.id) {
+
+      const existingScripts = systemConfigData?.custom_scripts || {};
+
+      if (systemConfigId) {
         const { error } = await supabase
-          .from('ticker_settings')
-          .update(updateData)
-          .eq('id', tickerData.id);
+          .from('ad_networks')
+          .update({
+            custom_scripts: {
+              ...existingScripts,
+              app_ui_texts: uiTexts
+            }
+          })
+          .eq('id', systemConfigId);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('ticker_settings')
-          .insert([updateData]);
+        const { data: created, error } = await supabase
+          .from('ad_networks')
+          .insert([{
+            network_name: 'SystemConfig',
+            is_enabled: true,
+            custom_scripts: {
+              force_all_live: forceAllLive,
+              auto_schedule_enabled: autoScheduleEnabled,
+              auto_populate_default_streams: autoPopulateDefaultStreams,
+              app_ui_texts: uiTexts
+            }
+          }])
+          .select()
+          .single();
         if (error) throw error;
+        if (created) setSystemConfigId(created.id);
       }
+
+      // Also try to update ticker_settings for backwards compatibility, but ignore errors
+      try {
+        const updateData = {
+          ticker_badge: tickerBadge,
+          header_subtitle: headerSubtitle,
+          tab_live_name: tabLiveName,
+          tab_upcoming_name: tabUpcomingName,
+          tab_finished_name: tabFinishedName,
+          tab_channels_name: tabChannelsName,
+          no_matches_title: noMatchesTitle,
+          no_matches_desc: noMatchesDesc,
+          no_streams_title: noStreamsTitle,
+          no_streams_desc: noStreamsDesc,
+          updated_at: new Date().toISOString()
+        };
+        if (tickerData?.id) {
+          await supabase
+            .from('ticker_settings')
+            .update(updateData)
+            .eq('id', tickerData.id);
+        } else {
+          await supabase
+            .from('ticker_settings')
+            .insert([updateData]);
+        }
+      } catch (tickerErr) {
+        console.warn('Failed to update ticker_settings columns, this is fine since it is saved in SystemConfig', tickerErr);
+      }
+
       setAppTextsSuccess(true);
+      await fetchSystemConfig();
       refetchTicker();
       setTimeout(() => setAppTextsSuccess(false), 3000);
     } catch (err) {
       console.error(err);
-      alert('Failed to save UI texts settings. Ensure that you have run the latest database migration SQL.');
+      alert('Failed to save UI texts settings.');
     } finally {
       setUpdatingAppTexts(false);
     }
