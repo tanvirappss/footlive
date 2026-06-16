@@ -446,12 +446,14 @@ export default function UserHomePage() {
 
   const liveList = matches.filter(m => isMatchLive(m));
   const upcomingList = matches.filter(m => isMatchUpcoming(m));
-  const finishedList = matches.filter(m => 
-    m.status === 'finished' || 
-    m.status === 'cancelled' || 
-    m.status === 'postponed' ||
-    (m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + matchDurationMins * 60 * 1000))
-  );
+  const finishedList = matches
+    .filter(m => 
+      m.status === 'finished' || 
+      m.status === 'cancelled' || 
+      m.status === 'postponed' ||
+      (m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + matchDurationMins * 60 * 1000))
+    )
+    .sort((a, b) => new Date(b.match_timestamp).getTime() - new Date(a.match_timestamp).getTime());
 
   // Auto-finish matches that have been playing for more than configured duration
   useEffect(() => {
@@ -533,7 +535,16 @@ export default function UserHomePage() {
       {/* Header Bar */}
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center">
+          <Link 
+            href="/" 
+            onClick={(e) => {
+              if (window.location.pathname === '/') {
+                e.preventDefault();
+                window.location.reload();
+              }
+            }}
+            className="flex items-center gap-3 cursor-pointer select-none"
+          >
             {ticker?.use_logo_image && ticker?.logo_url ? (
               <img 
                 src={ticker.logo_url} 
@@ -561,7 +572,7 @@ export default function UserHomePage() {
                 </div>
               </div>
             )}
-          </div>
+          </Link>
 
           <button
             onClick={() => setIsNoticeModalOpen(true)}

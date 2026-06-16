@@ -48,7 +48,7 @@ class MainViewModel @Inject constructor(
                 it.status == "postponed" ||
                 ((it.status == "live" || it.status == "half_time" || it.status == "upcoming") && 
                  System.currentTimeMillis() >= (it.matchTimestamp + durationMins * 60 * 1000L))
-            } 
+            }.sortedByDescending { it.matchTimestamp }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

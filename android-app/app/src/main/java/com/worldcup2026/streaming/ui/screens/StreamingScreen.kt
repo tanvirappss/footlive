@@ -351,6 +351,38 @@ fun StreamingScreen(
                         ) {
                             Text(text = "PiP", fontSize = 10.sp, fontWeight = FontWeight.Black)
                         }
+
+                        // -10s Button
+                        Button(
+                            onClick = { exoPlayer.seekTo(maxOf(0L, exoPlayer.currentPosition - 10000L)) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("-10s", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // +10s Button
+                        Button(
+                            onClick = {
+                                val duration = exoPlayer.duration
+                                val target = exoPlayer.currentPosition + 10000L
+                                exoPlayer.seekTo(if (duration > 0) minOf(duration, target) else target)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Black.copy(alpha = 0.6f),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Text("+10s", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
 
                     // Exit Fullscreen
@@ -655,6 +687,46 @@ fun StreamingScreen(
                                     contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
                                     Text(text = "PiP Mode", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Skip Backward Button
+                                Button(
+                                    onClick = {
+                                        exoPlayer.seekTo(maxOf(0L, exoPlayer.currentPosition - 10000L))
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = CardColor,
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).height(40.dp)
+                                ) {
+                                    Text("-10s", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                // Skip Forward Button
+                                Button(
+                                    onClick = {
+                                        val duration = exoPlayer.duration
+                                        val target = exoPlayer.currentPosition + 10000L
+                                        exoPlayer.seekTo(if (duration > 0) minOf(duration, target) else target)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = CardColor,
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).height(40.dp)
+                                ) {
+                                    Text("+10s", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

@@ -13,6 +13,7 @@ import {
   ChevronUp, 
   Tv, 
   RotateCw,
+  RotateCcw,
   Gauge
 } from 'lucide-react';
 
@@ -37,6 +38,58 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   
+  // Custom visibility controls state for mobile/touch compatibility
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimeoutRef = useRef<any>(null);
+
+  const resetControlsTimeout = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+      setShowSpeedMenu(false);
+      setShowQualityMenu(false);
+    }, 3500);
+  };
+
+  useEffect(() => {
+    resetControlsTimeout();
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Synchronize fullscreen status
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const skip = (amount: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    let newTime = video.currentTime + amount;
+    if (newTime < 0) newTime = 0;
+    if (newTime > video.duration) newTime = video.duration;
+    
+    video.currentTime = newTime;
+    resetControlsTimeout();
+  };
+
   // HLS Qualities
   const [qualities, setQualities] = useState<{ id: number; height: number; label: string }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1); // -1 = Auto
@@ -273,13 +326,30 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
 
   const toggleFullscreen = () => {
     const container = containerRef.current;
-    if (!container) return;
+    const video = videoRef.current;
+    if (!container || !video) return;
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+
+    if (isIOS) {
+      if ((video as any).webkitEnterFullscreen) {
+        (video as any).webkitEnterFullscreen();
+      } else if (video.requestFullscreen) {
+        video.requestFullscreen();
+      }
+      return;
+    }
 
     if (!document.fullscreenElement) {
       container.requestFullscreen().then(() => {
         setIsFullscreen(true);
       }).catch((err) => {
-        console.error(err);
+        if (video.requestFullscreen) {
+          video.requestFullscreen();
+        } else if ((video as any).webkitEnterFullscreen) {
+          (video as any).webkitEnterFullscreen();
+        }
+        setIsFullscreen(true);
       });
     } else {
       document.exitFullscreen().then(() => {
@@ -307,35 +377,66 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
     <div 
       ref={containerRef}
       className="w-full h-full bg-black relative flex items-center justify-center rounded-2xl overflow-hidden border border-card-border group"
+      onMouseMove={resetControlsTimeout}
+      onTouchStart={resetControlsTimeout}
+      onClick={resetControlsTimeout}
     >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         className="w-full h-full object-contain cursor-pointer"
-        onClick={togglePlay}
+        onClick={(e) => {
+          e.stopPropagation();
+          togglePlay();
+          resetControlsTimeout();
+        }}
       />
 
       {/* Premium Glassmorphic Controls Bar */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col gap-3 z-30 select-none">
+      <div 
+        className={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 flex flex-col gap-3 z-30 select-none ${
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         
         {/* Controls Row */}
         <div className="flex items-center justify-between gap-4">
           
           {/* Left Controls */}
           <div className="flex items-center gap-3.5">
+            {/* 10s Backward */}
+            <button 
+              onClick={(e) => { e.stopPropagation(); skip(-10); }} 
+              className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer flex items-center justify-center relative"
+              title="Backward 10s"
+            >
+              <RotateCcw className="h-5 w-5" />
+              <span className="absolute text-[8px] font-black top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-[1px]">10</span>
+            </button>
+
             {/* Play/Pause */}
             <button 
-              onClick={togglePlay} 
+              onClick={(e) => { e.stopPropagation(); togglePlay(); }} 
               className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer"
             >
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-white hover:fill-emerald-accent" />}
             </button>
 
+            {/* 10s Forward */}
+            <button 
+              onClick={(e) => { e.stopPropagation(); skip(10); }} 
+              className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer flex items-center justify-center relative"
+              title="Forward 10s"
+            >
+              <RotateCw className="h-5 w-5" />
+              <span className="absolute text-[8px] font-black top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-[1px]">10</span>
+            </button>
+
             {/* Mute/Volume */}
-            <div className="flex items-center gap-2 group/vol">
+            <div className="flex items-center gap-2">
               <button 
-                onClick={toggleMute} 
+                onClick={(e) => { e.stopPropagation(); toggleMute(); }} 
                 className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer"
               >
                 {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
@@ -346,13 +447,13 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                 max="1"
                 step="0.05"
                 value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-0 group-hover/vol:w-16 h-1 rounded-lg appearance-none bg-slate-800 accent-emerald-accent transition-all duration-300 cursor-pointer overflow-hidden"
+                onChange={(e) => { e.stopPropagation(); handleVolumeChange(e); }}
+                className="w-14 sm:w-16 h-1 rounded-lg appearance-none bg-slate-800 accent-emerald-accent cursor-pointer overflow-hidden"
               />
             </div>
             
             {/* Live Badge */}
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-600/20 border border-red-500/30 text-[9px] font-black text-red-500 uppercase tracking-widest animate-pulse">
+            <span className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-600/20 border border-red-500/30 text-[9px] font-black text-red-500 uppercase tracking-widest animate-pulse">
               <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
               LIVE
             </span>
