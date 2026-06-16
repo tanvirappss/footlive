@@ -393,18 +393,33 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
         }}
       />
 
+      {/* Floating Fullscreen Toggle Button (extremely visible & accessible on mobile) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleFullscreen();
+          resetControlsTimeout();
+        }}
+        className={`absolute top-4 right-4 p-2.5 bg-black/60 hover:bg-slate-900 border border-slate-700/60 rounded-xl transition-all duration-300 z-40 cursor-pointer ${
+          showControls ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
+        }`}
+        title="Fullscreen Toggle"
+      >
+        {isFullscreen ? <Minimize className="h-5 w-5 text-white" /> : <Maximize className="h-5 w-5 text-white" />}
+      </button>
+
       {/* Premium Glassmorphic Controls Bar */}
       <div 
-        className={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 flex flex-col gap-3 z-30 select-none ${
+        className={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300 flex flex-col gap-3 z-30 select-none ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
         
         {/* Controls Row */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-1 sm:gap-4 flex-nowrap w-full">
           
           {/* Left Controls */}
-          <div className="flex items-center gap-3.5">
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-nowrap">
             {/* 10s Backward */}
             <button 
               onClick={(e) => { e.stopPropagation(); skip(-10); }} 
@@ -414,7 +429,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
               <RotateCcw className="h-5 w-5" />
               <span className="absolute text-[8px] font-black top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-[1px]">10</span>
             </button>
-
+ 
             {/* Play/Pause */}
             <button 
               onClick={(e) => { e.stopPropagation(); togglePlay(); }} 
@@ -422,7 +437,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
             >
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-white hover:fill-emerald-accent" />}
             </button>
-
+ 
             {/* 10s Forward */}
             <button 
               onClick={(e) => { e.stopPropagation(); skip(10); }} 
@@ -432,15 +447,16 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
               <RotateCw className="h-5 w-5" />
               <span className="absolute text-[8px] font-black top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 mt-[1px]">10</span>
             </button>
-
+ 
             {/* Mute/Volume */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button 
                 onClick={(e) => { e.stopPropagation(); toggleMute(); }} 
                 className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer"
               >
                 {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </button>
+              {/* Hide range slider on mobile to prevent overflow (mobile users use physical keys) */}
               <input 
                 type="range"
                 min="0"
@@ -448,7 +464,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => { e.stopPropagation(); handleVolumeChange(e); }}
-                className="w-14 sm:w-16 h-1 rounded-lg appearance-none bg-slate-800 accent-emerald-accent cursor-pointer overflow-hidden"
+                className="hidden sm:block w-14 sm:w-16 h-1 rounded-lg appearance-none bg-slate-800 accent-emerald-accent cursor-pointer overflow-hidden"
               />
             </div>
             
@@ -458,24 +474,25 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
               LIVE
             </span>
           </div>
-
+ 
           {/* Right Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3.5 flex-nowrap">
             
             {/* PiP */}
             <button 
-              onClick={handlePiP}
+              onClick={(e) => { e.stopPropagation(); handlePiP(); }}
               className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer"
               title="Picture in Picture"
             >
               <Tv className="h-5 w-5" />
             </button>
-
+ 
             {/* Quality Selector (HLS only) */}
             {qualities.length > 0 && (
               <div className="relative">
                 <button 
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setShowQualityMenu(!showQualityMenu);
                     setShowSpeedMenu(false);
                   }}
@@ -490,7 +507,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                 {showQualityMenu && (
                   <div className="absolute bottom-full right-0 mb-2 py-1.5 w-32 bg-slate-950/90 border border-card-border rounded-xl backdrop-blur-xl shadow-2xl flex flex-col z-50">
                     <button 
-                      onClick={() => handleQualityChange(-1)}
+                      onClick={(e) => { e.stopPropagation(); handleQualityChange(-1); }}
                       className={`px-3 py-1.5 text-left text-xs uppercase tracking-wide hover:bg-slate-900 transition-colors ${currentQuality === -1 ? 'text-emerald-accent font-black' : 'text-slate-400 font-bold'}`}
                     >
                       Auto
@@ -498,7 +515,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                     {qualities.map((q) => (
                       <button 
                         key={q.id}
-                        onClick={() => handleQualityChange(q.id)}
+                        onClick={(e) => { e.stopPropagation(); handleQualityChange(q.id); }}
                         className={`px-3 py-1.5 text-left text-xs uppercase tracking-wide hover:bg-slate-900 transition-colors ${currentQuality === q.id ? 'text-emerald-accent font-black' : 'text-slate-400 font-bold'}`}
                       >
                         {q.label}
@@ -508,11 +525,12 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                 )}
               </div>
             )}
-
+ 
             {/* Playback Speed */}
             <div className="relative">
               <button 
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowSpeedMenu(!showSpeedMenu);
                   setShowQualityMenu(false);
                 }}
@@ -527,7 +545,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                   {[0.5, 1, 1.25, 1.5, 2].map((sp) => (
                     <button 
                       key={sp}
-                      onClick={() => handleSpeedChange(sp)}
+                      onClick={(e) => { e.stopPropagation(); handleSpeedChange(sp); }}
                       className={`px-3 py-1.5 text-left text-xs uppercase tracking-wide hover:bg-slate-900 transition-colors ${playbackSpeed === sp ? 'text-emerald-accent font-black' : 'text-slate-400 font-bold'}`}
                     >
                       {sp === 1 ? 'Normal' : `${sp}x`}
@@ -536,19 +554,19 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
                 </div>
               )}
             </div>
-
+ 
             {/* Fullscreen */}
             <button 
-              onClick={toggleFullscreen}
+              onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
               className="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer"
               title="Fullscreen"
             >
               {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             </button>
           </div>
-
+ 
         </div>
-
+ 
       </div>
     </div>
   );
