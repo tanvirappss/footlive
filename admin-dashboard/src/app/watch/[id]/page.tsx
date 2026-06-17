@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
+import PotPlayer from '@/components/PotPlayer';
 import AdsterraAd from '@/components/AdsterraAd';
 
 interface Match {
@@ -470,6 +471,13 @@ export default function UserWatchPage() {
           <div className="aspect-video w-full relative">
             {systemConfig?.custom_scripts?.active_player === 'player_2' ? (
               <PremiumPlayer 
+                key={playerKey}
+                url={activeUrl} 
+                onError={handleStreamError} 
+                onPlaying={handlePlaying}
+              />
+            ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
+              <PotPlayer 
                 key={playerKey}
                 url={activeUrl} 
                 onError={handleStreamError} 

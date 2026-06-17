@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
+import PotPlayer from '@/components/PotPlayer';
 import AdsterraAd from '@/components/AdsterraAd';
 
 interface Team {
@@ -202,7 +203,8 @@ export default function UserHomePage() {
         .maybeSingle();
       if (error) throw error;
       return data || null;
-    }
+    },
+    refetchInterval: 10000,
   });
 
   const getAdForPlacement = (placementKey: string) => {
@@ -410,9 +412,11 @@ export default function UserHomePage() {
         .order('match_timestamp', { ascending: true });
       if (error) throw error;
       return (data || []) as Match[];
-    }
+    },
+    refetchInterval: 10000,
   });
 
+  const autoFinishEnabled = systemConfig?.custom_scripts?.auto_finish_enabled !== false;
   const liveOffsetMins = systemConfig?.custom_scripts?.match_live_before_minutes !== undefined 
     ? Number(systemConfig.custom_scripts.match_live_before_minutes) 
     : 10;
@@ -427,7 +431,7 @@ export default function UserHomePage() {
   const isMatchLive = (m: Match) => {
     if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
     const kickoff = new Date(m.match_timestamp).getTime();
-    if (Date.now() >= (kickoff + matchDurationMins * 60 * 1000)) return false; // Finished dynamically
+    if (autoFinishEnabled && Date.now() >= (kickoff + matchDurationMins * 60 * 1000)) return false; // Finished dynamically
 
     if (systemConfig?.custom_scripts?.force_all_live && m.status === 'upcoming') return true;
     if (m.status === 'live' || m.status === 'half_time') return true;
@@ -441,6 +445,13 @@ export default function UserHomePage() {
     if (m.status !== 'upcoming') return false;
     if (systemConfig?.custom_scripts?.force_all_live) return false;
     const kickoff = new Date(m.match_timestamp).getTime();
+    
+    // If it is live dynamically, it is not upcoming anymore
+    if (Date.now() >= (kickoff - liveOffsetMins * 60 * 1000)) {
+      if (!autoFinishEnabled || Date.now() < (kickoff + matchDurationMins * 60 * 1000)) {
+        return false;
+      }
+    }
     return Date.now() < (kickoff - liveOffsetMins * 60 * 1000);
   };
 
@@ -451,40 +462,9 @@ export default function UserHomePage() {
       m.status === 'finished' || 
       m.status === 'cancelled' || 
       m.status === 'postponed' ||
-      (m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + matchDurationMins * 60 * 1000))
+      (autoFinishEnabled && m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' && Date.now() >= (new Date(m.match_timestamp).getTime() + matchDurationMins * 60 * 1000))
     )
     .sort((a, b) => new Date(b.match_timestamp).getTime() - new Date(a.match_timestamp).getTime());
-
-  // Auto-finish matches that have been playing for more than configured duration
-  useEffect(() => {
-    if (matches && matches.length > 0) {
-      const autoFinishOldMatches = async () => {
-        const now = Date.now();
-        const matchDuration = matchDurationMins * 60 * 1000;
-        const matchesToFinish = matches.filter(m => {
-          if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
-          const kickoff = new Date(m.match_timestamp).getTime();
-          return now >= (kickoff + matchDuration);
-        });
-
-        if (matchesToFinish.length > 0) {
-          let updatedAny = false;
-          for (const m of matchesToFinish) {
-            const { error } = await supabase
-              .from('matches')
-              .update({ status: 'finished' })
-              .eq('id', m.id);
-            if (!error) updatedAny = true;
-          }
-          if (updatedAny) {
-            queryClient.invalidateQueries({ queryKey: ['user-matches'] });
-          }
-        }
-      };
-
-      autoFinishOldMatches();
-    }
-  }, [matches, queryClient]);
 
   const currentList = whenTab(activeTab, liveList, upcomingList, finishedList);
 
@@ -806,6 +786,11 @@ export default function UserHomePage() {
               {selectedChannelUrl ? (
                 systemConfig?.custom_scripts?.active_player === 'player_2' ? (
                   <PremiumPlayer 
+                    url={selectedChannelUrl} 
+                    onError={(err) => console.error(err)} 
+                  />
+                ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
+                  <PotPlayer 
                     url={selectedChannelUrl} 
                     onError={(err) => console.error(err)} 
                   />

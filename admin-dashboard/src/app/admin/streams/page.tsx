@@ -136,7 +136,7 @@ export default function StreamsPage() {
   const activePlayer = systemConfig?.custom_scripts?.active_player || 'player_1';
 
   const updateActivePlayerMutation = useMutation({
-    mutationFn: async (player: 'player_1' | 'player_2') => {
+    mutationFn: async (player: 'player_1' | 'player_2' | 'pot_player') => {
       const existingScripts = systemConfig?.custom_scripts || {};
       const updatedScripts = {
         ...existingScripts,
@@ -317,14 +317,14 @@ export default function StreamsPage() {
         <div className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/10 hover:border-slate-800 transition-all duration-200">
           <div>
             <div className="flex items-center gap-2">
-              <Tv className={`h-5 w-5 ${activePlayer === 'player_2' ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <Tv className={`h-5 w-5 ${activePlayer !== 'player_1' ? 'text-emerald-400' : 'text-slate-400'}`} />
               <span className="text-sm font-extrabold text-white uppercase tracking-wider">📺 Active Streaming Video Player</span>
             </div>
             <p className="text-xs text-slate-400 mt-2 font-medium max-w-xl">
-              Toggle between **Player 1** (Standard player using hls.js) and **Player 2** (Premium Super Speed Player with speed selector, quality selector, and PiP). This setting affects the website and the Android application.
+              Toggle between **Player 1** (Standard player using hls.js), **Player 2** (Premium Super Speed Player with speed selector, quality selector, and PiP), and **Pot Player** (Futuristic clone player that plays all link formats speedily). This setting affects the website and the Android application.
             </p>
           </div>
-          <div className="flex items-center gap-3 bg-slate-950/40 p-1.5 rounded-2xl border border-slate-900">
+          <div className="flex flex-wrap items-center gap-3 bg-slate-950/40 p-1.5 rounded-2xl border border-slate-900">
             <button
               onClick={() => updateActivePlayerMutation.mutate('player_1')}
               className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
@@ -344,6 +344,16 @@ export default function StreamsPage() {
               }`}
             >
               Player 2 (Premium Speed)
+            </button>
+            <button
+              onClick={() => updateActivePlayerMutation.mutate('pot_player')}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                activePlayer === 'pot_player'
+                  ? 'bg-slate-800 text-emerald-accent border border-card-border shadow-lg'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Pot Player (Clone)
             </button>
           </div>
         </div>

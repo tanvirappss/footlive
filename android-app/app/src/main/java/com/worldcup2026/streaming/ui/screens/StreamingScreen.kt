@@ -270,7 +270,7 @@ fun StreamingScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (activePlayer == "player_2") {
+                    if (activePlayer == "player_2" || activePlayer == "pot_player") {
                         // Playback Speed button
                         Box {
                             Button(
@@ -585,8 +585,8 @@ fun StreamingScreen(
                         }
                     }
 
-                    // Player 2 Controls (Speed & Quality & PiP)
-                    if (activePlayer == "player_2") {
+                    // Player 2 / Pot Player Controls (Speed & Quality & PiP)
+                    if (activePlayer == "player_2" || activePlayer == "pot_player") {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier
@@ -595,7 +595,7 @@ fun StreamingScreen(
                                 .padding(16.dp)
                         ) {
                             Text(
-                                text = "PLAYER 2 HIGH-SPEED CONTROLS",
+                                text = if (activePlayer == "pot_player") "POT PLAYER HIGH-SPEED CONTROLS" else "PLAYER 2 HIGH-SPEED CONTROLS",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Black,
                                 color = SecondaryGold,

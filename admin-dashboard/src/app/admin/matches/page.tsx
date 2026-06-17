@@ -116,6 +116,7 @@ export default function MatchesPage() {
   const [matchDurationHours, setMatchDurationHours] = useState(1);
   const [matchDurationMinutes, setMatchDurationMinutes] = useState(45);
   const [matchLiveBeforeMinutes, setMatchLiveBeforeMinutes] = useState(10);
+  const [autoFinishEnabled, setAutoFinishEnabled] = useState(true);
   const [populating, setPopulating] = useState(false);
   const [populateSuccess, setPopulateSuccess] = useState<string | null>(null);
 
@@ -162,15 +163,7 @@ export default function MatchesPage() {
 
       if (error) throw error;
 
-      if (data) {
-        setSystemConfigId(data.id);
-        setForceAllLive(!!data.custom_scripts?.force_all_live);
-        setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
-        setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
-        setMatchDurationHours(data.custom_scripts?.match_duration_hours !== undefined ? data.custom_scripts.match_duration_hours : 1);
-        setMatchDurationMinutes(data.custom_scripts?.match_duration_minutes !== undefined ? data.custom_scripts.match_duration_minutes : 45);
-        setMatchLiveBeforeMinutes(data.custom_scripts?.match_live_before_minutes !== undefined ? data.custom_scripts.match_live_before_minutes : 10);
-      } else {
+      if (!data) {
         // Create default SystemConfig
         const { data: created, error: createError } = await supabase
           .from('ad_networks')
@@ -186,12 +179,25 @@ export default function MatchesPage() {
           .select()
           .single();
         if (!createError && created) {
-          setSystemConfigId(created.id);
+          return created;
         }
       }
       return data;
     }
   });
+
+  React.useEffect(() => {
+    if (systemConfig) {
+      setSystemConfigId(systemConfig.id);
+      setForceAllLive(!!systemConfig.custom_scripts?.force_all_live);
+      setAutoScheduleEnabled(!!systemConfig.custom_scripts?.auto_schedule_enabled);
+      setAutoPopulateDefaultStreams(systemConfig.custom_scripts?.auto_populate_default_streams !== false);
+      setMatchDurationHours(systemConfig.custom_scripts?.match_duration_hours !== undefined ? systemConfig.custom_scripts.match_duration_hours : 1);
+      setMatchDurationMinutes(systemConfig.custom_scripts?.match_duration_minutes !== undefined ? systemConfig.custom_scripts.match_duration_minutes : 45);
+      setMatchLiveBeforeMinutes(systemConfig.custom_scripts?.match_live_before_minutes !== undefined ? systemConfig.custom_scripts.match_live_before_minutes : 10);
+      setAutoFinishEnabled(systemConfig.custom_scripts?.auto_finish_enabled !== false);
+    }
+  }, [systemConfig]);
 
   const updateSystemConfigMutation = useMutation({
     mutationFn: async (updatedScripts: any) => {
@@ -263,7 +269,8 @@ export default function MatchesPage() {
     updateSystemConfigMutation.mutate({
       match_duration_hours: matchDurationHours,
       match_duration_minutes: matchDurationMinutes,
-      match_live_before_minutes: matchLiveBeforeMinutes
+      match_live_before_minutes: matchLiveBeforeMinutes,
+      auto_finish_enabled: autoFinishEnabled
     });
     alert('Match lifecycle settings saved successfully!');
   };
@@ -399,7 +406,7 @@ export default function MatchesPage() {
         }
 
         // Check if match already exists
-        const timestampString = new Date(`${m.match_date}T${m.match_time}:00`).toISOString();
+        const timestampString = new Date(`${m.match_date}T${m.match_time}:00+06:00`).toISOString();
         const duplicate = matchesList.find(dm => {
           const homeMatch = dm.home_team_id === homeTeam?.id;
           const awayMatch = dm.away_team_id === awayTeam?.id;
@@ -599,6 +606,9 @@ export default function MatchesPage() {
 
   // Auto-finish matches that have been playing for more than configured duration
   React.useEffect(() => {
+    const autoFinishEnabledVal = systemConfig?.custom_scripts?.auto_finish_enabled !== false;
+    if (!autoFinishEnabledVal) return;
+
     if (matches.length > 0) {
       const autoFinishOldMatches = async () => {
         const now = Date.now();
@@ -627,7 +637,7 @@ export default function MatchesPage() {
 
       autoFinishOldMatches();
     }
-  }, [matches, queryClient]);
+  }, [matches, systemConfig, matchDurationHours, matchDurationMinutes, queryClient]);
 
   const handleAddClick = () => {
     setEditingMatch(null);
@@ -712,8 +722,8 @@ export default function MatchesPage() {
         bannerUrl = await uploadBanner(bannerFile);
       }
 
-      // Combine Date + Time to ISO string for timestamptz
-      const timestampString = new Date(`${matchDate}T${matchTime}:00`).toISOString();
+      // Combine Date + Time to ISO string for timestamptz in Bangladesh Time (GMT+6)
+      const timestampString = new Date(`${matchDate}T${matchTime}:00+06:00`).toISOString();
 
       // Resolve Home Team
       let resolvedHomeTeamId = null;
@@ -1090,6 +1100,26 @@ export default function MatchesPage() {
                     onChange={(e) => setMatchLiveBeforeMinutes(parseInt(e.target.value) || 0)}
                     className="w-full bg-slate-950 border border-card-border rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-accent"
                   />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-900 rounded-xl my-2">
+                  <div>
+                    <span className="text-[10px] font-extrabold text-white uppercase tracking-wider block">🏁 Auto-Finish Matches</span>
+                    <span className="text-[9px] text-slate-500 block">Move matches to Finished when duration ends</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAutoFinishEnabled(!autoFinishEnabled)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      autoFinishEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        autoFinishEnabled ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
 
                 <button
