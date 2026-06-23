@@ -5,23 +5,43 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2, Trophy, MessageSquare, MapPin } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
 import PotPlayer from '@/components/PotPlayer';
 import AdsterraAd from '@/components/AdsterraAd';
+
+interface Team {
+  id: string;
+  name: string;
+  short_name: string;
+  flag_url: string;
+  logo_url: string;
+}
 
 interface Match {
   id: string;
   home_team_id: string | null;
   away_team_id: string | null;
   home_team_custom_name: string | null;
+  home_team_custom_flag: string | null;
   away_team_custom_name: string | null;
-  match_date: string;
-  status: string;
+  away_team_custom_flag: string | null;
   tournament_name: string;
-  home_team?: { name: string; flag_url: string };
-  away_team?: { name: string; flag_url: string };
+  match_date: string;
+  match_time: string;
+  match_timestamp: string;
+  stadium_name: string;
+  status: string;
+  home_score: number;
+  away_score: number;
+  home_scorers?: string | null;
+  away_scorers?: string | null;
+  live_minute?: string | null;
+  banner_url: string | null;
+  description: string | null;
+  home_team?: Team;
+  away_team?: Team;
 }
 
 interface Stream {
@@ -35,6 +55,37 @@ interface Stream {
   urls?: { label: string; url: string }[];
 }
 
+const teamNameAliases: Record<string, string[]> = {
+  'united states': ['usa', 'us', 'united states of america', 'u.s.a.'],
+  'south korea': ['korea republic', 'korea', 'korea rep.', 'republic of korea'],
+  'ivory coast': ["cote d'ivoire", 'côte d\'ivoire', 'cote divoire'],
+  'dr congo': ['democratic republic of congo', 'congo dr', 'dem. rep. congo', 'congo'],
+  'cabo verde': ['cape verde'],
+  'czech republic': ['czechia'],
+  'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
+  'curacao': ['curaçao'],
+  'turkey': ['türkiye', 'turkiye'],
+};
+
+function normalizeTeamName(name: string): string {
+  if (!name) return '';
+  const lower = name.trim().toLowerCase();
+  for (const [canonical, aliases] of Object.entries(teamNameAliases)) {
+    if (lower === canonical || aliases.includes(lower)) {
+      return canonical;
+    }
+  }
+  return lower;
+}
+
+function teamsMatch(dbName: string, espnName: string): boolean {
+  const norm1 = normalizeTeamName(dbName);
+  const norm2 = normalizeTeamName(espnName);
+  if (norm1 === norm2) return true;
+  if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
+  return false;
+}
+
 export default function UserWatchPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -43,6 +94,7 @@ export default function UserWatchPage() {
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [playError, setPlayError] = useState<string | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [activeSideTab, setActiveSideTab] = useState<'commentary' | 'events' | 'telemetry'>('commentary');
   const [playerKey, setPlayerKey] = useState(0);
   const [sessionId, setSessionId] = useState('web_session');
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -88,6 +140,57 @@ export default function UserWatchPage() {
       if (error) throw error;
       return data as Match;
     }
+  });
+
+  // Fetch real-time live score updates for this match date to get espnEventId and latest live scores
+  const matchDateStr = match ? (() => {
+    const d = new Date(match.match_timestamp);
+    return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+  })() : null;
+
+  const { data: espnScores = [] } = useQuery<any[]>({
+    queryKey: ['watch-espn-scores', matchDateStr],
+    queryFn: async () => {
+      if (!matchDateStr) return [];
+      try {
+        const res = await fetch(`/api/live-scores?date=${matchDateStr}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.scores || [];
+      } catch (e) {
+        return [];
+      }
+    },
+    enabled: !!matchDateStr,
+    refetchInterval: 15 * 1000, // Refetch every 15 seconds for live matches score tracking!
+  });
+
+  // Find the matching ESPN score record
+  const matchedEspnScore = match ? espnScores.find(es => {
+    const homeName = match.home_team_id ? match.home_team?.name : match.home_team_custom_name;
+    const awayName = match.away_team_id ? match.away_team?.name : match.away_team_custom_name;
+    if (!homeName || !awayName) return false;
+    return (teamsMatch(homeName, es.homeTeam) && teamsMatch(awayName, es.awayTeam)) ||
+           (teamsMatch(homeName, es.awayTeam) && teamsMatch(awayName, es.homeTeam));
+  }) : null;
+
+  const espnEventId = matchedEspnScore?.espnEventId;
+
+  // Fetch live play-by-play commentary from ESPN summary endpoint proxy
+  const { data: commentaryData, isLoading: loadingCommentary } = useQuery({
+    queryKey: ['live-commentary', espnEventId],
+    queryFn: async () => {
+      if (!espnEventId) return null;
+      try {
+        const res = await fetch(`/api/live-commentary?event=${espnEventId}`);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        return null;
+      }
+    },
+    enabled: !!espnEventId,
+    refetchInterval: 15 * 1000, // Refetch every 15 seconds for live play-by-play commentary!
   });
 
   // Fetch match streams
@@ -410,11 +513,12 @@ export default function UserWatchPage() {
     setBufferState('Healthy');
   };
 
+  const homeName = match?.home_team_id ? match.home_team?.name : match?.home_team_custom_name;
+  const awayName = match?.away_team_id ? match.away_team?.name : match?.away_team_custom_name;
+
   const getMatchTitle = () => {
     if (!match) return 'Live Match Broadcast';
-    const home = match.home_team_id ? match.home_team?.name : match.home_team_custom_name;
-    const away = match.away_team_id ? match.away_team?.name : match.away_team_custom_name;
-    return `${home} vs ${away}`;
+    return `${homeName} vs ${awayName}`;
   };
 
   return (
@@ -556,47 +660,247 @@ export default function UserWatchPage() {
           {getAdForPlacement('watchBelowPlayer')}
         </div>
 
-        {/* Telemetry log cards */}
-        <div className="space-y-6">
-          <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-6 h-full flex flex-col justify-between">
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 border-b border-card-border pb-4">
-                <Activity className="h-5 w-5 text-emerald-accent" />
-                <h3 className="font-black uppercase text-xs text-white tracking-wider">Stream Health Monitor</h3>
+        {/* Live Match Center & Commentary Sidebar */}
+        <div className="space-y-6 flex flex-col h-[calc(100vh-140px)] min-h-[500px]">
+          {/* Match Score Card (Like Screenshot) */}
+          <div className="glass-panel p-5 rounded-2xl border border-card-border bg-gradient-to-b from-slate-900/40 to-slate-950/20">
+            <div className="flex justify-between items-center text-center gap-1">
+              {/* Home Team */}
+              <div className="w-[35%] flex flex-col items-center gap-1.5 min-w-0">
+                <div className="h-10 w-14 bg-slate-950/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
+                  {(match?.home_team_id ? match.home_team?.flag_url : match?.home_team_custom_flag) ? (
+                    <img 
+                      src={match?.home_team_id ? match.home_team?.flag_url : match?.home_team_custom_flag || ''} 
+                      alt={homeName || 'Home'} 
+                      className="h-full w-full object-cover rounded" 
+                    />
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-bold">HOME</span>
+                  )}
+                </div>
+                <span className="font-bold text-white text-xs truncate w-full">{homeName}</span>
               </div>
 
-              <div className="space-y-4 text-xs font-bold">
-                <div className="flex justify-between items-center py-2 border-b border-slate-900">
-                  <span className="text-slate-500">Live Status:</span>
-                  <span className="text-emerald-accent uppercase flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-accent animate-ping" />
-                    ONLINE
+              {/* Score display */}
+              <div className="w-[30%] flex flex-col items-center justify-center">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-2xl font-black text-white tracking-tight">
+                    {matchedEspnScore ? matchedEspnScore.homeScore : (match?.home_score ?? 0)}
+                  </span>
+                  <span className="text-slate-600 font-bold text-xs">-</span>
+                  <span className="text-2xl font-black text-white tracking-tight">
+                    {matchedEspnScore ? matchedEspnScore.awayScore : (match?.away_score ?? 0)}
                   </span>
                 </div>
-                <div className="flex justify-between items-center py-2 border-b border-slate-900">
-                  <span className="text-slate-500">Active Channel:</span>
-                  <span className="text-white uppercase">{currentUrlIndex === 0 ? 'Primary Feed' : `Backup Feed ${currentUrlIndex}`}</span>
+                <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md text-[9px] font-black uppercase tracking-wider mt-1.5 animate-pulse">
+                  {matchedEspnScore?.liveMinute || match?.live_minute || 'LIVE'}
+                </span>
+              </div>
+
+              {/* Away Team */}
+              <div className="w-[35%] flex flex-col items-center gap-1.5 min-w-0">
+                <div className="h-10 w-14 bg-slate-950/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
+                  {(match?.away_team_id ? match.away_team?.flag_url : match?.away_team_custom_flag) ? (
+                    <img 
+                      src={match?.away_team_id ? match.away_team?.flag_url : match?.away_team_custom_flag || ''} 
+                      alt={awayName || 'Away'} 
+                      className="h-full w-full object-cover rounded" 
+                    />
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-bold">AWAY</span>
+                  )}
                 </div>
-                <div className="flex justify-between items-center py-2 border-b border-slate-900">
-                  <span className="text-slate-500">Codec Type:</span>
-                  <span className="text-white font-mono">H.264 / AAC</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-slate-900">
-                  <span className="text-slate-500">Network Latency:</span>
-                  <span className="text-white">{latency} (Low Delay)</span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-slate-500">Buffer state:</span>
-                  <span className={bufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}>{bufferState}</span>
-                </div>
+                <span className="font-bold text-white text-xs truncate w-full">{awayName}</span>
               </div>
             </div>
 
-            <div className="pt-6 border-t border-card-border">
-              <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-900 flex gap-2.5 text-[10px] text-slate-500 font-bold uppercase">
-                <Check className="h-4 w-4 text-emerald-accent shrink-0" />
-                Adaptive bitrate engine is active and adjusting to your bandwidth speeds automatically.
+            {/* Scorers info below (Exactly like screenshot) */}
+            {((matchedEspnScore ? matchedEspnScore.homeScorers : match?.home_scorers) || 
+              (matchedEspnScore ? matchedEspnScore.awayScorers : match?.away_scorers)) && (
+              <div className="text-[10px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-900/80 flex justify-between gap-3 mt-4">
+                <div className="w-[45%] text-left text-slate-300 font-medium leading-relaxed">
+                  {matchedEspnScore ? matchedEspnScore.homeScorers : match?.home_scorers || ""}
+                </div>
+                <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+                <div className="w-[45%] text-right text-slate-300 font-medium leading-relaxed">
+                  {matchedEspnScore ? matchedEspnScore.awayScorers : match?.away_scorers || ""}
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Interactive tabs */}
+          <div className="glass-panel rounded-2xl border border-card-border flex-1 flex flex-col overflow-hidden">
+            <div className="flex border-b border-card-border p-1 bg-slate-950/40">
+              <button
+                onClick={() => setActiveSideTab('commentary')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeSideTab === 'commentary'
+                    ? 'bg-emerald-accent text-black font-extrabold shadow'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Commentary
+              </button>
+              <button
+                onClick={() => setActiveSideTab('events')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeSideTab === 'events'
+                    ? 'bg-emerald-accent text-black font-extrabold shadow'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <Trophy className="h-3.5 w-3.5" />
+                Events
+              </button>
+              <button
+                onClick={() => setActiveSideTab('telemetry')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeSideTab === 'telemetry'
+                    ? 'bg-emerald-accent text-black font-extrabold shadow'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <Activity className="h-3.5 w-3.5" />
+                Health
+              </button>
+            </div>
+
+            {/* Tab content panel */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              {activeSideTab === 'commentary' && (
+                <div className="space-y-4">
+                  {!espnEventId ? (
+                    <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                      Commentary feed waiting to connect...
+                    </div>
+                  ) : loadingCommentary ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="h-5 w-5 text-emerald-accent animate-spin" />
+                      <span className="text-[10px] text-slate-500 uppercase font-black mt-2">Loading commentary...</span>
+                    </div>
+                  ) : !commentaryData?.commentary || commentaryData.commentary.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                      No commentary entries recorded yet
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5">
+                      {commentaryData.commentary.map((c: any, i: number) => {
+                        const isGoal = c.type?.toLowerCase().includes('goal');
+                        const isCard = c.type?.toLowerCase().includes('card') || c.type?.toLowerCase().includes('booking');
+                        return (
+                          <div 
+                            key={i} 
+                            className={`p-3 rounded-xl border flex gap-3 text-xs leading-relaxed transition-all ${
+                              isGoal 
+                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' 
+                                : isCard 
+                                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                                  : 'bg-slate-950/40 border-slate-900 text-slate-300'
+                            }`}
+                          >
+                            <span className="font-black text-emerald-accent shrink-0 min-w-[28px] text-left">
+                              {c.clock || '0\''}
+                            </span>
+                            <div className="space-y-1">
+                              <p className="font-medium">{c.text}</p>
+                              {c.type && (
+                                <span className="text-[9px] font-black uppercase tracking-wider opacity-60 flex items-center gap-1">
+                                  {isGoal ? '⚽ ' : isCard ? '🟨 ' : ''}{c.type}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeSideTab === 'events' && (
+                <div className="space-y-4">
+                  {!espnEventId ? (
+                    <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                      Key events waiting to connect...
+                    </div>
+                  ) : loadingCommentary ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="h-5 w-5 text-emerald-accent animate-spin" />
+                      <span className="text-[10px] text-slate-500 uppercase font-black mt-2">Loading events...</span>
+                    </div>
+                  ) : !commentaryData?.keyEvents || commentaryData.keyEvents.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                      No key events registered yet
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5">
+                      {commentaryData.keyEvents.map((e: any, i: number) => {
+                        const isGoal = e.type?.toLowerCase().includes('goal');
+                        const isCard = e.type?.toLowerCase().includes('card') || e.type?.toLowerCase().includes('booking');
+                        return (
+                          <div 
+                            key={i} 
+                            className={`p-3 rounded-xl border flex gap-3 text-xs leading-relaxed transition-all ${
+                              isGoal 
+                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 font-bold' 
+                                : isCard 
+                                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                                  : 'bg-slate-950/40 border-slate-900 text-slate-300'
+                            }`}
+                          >
+                            <span className="font-black text-emerald-accent shrink-0 min-w-[28px] text-left">
+                              {e.clock || '0\''}
+                            </span>
+                            <div className="space-y-1">
+                              <p className="font-semibold">{e.text}</p>
+                              <span className="text-[9px] font-black uppercase tracking-wider opacity-60 flex items-center gap-1">
+                                {isGoal ? '⚽ ' : isCard ? '🟨 ' : ''}{e.type}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeSideTab === 'telemetry' && (
+                <div className="space-y-6">
+                  <div className="space-y-4 text-xs font-bold">
+                    <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                      <span className="text-slate-500">Live Status:</span>
+                      <span className="text-emerald-accent uppercase flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-emerald-accent animate-ping" />
+                        ONLINE
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                      <span className="text-slate-500">Active Channel:</span>
+                      <span className="text-white uppercase">{currentUrlIndex === 0 ? 'Primary Feed' : `Backup Feed ${currentUrlIndex}`}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                      <span className="text-slate-500">Codec Type:</span>
+                      <span className="text-white font-mono">H.264 / AAC</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                      <span className="text-slate-500">Network Latency:</span>
+                      <span className="text-white">{latency} (Low Delay)</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-slate-500">Buffer state:</span>
+                      <span className={bufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}>{bufferState}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-900 flex gap-2.5 text-[10px] text-slate-500 font-bold uppercase leading-relaxed">
+                    <Check className="h-4 w-4 text-emerald-accent shrink-0" />
+                    Adaptive bitrate engine is active and adjusting to your bandwidth speeds automatically.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
