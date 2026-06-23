@@ -48,6 +48,7 @@ interface Match {
   away_score: number;
   home_scorers?: string | null;
   away_scorers?: string | null;
+  live_minute?: string | null;
   banner_url: string | null;
   description: string | null;
   home_team?: Team;
@@ -763,7 +764,7 @@ export default function UserHomePage() {
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
                           : 'bg-slate-800 text-slate-500 border-slate-700'
                     }`}>
-                      {isLive ? 'live' : match.status}
+                      {isLive ? `LIVE ${match.live_minute ? `• ${match.live_minute}` : ''}` : match.status}
                     </span>
                   </div>
 

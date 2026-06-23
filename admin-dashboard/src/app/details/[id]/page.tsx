@@ -45,6 +45,7 @@ interface Match {
   away_score: number;
   home_scorers?: string | null;
   away_scorers?: string | null;
+  live_minute?: string | null;
   banner_url: string | null;
   description: string | null;
   home_team?: Team;
@@ -285,7 +286,7 @@ export default function MatchDetailsPage() {
                     </span>
                     {isLive && (
                       <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mt-2 animate-pulse whitespace-nowrap">
-                        LIVE NOW
+                        LIVE NOW {match.live_minute ? `• ${match.live_minute}` : ''}
                       </span>
                     )}
                   </div>

@@ -37,6 +37,7 @@ interface MatchScore {
   awayScorers: string;
   status: 'pre' | 'in' | 'post';
   matchDate: string; // ISO date string
+  liveMinute: string;
 }
 
 async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
@@ -76,6 +77,7 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
       const homeScore = parseInt(homeComp.score || '0', 10);
       const awayScore = parseInt(awayComp.score || '0', 10);
       const status = comp.status?.type?.state as 'pre' | 'in' | 'post';
+      const liveMinute = comp.status?.displayClock || comp.status?.type?.shortDetail || '';
 
       // Extract goal details from competition details
       const details = comp.details || [];
@@ -125,6 +127,7 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
         awayScorers: formatScorers(awayGoals),
         status,
         matchDate: event.date || comp.date || '',
+        liveMinute,
       });
     }
 

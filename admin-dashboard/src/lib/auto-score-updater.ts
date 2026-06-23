@@ -46,6 +46,7 @@ interface ESPNScore {
   awayScorers: string;
   status: 'pre' | 'in' | 'post';
   matchDate: string;
+  liveMinute: string;
 }
 
 // Client-triggered sync checker to verify and update the Supabase match score/scorers using real ESPN data
@@ -165,15 +166,17 @@ export async function syncLiveMatchScores(
     const scoreDiffers = match.home_score !== targetHomeScore || match.away_score !== targetAwayScore;
     const scorersDiffer = (match.home_scorers || '') !== targetHomeScorers || (match.away_scorers || '') !== targetAwayScorers;
     const statusDiffers = match.status !== targetStatus;
+    const minuteDiffers = (match.live_minute || '') !== (espnMatch.liveMinute || '');
 
-    if (scoreDiffers || scorersDiffer || statusDiffers) {
-      console.log(`ESPN Sync [${homeName} vs ${awayName}]: Score ${match.home_score}-${match.away_score} → ${targetHomeScore}-${targetAwayScore}, Status: ${match.status} → ${targetStatus}`);
+    if (scoreDiffers || scorersDiffer || statusDiffers || minuteDiffers) {
+      console.log(`ESPN Sync [${homeName} vs ${awayName}]: Score ${match.home_score}-${match.away_score} → ${targetHomeScore}-${targetAwayScore}, Status: ${match.status} → ${targetStatus}, Minute: ${match.live_minute} → ${espnMatch.liveMinute}`);
 
       const updateData: any = {
         home_score: targetHomeScore,
         away_score: targetAwayScore,
         home_scorers: targetHomeScorers || null,
         away_scorers: targetAwayScorers || null,
+        live_minute: espnMatch.liveMinute || null,
       };
       
       if (statusDiffers) {

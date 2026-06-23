@@ -52,6 +52,7 @@ interface Match {
   away_score: number;
   home_scorers?: string | null;
   away_scorers?: string | null;
+  live_minute?: string | null;
   banner_url: string | null;
   description: string | null;
   home_team?: Team;
@@ -1252,7 +1253,7 @@ export default function MatchesPage() {
                             ? 'bg-slate-800 text-slate-400 border border-slate-700'
                             : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                       }`}>
-                        {match.status}
+                        {isLive ? `LIVE ${match.live_minute ? `• ${match.live_minute}` : ''}` : match.status}
                       </span>
                     </div>
                   </div>
