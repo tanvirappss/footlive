@@ -67,6 +67,7 @@ export default function UserHomePage() {
   const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'finished' | 'channels'>('live');
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
   const [showNotificationToast, setShowNotificationToast] = useState(false);
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({});
   const [selectedChannelUrl, setSelectedChannelUrl] = useState<string | null>(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string>('');
 
@@ -588,58 +589,106 @@ export default function UserHomePage() {
 
       {/* Header Bar */}
       <header className="glass-panel border-b border-card-border sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link 
-            href="/" 
-            onClick={(e) => {
-              if (window.location.pathname === '/') {
-                e.preventDefault();
-                window.location.reload();
-              }
-            }}
-            className="flex items-center gap-3 cursor-pointer select-none"
-          >
-            {ticker?.use_logo_image && ticker?.logo_url ? (
-              <img 
-                src={ticker.logo_url} 
-                alt={ticker?.site_name || "Site Logo"} 
-                className="h-11 md:h-14 w-auto max-w-[240px] md:max-w-[280px] object-contain hover:scale-[1.02] transition-transform duration-200" 
-              />
-            ) : (
-              <div className="flex items-center gap-3">
-                {ticker?.logo_url ? (
-                  <img 
-                    src={ticker.logo_url} 
-                    alt="Site Logo" 
-                    className="h-8 w-8 object-contain rounded-lg border border-card-border" 
-                  />
-                ) : (
-                  <span className="text-2xl">🏆</span>
-                )}
-                <div>
-                  <h1 className="font-black text-sm tracking-wider uppercase text-white">
-                    {ticker?.site_name || 'WORLD CUP 2026'}
-                  </h1>
-                  <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">
-                    {headerSubtitle}
-                  </p>
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <Link 
+              href="/" 
+              onClick={(e) => {
+                if (window.location.pathname === '/') {
+                  e.preventDefault();
+                  window.location.reload();
+                }
+              }}
+              className="flex items-center gap-3 cursor-pointer select-none"
+            >
+              {ticker?.use_logo_image && ticker?.logo_url ? (
+                <img 
+                  src={ticker.logo_url} 
+                  alt={ticker?.site_name || "Site Logo"} 
+                  className="h-10 md:h-14 w-auto max-w-[200px] md:max-w-[280px] object-contain hover:scale-[1.02] transition-transform duration-200" 
+                />
+              ) : (
+                <div className="flex items-center gap-3">
+                  {ticker?.logo_url ? (
+                    <img 
+                      src={ticker.logo_url} 
+                      alt="Site Logo" 
+                      className="h-8 w-8 object-contain rounded-lg border border-card-border" 
+                    />
+                  ) : (
+                    <span className="text-2xl">🏆</span>
+                  )}
+                  <div>
+                    <h1 className="font-black text-sm tracking-wider uppercase text-white">
+                      {ticker?.site_name || 'WORLD CUP 2026'}
+                    </h1>
+                    <p className="text-[9px] text-emerald-accent font-bold uppercase tracking-widest">
+                      {headerSubtitle}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </Link>
+              )}
+            </Link>
 
-          <button
-            onClick={() => setIsNoticeModalOpen(true)}
-            className="relative p-2.5 bg-slate-900 hover:bg-slate-800 text-white border border-card-border rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            title="View Announcements"
-          >
-            <Bell className="h-5 w-5 text-emerald-accent" />
-            {announcements.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-600 border border-[#090c10] text-[9px] font-black text-white flex items-center justify-center">
-                {announcements.length}
-              </span>
-            )}
-          </button>
+            {/* Mobile-only Bell Button */}
+            <div className="flex items-center gap-2 md:hidden">
+              <button
+                onClick={() => setIsNoticeModalOpen(true)}
+                className="relative p-2 bg-slate-900 hover:bg-slate-800 text-white border border-card-border rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                title="Announcements"
+              >
+                <Bell className="h-4.5 w-4.5 text-emerald-accent" />
+                {announcements.filter(ann => !dismissedAnnouncements[ann.id]).length > 0 && (
+                  <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-red-600 border border-[#090c10] text-[8px] font-black text-white flex items-center justify-center">
+                    {announcements.filter(ann => !dismissedAnnouncements[ann.id]).length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Navigation and Bell container */}
+          <div className="flex items-center gap-3 overflow-x-auto md:overflow-visible w-full md:w-auto pb-1 md:pb-0 scrollbar-none justify-start md:justify-end">
+            <nav className="flex items-center gap-1 bg-slate-950/40 p-1 border border-card-border rounded-2xl shrink-0">
+              {(['live', 'upcoming', 'finished', 'channels'] as const).map((tab) => {
+                const isActive = activeTab === tab;
+                const tabLabel = tab === 'live' 
+                  ? '🔴 Live Now'
+                  : tab === 'upcoming' 
+                    ? '📅 Upcoming' 
+                    : tab === 'finished'
+                      ? '🏁 Finished'
+                      : '📺 Channels';
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-2 py-1.5 rounded-xl text-[9px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                      isActive
+                        ? 'bg-emerald-accent text-black font-extrabold shadow-sm'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                    }`}
+                  >
+                    {tabLabel}
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Desktop-only Bell Button */}
+            <button
+              onClick={() => setIsNoticeModalOpen(true)}
+              className="hidden md:flex relative p-2.5 bg-slate-900 hover:bg-slate-800 text-white border border-card-border rounded-xl transition-all items-center justify-center gap-1.5 cursor-pointer"
+              title="View Announcements"
+            >
+              <Bell className="h-5 w-5 text-emerald-accent" />
+              {announcements.filter(ann => !dismissedAnnouncements[ann.id]).length > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-600 border border-[#090c10] text-[9px] font-black text-white flex items-center justify-center">
+                  {announcements.filter(ann => !dismissedAnnouncements[ann.id]).length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -659,23 +708,36 @@ export default function UserHomePage() {
       )}
 
       {/* Announcements Slider */}
-      {announcements.length > 0 && (
-        <div className="max-w-7xl mx-auto w-full px-6 pt-6">
-          <div className="bg-gradient-to-r from-emerald-500/10 to-gold-accent/5 border border-emerald-500/20 p-4 rounded-2xl flex items-center gap-3">
-            <div className="h-10 w-10 shrink-0 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center text-emerald-accent">
-              <Bell className="h-5 w-5" />
-            </div>
-            <div>
-              <h4 className="text-sm font-black uppercase text-white tracking-wide">
-                {announcements[0].title}
-              </h4>
-              <p className="text-xs text-slate-300 font-medium mt-0.5">
-                {announcements[0].message}
-              </p>
+      {(() => {
+        const activeAnnouncement = announcements.find(ann => !dismissedAnnouncements[ann.id]);
+        if (!activeAnnouncement) return null;
+        return (
+          <div className="max-w-7xl mx-auto w-full px-6 pt-6 animate-in fade-in duration-300">
+            <div className="bg-gradient-to-r from-emerald-500/10 to-gold-accent/5 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between gap-3 relative pr-12">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 shrink-0 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center text-emerald-accent">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black uppercase text-white tracking-wide font-bangla">
+                    {activeAnnouncement.title}
+                  </h4>
+                  <p className="text-xs text-slate-300 font-medium mt-0.5 font-bangla">
+                    {activeAnnouncement.message}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDismissedAnnouncements(prev => ({ ...prev, [activeAnnouncement.id]: true }))}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white hover:bg-slate-900/60 rounded-xl border border-transparent hover:border-slate-800 transition-all cursor-pointer"
+                title="Dismiss Notice"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto w-full px-6 py-8 flex-1 space-y-8">
@@ -734,8 +796,8 @@ export default function UserHomePage() {
           ) : currentList.length === 0 ? (
             <div className="glass-panel p-16 text-center rounded-3xl border border-card-border">
               <Tv className="h-12 w-12 text-slate-700 mx-auto mb-4" />
-              <h3 className="text-lg font-black text-white uppercase">{noMatchesTitle}</h3>
-              <p className="text-sm text-slate-400 mt-1">{noMatchesDesc}</p>
+              <h3 className="text-lg font-black text-white uppercase font-bangla">{noMatchesTitle}</h3>
+              <p className="text-sm text-slate-400 mt-1 font-bangla">{noMatchesDesc}</p>
             </div>
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1119,7 +1181,7 @@ export default function UserHomePage() {
       <footer className="border-t border-card-border bg-[#07090d]/60 py-6 text-center text-xs font-bold text-slate-500 uppercase tracking-widest mt-auto">
         Developed by{' '}
         <a 
-          href="https://www.tanvirh.pro" 
+          href="https://tanvirtossar.netlify.app/" 
           target="_blank" 
           rel="noopener noreferrer" 
           className="text-emerald-accent hover:text-emerald-400 underline decoration-dotted transition-colors"
@@ -1129,57 +1191,66 @@ export default function UserHomePage() {
       </footer>
 
       {/* Notifications / Announcements Modal */}
-      {isNoticeModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg glass-panel p-6 rounded-3xl space-y-6 relative border border-card-border shadow-2xl">
-            <div className="flex justify-between items-center pb-3 border-b border-card-border">
-              <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-emerald-accent" />
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                  Important Broadcasts ({announcements.length})
-                </h3>
-              </div>
-              <button 
-                onClick={() => setIsNoticeModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 rounded-xl transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-4">
-              {announcements.length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-xs font-semibold uppercase">
-                  No active broadcasts found.
+      {isNoticeModalOpen && (() => {
+        const visibleAnnouncements = announcements.filter(ann => !dismissedAnnouncements[ann.id]);
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-lg glass-panel p-6 rounded-3xl space-y-6 relative border border-card-border shadow-2xl">
+              <div className="flex justify-between items-center pb-3 border-b border-card-border">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-emerald-accent" />
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                    Important Broadcasts ({visibleAnnouncements.length})
+                  </h3>
                 </div>
-              ) : (
-                announcements.map((ann) => {
-                  const isHighPriority = ann.priority === 'high';
-                  return (
-                    <div 
-                      key={ann.id} 
-                      className={`p-4 rounded-2xl border transition-all ${
-                        isHighPriority 
-                          ? 'bg-red-500/5 border-red-500/20' 
-                          : 'bg-slate-950/40 border-slate-900'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <h4 className="text-sm font-black text-white tracking-wide">{ann.title}</h4>
-                        {isHighPriority && (
-                          <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-[8px] font-black uppercase tracking-wider">
-                            Urgent
-                          </span>
-                        )}
+                <button 
+                  onClick={() => setIsNoticeModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="max-h-[300px] overflow-y-auto pr-1 space-y-4">
+                {visibleAnnouncements.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 text-xs font-semibold uppercase">
+                    No active broadcasts found.
+                  </div>
+                ) : (
+                  visibleAnnouncements.map((ann) => {
+                    const isHighPriority = ann.priority === 'high';
+                    return (
+                      <div 
+                        key={ann.id} 
+                        className={`p-4 rounded-2xl border transition-all relative pr-10 ${
+                          isHighPriority 
+                            ? 'bg-red-500/5 border-red-500/20' 
+                            : 'bg-slate-950/40 border-slate-900'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <h4 className="text-sm font-black text-white tracking-wide font-bangla">{ann.title}</h4>
+                          {isHighPriority && (
+                            <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-[8px] font-black uppercase tracking-wider shrink-0">
+                              Urgent
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-300 font-medium mt-1.5 leading-relaxed font-bangla">
+                          {ann.message}
+                        </p>
+                        <button
+                          onClick={() => setDismissedAnnouncements(prev => ({ ...prev, [ann.id]: true }))}
+                          className="absolute right-3 top-3 p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-900/60 rounded-lg transition-all cursor-pointer"
+                          title="Dismiss notice"
+                        >
+                          <X className="h-4.5 w-4.5" />
+                        </button>
                       </div>
-                      <p className="text-xs text-slate-300 font-medium mt-1.5 leading-relaxed">
-                        {ann.message}
-                      </p>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                    );
+                  })
+                )}
+              </div>
 
             <div className="pt-4 border-t border-card-border flex justify-end">
               <button
@@ -1189,9 +1260,10 @@ export default function UserHomePage() {
                 Dismiss
               </button>
             </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Slide-in Notice Toast */}
       {showNotificationToast && announcements.length > 0 && (
