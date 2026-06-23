@@ -1,10 +1,4 @@
--- SQL Update script to add scorers columns to matches table
--- Run this in your Supabase SQL Editor to update your database.
-
-ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_scorers text;
-ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_scorers text;
-
--- Create live_score_keys table if not exists
+-- Migration: Create live_score_keys table and configure public RLS policies
 CREATE TABLE IF NOT EXISTS live_score_keys (
     id uuid primary key default gen_random_uuid(),
     name text not null,
@@ -28,7 +22,8 @@ CREATE POLICY "Allow public insert live_score_keys" ON live_score_keys FOR INSER
 CREATE POLICY "Allow public update live_score_keys" ON live_score_keys FOR UPDATE USING (true);
 CREATE POLICY "Allow public delete live_score_keys" ON live_score_keys FOR DELETE USING (true);
 
--- Enable realtime for live_score_keys table
+-- Enable realtime for live_score_keys table if not already added
+-- We do a block to catch exceptions if it's already part of the publication
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE live_score_keys;
@@ -36,4 +31,3 @@ EXCEPTION
     WHEN OTHERS THEN
         NULL;
 END $$;
-

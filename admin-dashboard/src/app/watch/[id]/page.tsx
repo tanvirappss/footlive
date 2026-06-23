@@ -889,9 +889,20 @@ export default function UserWatchPage() {
                       <span className="text-slate-500">Network Latency:</span>
                       <span className="text-white">{latency} (Low Delay)</span>
                     </div>
-                    <div className="flex justify-between items-center py-2">
+                    <div className="flex justify-between items-center py-2 border-b border-slate-900">
                       <span className="text-slate-500">Buffer state:</span>
                       <span className={bufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}>{bufferState}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-slate-500">Score Sync API:</span>
+                      <span className={espnEventId ? 'text-emerald-accent flex items-center gap-1.5' : 'text-amber-500'}>
+                        {espnEventId ? (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-accent animate-pulse" />
+                            CONNECTED ({espnEventId})
+                          </>
+                        ) : 'NOT CONNECTED'}
+                      </span>
                     </div>
                   </div>
 
