@@ -14,6 +14,7 @@ const teamNameAliases: Record<string, string[]> = {
   'czech republic': ['czechia'],
   'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
   'curacao': ['curaçao'],
+  'turkey': ['türkiye', 'turkiye'],
 };
 
 function normalizeTeamName(name: string): string {

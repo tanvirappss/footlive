@@ -13,6 +13,7 @@ const teamNameAliases: Record<string, string[]> = {
   'czech republic': ['czechia'],
   'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
   'curacao': ['curaçao'],
+  'turkey': ['türkiye', 'turkiye'],
 };
 
 function normalizeTeamName(name: string): string {
@@ -64,12 +65,25 @@ export async function syncLiveMatchScores(
   
   if (relevantMatches.length === 0) return false;
 
-  // Collect all unique dates from relevant matches
+  // Collect all unique dates from relevant matches, including +/- 1 day for timezone safety
   const dateSet = new Set<string>();
+  const getFmt = (dateObj: Date) => `${dateObj.getUTCFullYear()}${String(dateObj.getUTCMonth() + 1).padStart(2, '0')}${String(dateObj.getUTCDate()).padStart(2, '0')}`;
+
   for (const m of relevantMatches) {
     const d = new Date(m.match_timestamp);
-    const dateStr = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
-    dateSet.add(dateStr);
+    
+    // Exact day
+    dateSet.add(getFmt(d));
+    
+    // Day before
+    const prev = new Date(d);
+    prev.setUTCDate(d.getUTCDate() - 1);
+    dateSet.add(getFmt(prev));
+    
+    // Day after
+    const next = new Date(d);
+    next.setUTCDate(d.getUTCDate() + 1);
+    dateSet.add(getFmt(next));
   }
 
   // Fetch real scores from ESPN API via our proxy route
