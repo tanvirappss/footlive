@@ -292,14 +292,20 @@ export default function UserHomePage() {
   useEffect(() => {
     if (audioAnnouncements.length === 0) return;
 
-    // Check if audio has already played in this client-side JS load context
-    if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
-      return;
-    }
-
-    // Read play limits based on mode
+    // Read play mode from system config
     const playMode = systemConfig?.custom_scripts?.audio_play_mode || 'session_limit';
     const selectedAudioId = systemConfig?.custom_scripts?.selected_audio_id;
+
+    // In 'refresh' mode: play every time (skip all guards)
+    // In 'session_limit' mode: max 2 plays per browser session
+    // In 'limit_5' mode: max 5 plays per calendar day
+    
+    if (playMode !== 'refresh') {
+      // Check if audio has already played in this JS load context
+      if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
+        return;
+      }
+    }
 
     if (playMode === 'limit_5') {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -314,8 +320,7 @@ export default function UserHomePage() {
         }
       } catch (e) {}
       if (dailyPlay.count >= 5) return;
-    } else if (playMode !== 'refresh') {
-      // Default / Session Limit Mode (max 2 plays)
+    } else if (playMode === 'session_limit') {
       let playCount = 0;
       try {
         const stored = sessionStorage.getItem('audio_play_count');
@@ -323,8 +328,9 @@ export default function UserHomePage() {
       } catch (e) {}
       if (playCount >= 2) return;
     }
+    // 'refresh' mode: no count check, always proceed
 
-    let activeAudio = null;
+    let activeAudio: any = null;
     if (selectedAudioId) {
       activeAudio = audioAnnouncements.find((a: any) => a.id === selectedAudioId);
     }
@@ -332,7 +338,7 @@ export default function UserHomePage() {
     if (!activeAudio) {
       activeAudio = audioAnnouncements
         .filter((a: any) => new Date(a.play_at).getTime() <= Date.now())
-        .pop(); // Get the most recently scheduled past audio
+        .pop();
     }
 
     let currentAudioElement: HTMLAudioElement | null = null;
@@ -340,7 +346,7 @@ export default function UserHomePage() {
     const futureTimeouts: NodeJS.Timeout[] = [];
 
     const playAudioUrl = (url: string) => {
-      // Check play count limit again before playing
+      // Re-check limits before playing
       if (playMode === 'limit_5') {
         const todayStr = new Date().toISOString().split('T')[0];
         let dailyPlay = { date: todayStr, count: 0 };
@@ -348,13 +354,11 @@ export default function UserHomePage() {
           const stored = localStorage.getItem('daily_audio_play');
           if (stored) {
             const parsed = JSON.parse(stored);
-            if (parsed && parsed.date === todayStr) {
-              dailyPlay = parsed;
-            }
+            if (parsed && parsed.date === todayStr) dailyPlay = parsed;
           }
         } catch (e) {}
         if (dailyPlay.count >= 5) return;
-      } else if (playMode !== 'refresh') {
+      } else if (playMode === 'session_limit') {
         let currentPlayCount = 0;
         try {
           const stored = sessionStorage.getItem('audio_play_count');
@@ -387,13 +391,16 @@ export default function UserHomePage() {
                 }
                 dailyPlay.count += 1;
                 localStorage.setItem('daily_audio_play', JSON.stringify(dailyPlay));
-              } else if (playMode !== 'refresh') {
+              } else if (playMode === 'session_limit') {
                 let currentPlayCount = 0;
                 const stored = sessionStorage.getItem('audio_play_count');
                 if (stored) currentPlayCount = parseInt(stored, 10);
                 sessionStorage.setItem('audio_play_count', String(currentPlayCount + 1));
               }
-              (window as any).__audioPlayedInCurrentLoad = true;
+              // Only set the "already played" flag for non-refresh modes
+              if (playMode !== 'refresh') {
+                (window as any).__audioPlayedInCurrentLoad = true;
+              }
             } catch (e) {
               console.error(e);
             }
