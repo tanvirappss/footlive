@@ -21,6 +21,7 @@ import {
   Clock
 } from 'lucide-react';
 import { wc2026Schedule, getStadiumForTeam } from '@/lib/wc2026-schedule';
+import { syncLiveMatchScores } from '@/lib/auto-score-updater';
 
 interface Team {
   id: string;
@@ -49,6 +50,8 @@ interface Match {
   status: string;
   home_score: number;
   away_score: number;
+  home_scorers?: string | null;
+  away_scorers?: string | null;
   banner_url: string | null;
   description: string | null;
   home_team?: Team;
@@ -103,6 +106,9 @@ export default function MatchesPage() {
   const [status, setStatus] = useState('upcoming');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
+  const [homeScorers, setHomeScorers] = useState('');
+  const [awayScorers, setAwayScorers] = useState('');
+  const [autoUpdateScores, setAutoUpdateScores] = useState(true);
   const [description, setDescription] = useState('');
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -196,6 +202,7 @@ export default function MatchesPage() {
       setMatchDurationMinutes(systemConfig.custom_scripts?.match_duration_minutes !== undefined ? systemConfig.custom_scripts.match_duration_minutes : 45);
       setMatchLiveBeforeMinutes(systemConfig.custom_scripts?.match_live_before_minutes !== undefined ? systemConfig.custom_scripts.match_live_before_minutes : 10);
       setAutoFinishEnabled(systemConfig.custom_scripts?.auto_finish_enabled !== false);
+      setAutoUpdateScores(systemConfig.custom_scripts?.auto_update_scores !== false);
     }
   }, [systemConfig]);
 
@@ -270,7 +277,8 @@ export default function MatchesPage() {
       match_duration_hours: matchDurationHours,
       match_duration_minutes: matchDurationMinutes,
       match_live_before_minutes: matchLiveBeforeMinutes,
-      auto_finish_enabled: autoFinishEnabled
+      auto_finish_enabled: autoFinishEnabled,
+      auto_update_scores: autoUpdateScores
     });
     alert('Match lifecycle settings saved successfully!');
   };
@@ -639,6 +647,13 @@ export default function MatchesPage() {
     }
   }, [matches, systemConfig, matchDurationHours, matchDurationMinutes, queryClient]);
 
+  // Auto-Update score and goals for active/live matches
+  React.useEffect(() => {
+    if (matches.length > 0 && systemConfig) {
+      syncLiveMatchScores(supabase, matches, systemConfig);
+    }
+  }, [matches, systemConfig]);
+
   const handleAddClick = () => {
     setEditingMatch(null);
     setTournamentName('FIFA World Cup 2026');
@@ -659,6 +674,8 @@ export default function MatchesPage() {
     setStatus('upcoming');
     setHomeScore(0);
     setAwayScore(0);
+    setHomeScorers('');
+    setAwayScorers('');
     setDescription('');
     setBannerFile(null);
     setMutationError(null);
@@ -678,6 +695,8 @@ export default function MatchesPage() {
     setAwayCustomFlagUrl(match.away_team_custom_flag || '');
     setMatchDate(match.match_date);
     setMatchTime(match.match_time.substring(0, 5));
+    setHomeScorers(match.home_scorers || '');
+    setAwayScorers(match.away_scorers || '');
     setStadiumName(match.stadium_name);
     
     const isStandard = standardStadiums.includes(match.stadium_name);
@@ -818,6 +837,8 @@ export default function MatchesPage() {
         status,
         home_score: Number(homeScore),
         away_score: Number(awayScore),
+        home_scorers: homeScorers || null,
+        away_scorers: awayScorers || null,
         banner_url: bannerUrl || null,
         description: description || null
       };
@@ -1117,6 +1138,26 @@ export default function MatchesPage() {
                     <span
                       className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                         autoFinishEnabled ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-900 rounded-xl my-2">
+                  <div>
+                    <span className="text-[10px] font-extrabold text-white uppercase tracking-wider block">⚽ Auto-Update Scores</span>
+                    <span className="text-[9px] text-slate-500 block">Auto update match scores and scorers in real-time</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAutoUpdateScores(!autoUpdateScores)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      autoUpdateScores ? 'bg-emerald-500' : 'bg-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        autoUpdateScores ? 'translate-x-4' : 'translate-x-0'
                       }`}
                     />
                   </button>
@@ -1532,26 +1573,50 @@ export default function MatchesPage() {
 
                 {/* Score inputs (Visible only if status is Live/Finished/Half-time) */}
                 {(status === 'live' || status === 'half_time' || status === 'finished') && (
-                  <div className="grid grid-cols-2 gap-4 p-4 bg-slate-900/20 border border-card-border rounded-2xl">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-white uppercase tracking-wider block">Home Score</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={homeScore}
-                        onChange={(e) => setHomeScore(Number(e.target.value))}
-                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                      />
+                  <div className="space-y-4 p-4 bg-slate-900/20 border border-card-border rounded-2xl">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-white uppercase tracking-wider block">Home Score</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={homeScore}
+                          onChange={(e) => setHomeScore(Number(e.target.value))}
+                          className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-white uppercase tracking-wider block">Away Score</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={awayScore}
+                          onChange={(e) => setAwayScore(Number(e.target.value))}
+                          className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-white uppercase tracking-wider block">Away Score</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={awayScore}
-                        onChange={(e) => setAwayScore(Number(e.target.value))}
-                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-white uppercase tracking-wider block">Home Scorers</label>
+                        <input
+                          type="text"
+                          value={homeScorers}
+                          onChange={(e) => setHomeScorers(e.target.value)}
+                          placeholder="e.g. L. Messi (12', 45')"
+                          className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-white uppercase tracking-wider block">Away Scorers</label>
+                        <input
+                          type="text"
+                          value={awayScorers}
+                          onChange={(e) => setAwayScorers(e.target.value)}
+                          placeholder="e.g. Neymar (70')"
+                          className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

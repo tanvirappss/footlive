@@ -42,6 +42,8 @@ interface Match {
   status: string;
   home_score: number;
   away_score: number;
+  home_scorers?: string | null;
+  away_scorers?: string | null;
   banner_url: string | null;
   description: string | null;
   home_team?: Team;
@@ -248,7 +250,7 @@ export default function MatchDetailsPage() {
 
               {/* Score or VS */}
               <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
-                {(isLive || (isFinished && (match.home_score > 0 || match.away_score > 0))) ? (
+                {(isLive || isFinished) ? (
                   <div className="flex flex-col items-center">
                     <span className="text-2xl md:text-5xl lg:text-6xl font-black text-white tracking-tighter whitespace-nowrap">
                       {match.home_score} - {match.away_score}
@@ -278,6 +280,19 @@ export default function MatchDetailsPage() {
                 <h3 className="text-base md:text-xl font-black text-white w-full truncate">{awayName}</h3>
               </div>
             </div>
+
+            {/* Goal Scorers details */}
+            {(match.home_scorers || match.away_scorers) && (
+              <div className="w-full text-xs md:text-sm text-slate-400 bg-slate-950/40 p-4 rounded-2xl border border-slate-900/50 flex justify-between gap-4 mt-2">
+                <div className="w-[45%] text-left text-slate-300 font-medium">
+                  {match.home_scorers || ""}
+                </div>
+                <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+                <div className="w-[45%] text-right text-slate-300 font-medium">
+                  {match.away_scorers || ""}
+                </div>
+              </div>
+            )}
 
             {/* Countdown for Upcoming */}
             {isUpcoming && (

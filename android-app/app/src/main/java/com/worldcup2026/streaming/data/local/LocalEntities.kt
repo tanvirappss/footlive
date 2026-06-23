@@ -33,6 +33,8 @@ data class CachedMatch(
     val status: String,
     val homeScore: Int,
     val awayScore: Int,
+    val homeScorers: String?,
+    val awayScorers: String?,
     val bannerUrl: String?,
     val description: String?
 )

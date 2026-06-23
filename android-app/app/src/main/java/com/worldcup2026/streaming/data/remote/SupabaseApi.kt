@@ -33,6 +33,8 @@ data class MatchDto(
     @SerializedName("status") val status: String,
     @SerializedName("home_score") val homeScore: Int,
     @SerializedName("away_score") val awayScore: Int,
+    @SerializedName("home_scorers") val homeScorers: String?,
+    @SerializedName("away_scorers") val awayScorers: String?,
     @SerializedName("banner_url") val bannerUrl: String?,
     @SerializedName("description") val description: String?
 )

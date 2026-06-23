@@ -39,6 +39,8 @@ create table if not exists matches (
     description text, -- rich text description
     home_score integer default 0,
     away_score integer default 0,
+    home_scorers text,
+    away_scorers text,
     created_at timestamptz default now()
 );
 

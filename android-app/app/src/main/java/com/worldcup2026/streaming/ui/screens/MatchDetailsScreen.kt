@@ -159,7 +159,7 @@ fun MatchDetailsScreen(
                                 val isMatchFinished = activeMatch.status == "finished" ||
                                                       ((activeMatch.status == "live" || activeMatch.status == "half_time" || activeMatch.status == "upcoming") &&
                                                        System.currentTimeMillis() >= (activeMatch.matchTimestamp + 105 * 60 * 1000))
-                                val isMatchFinishedWithScore = isMatchFinished && (activeMatch.homeScore > 0 || activeMatch.awayScore > 0)
+                                val isMatchFinishedWithScore = isMatchFinished
 
                                 if (isMatchLive || isMatchFinishedWithScore) {
                                     Text(
@@ -202,6 +202,43 @@ fun MatchDetailsScreen(
                                     textAlign = TextAlign.Center,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        if (!activeMatch.homeScorers.isNullOrBlank() || !activeMatch.awayScorers.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SurfaceColor.copy(alpha = 0.4f), shape = RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = activeMatch.homeScorers ?: "",
+                                    color = SlateLight,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "⚽",
+                                    color = SlateMedium,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = activeMatch.awayScorers ?: "",
+                                    color = SlateLight,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.End,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }

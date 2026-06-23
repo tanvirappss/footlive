@@ -20,6 +20,7 @@ import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
 import PotPlayer from '@/components/PotPlayer';
 import AdsterraAd from '@/components/AdsterraAd';
+import { syncLiveMatchScores } from '@/lib/auto-score-updater';
 
 interface Team {
   id: string;
@@ -45,6 +46,8 @@ interface Match {
   status: string;
   home_score: number;
   away_score: number;
+  home_scorers?: string | null;
+  away_scorers?: string | null;
   banner_url: string | null;
   description: string | null;
   home_team?: Team;
@@ -490,6 +493,13 @@ export default function UserHomePage() {
     }
   };
 
+  // Auto-Update score and goals for active/live matches
+  useEffect(() => {
+    if (matches.length > 0 && systemConfig) {
+      syncLiveMatchScores(supabase, matches, systemConfig);
+    }
+  }, [matches, systemConfig]);
+
   const uiTexts = systemConfig?.custom_scripts?.app_ui_texts || {};
   const noMatchesTitle = uiTexts.no_matches_title || (ticker as any)?.no_matches_title || "No Matches Broadcasts";
   const noMatchesDesc = uiTexts.no_matches_desc || (ticker as any)?.no_matches_desc || "There are no active matches in this tab. Tune in during kickoff schedules.";
@@ -708,7 +718,7 @@ export default function UserHomePage() {
                     </div>
 
                     <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
-                      {(isLive || (match.status === 'finished' && (match.home_score > 0 || match.away_score > 0))) ? (
+                      {(isLive || match.status === 'finished' || (autoFinishEnabled && Date.now() >= (new Date(match.match_timestamp).getTime() + matchDurationMins * 60 * 1000))) ? (
                         <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
                       ) : (
                         <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>
@@ -726,6 +736,19 @@ export default function UserHomePage() {
                       <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{awayName}</span>
                     </div>
                   </div>
+
+                  {/* Goal Scorers details */}
+                  {(match.home_scorers || match.away_scorers) && (
+                    <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-900/50 flex justify-between gap-2 mt-1">
+                      <div className="w-[45%] text-left text-slate-300 font-medium line-clamp-2">
+                        {match.home_scorers || ""}
+                      </div>
+                      <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+                      <div className="w-[45%] text-right text-slate-300 font-medium line-clamp-2">
+                        {match.away_scorers || ""}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Countdown Timer for Upcoming Matches */}
                   {isUpcoming && <WebCountdown targetTime={match.match_timestamp} />}

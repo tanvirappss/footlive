@@ -331,7 +331,7 @@ fun MatchCard(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.width(80.dp)
                 ) {
-                    if (isLive || (isFinished && (match.homeScore > 0 || match.awayScore > 0))) {
+                    if (isLive || isFinished) {
                         Text(
                             text = "${match.homeScore} - ${match.awayScore}",
                             fontSize = 28.sp,
@@ -372,6 +372,43 @@ fun MatchCard(
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (!match.homeScorers.isNullOrBlank() || !match.awayScorers.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceColor.copy(alpha = 0.4f), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = match.homeScorers ?: "",
+                        color = SlateLight,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "⚽",
+                        color = SlateMedium,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = match.awayScorers ?: "",
+                        color = SlateLight,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }

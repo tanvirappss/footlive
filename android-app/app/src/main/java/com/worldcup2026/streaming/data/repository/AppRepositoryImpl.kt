@@ -155,6 +155,7 @@ class AppRepositoryImpl @Inject constructor(
         tournamentName = tournamentName, matchDate = matchDate, matchTime = matchTime,
         matchTimestamp = parseIsoTimestamp(matchTimestamp), stadiumName = stadiumName,
         status = status, homeScore = homeScore, awayScore = awayScore,
+        homeScorers = homeScorers, awayScorers = awayScorers,
         bannerUrl = bannerUrl, description = description
     )
 
@@ -192,8 +193,9 @@ class AppRepositoryImpl @Inject constructor(
         awayTeamCustomName = awayTeamCustomName, awayTeamCustomFlag = awayTeamCustomFlag,
         tournamentName = tournamentName, matchDate = matchDate, matchTime = matchTime,
         matchTimestamp = matchTimestamp, stadiumName = stadiumName, status = status,
-        homeScore = homeScore, awayScore = awayScore, bannerUrl = bannerUrl,
-        description = description, homeTeam = home, awayTeam = away
+        homeScore = homeScore, awayScore = awayScore, 
+        homeScorers = homeScorers, awayScorers = awayScorers,
+        bannerUrl = bannerUrl, description = description, homeTeam = home, awayTeam = away
     )
 
     private fun CachedStream.toDomain() = Stream(
