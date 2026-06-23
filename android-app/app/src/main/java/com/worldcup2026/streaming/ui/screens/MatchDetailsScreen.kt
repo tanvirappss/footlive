@@ -29,6 +29,7 @@ import com.worldcup2026.streaming.domain.model.Match
 import com.worldcup2026.streaming.ui.MainViewModel
 import com.worldcup2026.streaming.ui.theme.*
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 
 @Composable
 fun MatchDetailsScreen(
@@ -307,7 +308,7 @@ fun HtmlText(html: String, modifier: Modifier = Modifier) {
             TextView(context).apply {
                 setTextColor(android.graphics.Color.parseColor("#E2E8F0")) // SlateLight hex
                 textSize = 13f
-                lineSpacingMultiplier = 1.25f
+                setLineSpacing(0f, 1.25f)
             }
         },
         update = { textView ->
