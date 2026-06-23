@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // In-memory cache for ESPN scores
 let scoreCache: { data: any; timestamp: number } | null = null;
 const CACHE_DURATION_MS = 3 * 60 * 1000; // 3 minutes cache
