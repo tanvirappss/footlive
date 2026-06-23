@@ -650,9 +650,13 @@ export default function MatchesPage() {
   // Auto-Update score and goals for active/live matches
   React.useEffect(() => {
     if (matches.length > 0 && systemConfig) {
-      syncLiveMatchScores(supabase, matches, systemConfig);
+      syncLiveMatchScores(supabase, matches, systemConfig).then((updated) => {
+        if (updated) {
+          queryClient.invalidateQueries({ queryKey: ['matches-admin'] });
+        }
+      });
     }
-  }, [matches, systemConfig]);
+  }, [matches, systemConfig, queryClient]);
 
   const handleAddClick = () => {
     setEditingMatch(null);
@@ -1292,6 +1296,19 @@ export default function MatchesPage() {
                       <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{awayName}</span>
                     </div>
                   </div>
+
+                  {/* Goal Scorers details */}
+                  {(match.home_scorers || match.away_scorers) && (
+                    <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-900/50 flex justify-between gap-2 mt-1 mb-2">
+                      <div className="w-[45%] text-left text-slate-300 font-medium line-clamp-2">
+                        {match.home_scorers || ""}
+                      </div>
+                      <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+                      <div className="w-[45%] text-right text-slate-300 font-medium line-clamp-2">
+                        {match.away_scorers || ""}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Footer Stats and Actions */}
                   <div className="flex justify-between items-center border-t border-card-border pt-4 text-xs">

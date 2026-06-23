@@ -142,9 +142,9 @@ export async function syncLiveMatchScores(
   supabase: SupabaseClient, 
   matches: any[], 
   systemConfig: any
-) {
+): Promise<boolean> {
   const autoUpdateScores = systemConfig?.custom_scripts?.auto_update_scores !== false;
-  if (!autoUpdateScores) return;
+  if (!autoUpdateScores) return false;
 
   const autoFinishEnabled = systemConfig?.custom_scripts?.auto_finish_enabled !== false;
   const liveOffsetMins = systemConfig?.custom_scripts?.match_live_before_minutes !== undefined 
@@ -159,6 +159,8 @@ export async function syncLiveMatchScores(
   const matchDurationMins = durationHours * 60 + durationMins;
 
   const now = Date.now();
+  let updatedAny = false;
+  const promises: PromiseLike<any>[] = [];
 
   for (const match of matches) {
     const isFinishedDB = match.status === 'finished';
@@ -176,10 +178,6 @@ export async function syncLiveMatchScores(
     const { events } = getDeterministicMatchEvents(match.id, homeName, awayName, matchDurationMins);
 
     if (isFinishedDB) {
-      // For finished matches, check if they need an initial sync (home_scorers and away_scorers are null)
-      const needsSync = match.home_scorers === null && match.away_scorers === null;
-      if (!needsSync) continue;
-
       // Calculate final scores and scorers
       const targetHomeScore = events.filter(e => e.team === 'home').length;
       const targetAwayScore = events.filter(e => e.team === 'away').length;
@@ -204,18 +202,27 @@ export async function syncLiveMatchScores(
       const targetHomeScorers = formatScorers('home') || ""; // Use empty string instead of null to mark it as synced
       const targetAwayScorers = formatScorers('away') || "";
 
-      console.log(`AutoSync Finished Match [${homeName} vs ${awayName}]: Score -> ${targetHomeScore}-${targetAwayScore}`);
-      
-      supabase.from('matches').update({
-        home_score: targetHomeScore,
-        away_score: targetAwayScore,
-        home_scorers: targetHomeScorers,
-        away_scorers: targetAwayScorers
-      }).eq('id', match.id).then(({ error }) => {
-        if (error) {
-          console.error(`AutoSync finished match failed for ${match.id}:`, error);
-        }
-      });
+      // Check if current DB values differ from target
+      const scoreDiffers = match.home_score !== targetHomeScore || match.away_score !== targetAwayScore;
+      const scorersDiffer = (match.home_scorers || '') !== targetHomeScorers || (match.away_scorers || '') !== targetAwayScorers;
+
+      if (scoreDiffers || scorersDiffer) {
+        console.log(`AutoSync Finished Match [${homeName} vs ${awayName}]: Score ${match.home_score}-${match.away_score} -> ${targetHomeScore}-${targetAwayScore}`);
+        
+        const p = supabase.from('matches').update({
+          home_score: targetHomeScore,
+          away_score: targetAwayScore,
+          home_scorers: targetHomeScorers,
+          away_scorers: targetAwayScorers
+        }).eq('id', match.id).then(({ error }) => {
+          if (error) {
+            console.error(`AutoSync finished match failed for ${match.id}:`, error);
+          } else {
+            updatedAny = true;
+          }
+        });
+        promises.push(p);
+      }
       continue;
     }
 
@@ -228,13 +235,6 @@ export async function syncLiveMatchScores(
     if (elapsedMins < 0) elapsedMins = 0; // Warmup / pre-match live state
 
     const isOver = elapsedMins >= matchDurationMins;
-
-    // Resolve team names
-    const homeName = match.home_team_id ? (match.home_team?.name) : match.home_team_custom_name || 'Home Team';
-    const awayName = match.away_team_id ? (match.away_team?.name) : match.away_team_custom_name || 'Away Team';
-
-    // Get deterministic events for the entire match
-    const { events } = getDeterministicMatchEvents(match.id, homeName, awayName, matchDurationMins);
 
     // Filter events that have happened up to the current minute
     const occurredEvents = events.filter(e => e.minute <= elapsedMins);
@@ -290,7 +290,7 @@ export async function syncLiveMatchScores(
       console.log(`AutoSync [${homeName} vs ${awayName}]: Score ${match.home_score}-${match.away_score} -> ${targetHomeScore}-${targetAwayScore}, Status: ${match.status} -> ${targetStatus}`);
       
       // Update database using non-blocking API call
-      supabase.from('matches').update({
+      const p = supabase.from('matches').update({
         home_score: targetHomeScore,
         away_score: targetAwayScore,
         home_scorers: targetHomeScorers || null,
@@ -299,8 +299,16 @@ export async function syncLiveMatchScores(
       }).eq('id', match.id).then(({ error }) => {
         if (error) {
           console.error(`AutoSync failed for match ${match.id}:`, error);
+        } else {
+          updatedAny = true;
         }
       });
+      promises.push(p);
     }
   }
+
+  if (promises.length > 0) {
+    await Promise.all(promises);
+  }
+  return updatedAny;
 }

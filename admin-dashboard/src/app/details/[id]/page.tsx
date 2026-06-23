@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { syncLiveMatchScores } from '@/lib/auto-score-updater';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -71,6 +72,33 @@ export default function MatchDetailsPage() {
       return data as unknown as Match;
     }
   });
+
+  const queryClient = useQueryClient();
+
+  // Fetch SystemConfig
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Auto-Update score and goals for this match
+  useEffect(() => {
+    if (match && systemConfig) {
+      syncLiveMatchScores(supabase, [match], systemConfig).then((updated) => {
+        if (updated) {
+          queryClient.invalidateQueries({ queryKey: ['match-details', id] });
+        }
+      });
+    }
+  }, [match, systemConfig, id, queryClient]);
 
   // Fetch Adsterra configuration settings
   const { data: adsterra } = useQuery({

@@ -14,7 +14,9 @@ import {
   Volume2,
   Upload,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Edit3,
+  Settings
 } from 'lucide-react';
 
 interface Announcement {
@@ -49,6 +51,40 @@ export default function AnnouncementsPage() {
   const [playAtDate, setPlayAtDate] = useState('');
   const [playAtTime, setPlayAtTime] = useState('');
   const [addingAudio, setAddingAudio] = useState(false);
+
+  // Form states - Audio Settings
+  const [audioPlayMode, setAudioPlayMode] = useState<string>('session_limit');
+  const [selectedAudioId, setSelectedAudioId] = useState<string>('');
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // Form states - Edit Audio Alarm
+  const [isEditAudioModalOpen, setIsEditAudioModalOpen] = useState(false);
+  const [editingAudio, setEditingAudio] = useState<any | null>(null);
+  const [editPlayAtDate, setEditPlayAtDate] = useState('');
+  const [editPlayAtTime, setEditPlayAtTime] = useState('');
+  const [updatingAudio, setUpdatingAudio] = useState(false);
+
+  // Query SystemConfig
+  const { data: systemConfig, refetch: refetchSystemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // Sync settings when SystemConfig loads
+  React.useEffect(() => {
+    if (systemConfig) {
+      setAudioPlayMode(systemConfig.custom_scripts?.audio_play_mode || 'session_limit');
+      setSelectedAudioId(systemConfig.custom_scripts?.selected_audio_id || '');
+    }
+  }, [systemConfig]);
 
   // Query Text Announcements
   const { data: announcements = [], isLoading: isLoadingText } = useQuery<Announcement[]>({
@@ -205,6 +241,73 @@ export default function AnnouncementsPage() {
     } catch (err) {
       console.error(err);
       alert('Failed to delete audio announcement.');
+    }
+  };
+
+  // Edit Audio click handler
+  const handleEditAudioClick = (audio: any) => {
+    setEditingAudio(audio);
+    const dateObj = new Date(audio.play_at);
+    // Pre-populate with local date/time in YYYY-MM-DD and HH:MM formats
+    const localDate = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
+    const localTime = String(dateObj.getHours()).padStart(2, '0') + ':' + String(dateObj.getMinutes()).padStart(2, '0');
+    setEditPlayAtDate(localDate);
+    setEditPlayAtTime(localTime);
+    setIsEditAudioModalOpen(true);
+  };
+
+  // Submit Update Scheduled Audio Alarm
+  const handleUpdateAudioAlarm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAudio) return;
+    if (!editPlayAtDate || !editPlayAtTime) {
+      alert('Please select both date and time.');
+      return;
+    }
+    setUpdatingAudio(true);
+    try {
+      const scheduledDateTime = new Date(`${editPlayAtDate}T${editPlayAtTime}`).toISOString();
+      const { error } = await supabase
+        .from('audio_announcements')
+        .update({
+          play_at: scheduledDateTime
+        })
+        .eq('id', editingAudio.id);
+      if (error) throw error;
+      setIsEditAudioModalOpen(false);
+      refetchAudios();
+      alert('Audio alarm updated successfully!');
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to update audio alarm: ${err.message}`);
+    } finally {
+      setUpdatingAudio(false);
+    }
+  };
+
+  // Save Audio settings to SystemConfig
+  const handleSaveAudioSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const updatedScripts = {
+        ...(systemConfig?.custom_scripts || {}),
+        audio_play_mode: audioPlayMode,
+        selected_audio_id: selectedAudioId || null
+      };
+      const { error } = await supabase
+        .from('ad_networks')
+        .update({
+          custom_scripts: updatedScripts
+        })
+        .eq('network_name', 'SystemConfig');
+      if (error) throw error;
+      refetchSystemConfig();
+      alert('Audio playback settings updated successfully!');
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to save settings: ${err.message}`);
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -393,6 +496,65 @@ export default function AnnouncementsPage() {
               </form>
             </div>
 
+            {/* Audio Playback Settings Panel */}
+            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-emerald-accent" />
+                  Website Audio Playback & Auto-Play Settings
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Control how uploaded audio announcements behave on the public website and select the active audio file.
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Playback Mode */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Playback Frequency / Mode</label>
+                    <select
+                      value={audioPlayMode}
+                      onChange={(e) => setAudioPlayMode(e.target.value)}
+                      className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white appearance-none cursor-pointer"
+                    >
+                      <option value="session_limit">Limit to Max 2 Plays per Session (Default)</option>
+                      <option value="refresh">Play on Every Refresh / Page Load</option>
+                      <option value="limit_5">Limit to Max 5 Plays per Day per User</option>
+                    </select>
+                  </div>
+
+                  {/* Selected Audio */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Select Active Audio Sound</label>
+                    <select
+                      value={selectedAudioId}
+                      onChange={(e) => setSelectedAudioId(e.target.value)}
+                      className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white appearance-none cursor-pointer"
+                    >
+                      <option value="">-- Play Latest Scheduled Past Sound (Default) --</option>
+                      {audioAnnouncements.map((audio: any) => (
+                        <option key={audio.id} value={audio.id}>
+                          {audio.name} ({new Date(audio.play_at).toLocaleDateString()} {new Date(audio.play_at).toLocaleTimeString()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveAudioSettings}
+                    disabled={savingSettings}
+                    className="px-5 py-2.5 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {savingSettings ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* List of scheduled alarms */}
             <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
               <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">Scheduled Alarms ({audioAnnouncements.length})</span>
@@ -433,9 +595,17 @@ export default function AnnouncementsPage() {
                             </div>
                           </div>
 
-                          {/* Audio Player and Delete */}
-                          <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
-                            <audio src={item.audio_url} controls className="h-7 max-w-[150px] sm:max-w-[180px] bg-slate-900 rounded-lg" />
+                          {/* Audio Player, Edit and Delete */}
+                          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                            <audio src={item.audio_url} controls className="h-7 max-w-[140px] sm:max-w-[160px] bg-slate-900 rounded-lg" />
+                            <button
+                              type="button"
+                              onClick={() => handleEditAudioClick(item)}
+                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-emerald-500/25 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg cursor-pointer transition-colors"
+                              title="Edit Date/Time"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteScheduledAudio(item.id, item.audio_url)}
@@ -559,6 +729,78 @@ export default function AnnouncementsPage() {
                       <Check className="h-4.5 w-4.5" />
                     )}
                     Publish Notice
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Audio Date/Time Modal */}
+        {isEditAudioModalOpen && editingAudio && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md glass-panel p-6 rounded-3xl space-y-6">
+              <div className="flex justify-between items-center pb-4 border-b border-card-border">
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider">Edit Scheduled Alarm Date & Time</h3>
+                <button 
+                  onClick={() => setIsEditAudioModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateAudioAlarm} className="space-y-4">
+                <div className="space-y-1 text-xs">
+                  <p className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">File Name:</p>
+                  <p className="text-white font-extrabold truncate text-sm">{editingAudio.name}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Date Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Play Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={editPlayAtDate}
+                      onChange={(e) => setEditPlayAtDate(e.target.value)}
+                      className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white"
+                    />
+                  </div>
+
+                  {/* Time Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Play Time</label>
+                    <input
+                      type="time"
+                      required
+                      value={editPlayAtTime}
+                      onChange={(e) => setEditPlayAtTime(e.target.value)}
+                      className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-card-border">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditAudioModalOpen(false)}
+                    className="px-5 py-3 border border-slate-800 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updatingAudio}
+                    className="flex items-center gap-2 px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-150 cursor-pointer"
+                  >
+                    {updatingAudio ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    Update Schedule
                   </button>
                 </div>
               </form>
