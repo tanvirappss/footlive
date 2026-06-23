@@ -161,13 +161,64 @@ export async function syncLiveMatchScores(
   const now = Date.now();
 
   for (const match of matches) {
-    // Only update matches that are not already finished/cancelled/postponed in the DB
-    if (match.status === 'finished' || match.status === 'cancelled' || match.status === 'postponed') {
-      continue;
-    }
+    const isFinishedDB = match.status === 'finished';
+    const isCancelledOrPostponed = match.status === 'cancelled' || match.status === 'postponed';
+    
+    if (isCancelledOrPostponed) continue;
 
     const kickoff = new Date(match.match_timestamp).getTime();
     
+    // Resolve team names
+    const homeName = match.home_team_id ? (match.home_team?.name) : match.home_team_custom_name || 'Home Team';
+    const awayName = match.away_team_id ? (match.away_team?.name) : match.away_team_custom_name || 'Away Team';
+
+    // Get deterministic events for the entire match
+    const { events } = getDeterministicMatchEvents(match.id, homeName, awayName, matchDurationMins);
+
+    if (isFinishedDB) {
+      // For finished matches, check if they need an initial sync (home_scorers and away_scorers are null)
+      const needsSync = match.home_scorers === null && match.away_scorers === null;
+      if (!needsSync) continue;
+
+      // Calculate final scores and scorers
+      const targetHomeScore = events.filter(e => e.team === 'home').length;
+      const targetAwayScore = events.filter(e => e.team === 'away').length;
+
+      const formatScorers = (team: 'home' | 'away') => {
+        const teamEvents = events.filter(e => e.team === team);
+        const playerGoalsMap: { [player: string]: number[] } = {};
+        
+        teamEvents.forEach(e => {
+          if (!playerGoalsMap[e.player]) playerGoalsMap[e.player] = [];
+          playerGoalsMap[e.player].push(e.minute);
+        });
+
+        return Object.keys(playerGoalsMap)
+          .map(player => {
+            const mins = playerGoalsMap[player].map(m => `${m}'`).join(', ');
+            return `${player} (${mins})`;
+          })
+          .join(', ');
+      };
+
+      const targetHomeScorers = formatScorers('home') || ""; // Use empty string instead of null to mark it as synced
+      const targetAwayScorers = formatScorers('away') || "";
+
+      console.log(`AutoSync Finished Match [${homeName} vs ${awayName}]: Score -> ${targetHomeScore}-${targetAwayScore}`);
+      
+      supabase.from('matches').update({
+        home_score: targetHomeScore,
+        away_score: targetAwayScore,
+        home_scorers: targetHomeScorers,
+        away_scorers: targetAwayScorers
+      }).eq('id', match.id).then(({ error }) => {
+        if (error) {
+          console.error(`AutoSync finished match failed for ${match.id}:`, error);
+        }
+      });
+      continue;
+    }
+
     // Check if the match is currently in its active timeline (starting from live offset before kickoff up to full duration)
     const isLiveTimeline = now >= (kickoff - liveOffsetMins * 60 * 1000);
     if (!isLiveTimeline) continue;
