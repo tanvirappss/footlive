@@ -15,7 +15,8 @@ import {
   Loader2,
   Menu,
   X,
-  Settings
+  Settings,
+  Activity
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -46,6 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Matches', href: '/admin/matches', icon: Calendar },
     { name: 'Streams', href: '/admin/streams', icon: Tv },
     { name: 'TV Channels', href: '/admin/channels', icon: Tv },
+    { name: 'Live Score', href: '/admin/live-score', icon: Activity },
     { name: 'Earnings', href: '/admin/earnings', icon: DollarSign },
     { name: 'Announcements', href: '/admin/announcements', icon: Megaphone },
     { name: 'Settings', href: '/admin/settings', icon: Settings },
