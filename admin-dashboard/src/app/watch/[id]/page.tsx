@@ -169,7 +169,7 @@ export default function UserWatchPage() {
   const [playerKey, setPlayerKey] = useState(0);
   const [sessionId, setSessionId] = useState('web_session');
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const processedEventsRef = useRef<Set<string>>(new Set());
   const [isCommentaryInitialized, setIsCommentaryInitialized] = useState(false);
   const [notification, setNotification] = useState<{
     id: string;
@@ -332,40 +332,54 @@ export default function UserWatchPage() {
     if (systemConfig?.custom_scripts?.enable_live_notifications === false) return;
     if (!commentaryData?.keyEvents) return;
     
+    // On first load, record all existing event IDs so we don't fire old notifications
     if (!isCommentaryInitialized) {
-      if (commentaryData.keyEvents.length > 0) {
-        setLastEventId(commentaryData.keyEvents[0].id);
+      const initialIds = new Set<string>();
+      for (const ev of commentaryData.keyEvents) {
+        initialIds.add(ev.id);
       }
+      processedEventsRef.current = initialIds;
       setIsCommentaryInitialized(true);
       return;
     }
 
-    const events = commentaryData.keyEvents;
-    if (events.length === 0) return;
-    
-    const latestEvent = events[0];
-    const textLower = (latestEvent.text || '').toLowerCase();
-    const typeLower = (latestEvent.type || '').toLowerCase();
-    const isGoal = typeLower.includes('goal') || textLower.includes('goal!');
-    const isCard = typeLower.includes('card') || typeLower.includes('booking') || textLower.includes('yellow card') || textLower.includes('red card');
-    const isFoul = typeLower.includes('foul') || textLower.includes('foul');
+    // Check for new events we haven't processed yet
+    for (const event of commentaryData.keyEvents) {
+      if (processedEventsRef.current.has(event.id)) continue;
+      
+      // Use the enhanced 'category' field from the API
+      const cat = event.category || '';
+      const isGoal = cat === 'goal';
+      const isCard = cat === 'card' || cat === 'yellow_card' || cat === 'red_card';
+      const isFoul = cat === 'foul';
+      
+      // Fallback: also check type/text for backward compatibility
+      const textLower = (event.text || '').toLowerCase();
+      const typeLower = (event.type || '').toLowerCase();
+      const fallbackGoal = event.scoringPlay || typeLower.includes('goal') || textLower.includes('goal!');
+      const fallbackCard = typeLower.includes('card') || typeLower.includes('booking') || textLower.includes('yellow card') || textLower.includes('red card');
+      const fallbackFoul = typeLower.includes('foul') || textLower.includes('foul');
+      
+      const isNotifiable = isGoal || isCard || isFoul || fallbackGoal || fallbackCard || fallbackFoul;
+      
+      if (isNotifiable) {
+        const type: 'goal' | 'card' | 'foul' = (isGoal || fallbackGoal) ? 'goal' : (isCard || fallbackCard) ? 'card' : 'foul';
+        setNotification({
+          id: event.id,
+          text: event.text,
+          type,
+          clock: event.clock || "0'"
+        });
+        playCelebrationSound(type);
 
-    if ((isGoal || isCard || isFoul) && latestEvent.id !== lastEventId) {
-      const type: 'goal' | 'card' | 'foul' = isGoal ? 'goal' : isCard ? 'card' : 'foul';
-      setNotification({
-        id: latestEvent.id,
-        text: latestEvent.text,
-        type,
-        clock: latestEvent.clock || "0'"
-      });
-      playCelebrationSound(type);
-
-      const t = setTimeout(() => {
-        setNotification(prev => prev?.id === latestEvent.id ? null : prev);
-      }, 6000);
-      return () => clearTimeout(t);
+        const t = setTimeout(() => {
+          setNotification(prev => prev?.id === event.id ? null : prev);
+        }, 4000);
+      }
+      
+      processedEventsRef.current.add(event.id);
     }
-  }, [commentaryData, lastEventId, isCommentaryInitialized, systemConfig]);
+  }, [commentaryData, isCommentaryInitialized, systemConfig]);
 
   const getAdForPlacement = (placementKey: string) => {
     const config = adsterra?.custom_scripts?.placements?.[placementKey];
@@ -1196,20 +1210,23 @@ export default function UserWatchPage() {
       </main>
 
       {notification && (
-        <div className="fixed bottom-6 right-6 max-w-sm w-full bg-slate-950/95 border border-slate-800 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-[9999] flex items-start gap-3 transition-all duration-300">
-          <span className="text-xl shrink-0">
+        <div 
+          className="fixed top-4 left-1/2 -translate-x-1/2 max-w-md w-[calc(100%-2rem)] bg-slate-950/95 border rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl z-[9999] flex items-start gap-3 animate-slideDown"
+          style={{ borderColor: notification.type === 'goal' ? '#10b981' : notification.type === 'card' ? '#f59e0b' : '#64748b' }}
+        >
+          <span className="text-2xl shrink-0">
             {notification.type === 'goal' ? '⚽' : notification.type === 'card' ? '🟨' : '🔔'}
           </span>
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-1 min-w-0">
             <div className="flex justify-between items-center">
               <span className={`text-[10px] font-black uppercase tracking-widest ${
                 notification.type === 'goal' ? 'text-emerald-accent' : notification.type === 'card' ? 'text-amber-500' : 'text-slate-400'
               }`}>
-                {notification.type === 'goal' ? 'GOAL ALERT!' : notification.type === 'card' ? 'CARD ISSUED' : 'FOUL REGISTERED'} ({notification.clock})
+                {notification.type === 'goal' ? '⚡ GOAL ALERT!' : notification.type === 'card' ? '🟡 CARD ISSUED' : '📢 FOUL REGISTERED'} ({notification.clock})
               </span>
               <button 
                 onClick={() => setNotification(null)}
-                className="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                className="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer ml-2 shrink-0"
               >
                 ✕
               </button>

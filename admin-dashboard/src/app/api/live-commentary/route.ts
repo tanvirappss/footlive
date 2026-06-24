@@ -31,13 +31,64 @@ export async function GET(request: Request) {
 
       const data = await res.json();
       
-      // Extract keyEvents and commentary
-      const keyEvents = (data.keyEvents || []).map((e: any, idx: number) => ({
-        id: e.id || `${e.clock?.displayValue || ''}-${e.type?.text || ''}-${e.text || ''}-${idx}`,
-        clock: e.clock?.displayValue || '',
-        type: e.type?.text || '',
-        text: e.text || '',
-      }));
+      // Extract keyEvents with rich data for notifications
+      const keyEvents = (data.keyEvents || []).map((e: any, idx: number) => {
+        const typeText = e.type?.text || '';
+        const eventText = e.text || '';
+        const typeLower = typeText.toLowerCase();
+        const textLower = eventText.toLowerCase();
+        
+        // Comprehensive event type detection
+        const isScoringPlay = e.scoringPlay === true;
+        const isGoalType = typeLower.includes('goal') || typeLower.includes('penalty - scored');
+        const isGoalText = textLower.includes('goal!') || textLower.includes('scores') || textLower.includes('penalty - Loss');
+        const isGoal = isScoringPlay || isGoalType || isGoalText;
+        
+        const isYellowCard = typeLower.includes('yellow card') || typeLower.includes('booking') || textLower.includes('yellow card');
+        const isRedCard = typeLower.includes('red card') || typeLower.includes('sending off') || typeLower.includes('dismissal') || textLower.includes('red card') || textLower.includes('sent off');
+        const isCard = isYellowCard || isRedCard;
+        
+        const isFoul = typeLower.includes('foul') || textLower.includes('foul');
+        const isSubstitution = typeLower.includes('substitution') || textLower.includes('substitution');
+        const isPenaltyMissed = typeLower.includes('penalty - missed') || typeLower.includes('penalty - saved') || textLower.includes('penalty miss');
+        
+        // Determine normalized event category
+        let category = 'other';
+        if (isGoal) category = 'goal';
+        else if (isRedCard) category = 'red_card';
+        else if (isYellowCard) category = 'yellow_card';
+        else if (isCard) category = 'card';
+        else if (isPenaltyMissed) category = 'penalty_missed';
+        else if (isFoul) category = 'foul';
+        else if (isSubstitution) category = 'substitution';
+        
+        // Extract player name
+        let playerName = '';
+        if (e.participants?.[0]?.athlete?.displayName) {
+          playerName = e.participants[0].athlete.displayName;
+        } else if (eventText) {
+          const goalMatch = eventText.match(/Goal!\s+[^.]+\.\s+([^(\n]+)/);
+          const cardMatch = eventText.match(/(?:Yellow|Red)\s+Card[^.]*\.\s*([^(\n.]+)/i);
+          if (goalMatch) playerName = goalMatch[1].trim();
+          else if (cardMatch) playerName = cardMatch[1].trim();
+        }
+        
+        // Extract team info
+        const teamName = e.team?.displayName || e.team?.name || '';
+        const teamId = e.team?.id || '';
+        
+        return {
+          id: e.id || `evt-${e.clock?.displayValue || ''}-${typeText}-${idx}`,
+          clock: e.clock?.displayValue || '',
+          type: typeText,
+          text: eventText,
+          category, // normalized: 'goal', 'card', 'yellow_card', 'red_card', 'foul', 'substitution', 'penalty_missed', 'other'
+          scoringPlay: isScoringPlay,
+          playerName,
+          teamName,
+          teamId: String(teamId),
+        };
+      });
 
       const commentary = (data.commentary || []).map((c: any) => ({
         sequence: c.sequence || 0,
