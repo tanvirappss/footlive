@@ -38,6 +38,7 @@ export default function LiveScoreAdminPage() {
   const [liveOffsetMins, setLiveOffsetMins] = useState(10);
   const [durationHours, setDurationHours] = useState(1);
   const [durationMins, setDurationMins] = useState(45);
+  const [enableLiveNotifications, setEnableLiveNotifications] = useState(true);
   
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
@@ -87,6 +88,7 @@ export default function LiveScoreAdminPage() {
       setLiveOffsetMins(scripts.match_live_before_minutes !== undefined ? Number(scripts.match_live_before_minutes) : 10);
       setDurationHours(scripts.match_duration_hours !== undefined ? Number(scripts.match_duration_hours) : 1);
       setDurationMins(scripts.match_duration_minutes !== undefined ? Number(scripts.match_duration_minutes) : 45);
+      setEnableLiveNotifications(scripts.enable_live_notifications !== false);
     }
   }, [systemConfigData]);
 
@@ -104,7 +106,8 @@ export default function LiveScoreAdminPage() {
         auto_finish_enabled: autoFinishEnabled,
         match_live_before_minutes: Number(liveOffsetMins),
         match_duration_hours: Number(durationHours),
-        match_duration_minutes: Number(durationMins)
+        match_duration_minutes: Number(durationMins),
+        enable_live_notifications: enableLiveNotifications
       };
 
       if (systemConfigId) {
@@ -292,6 +295,25 @@ export default function LiveScoreAdminPage() {
                       className="text-emerald-accent hover:opacity-80 transition-all cursor-pointer"
                     >
                       {autoFinishEnabled ? (
+                        <ToggleRight className="h-8 w-8" />
+                      ) : (
+                        <ToggleLeft className="h-8 w-8 text-slate-600" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Live notifications toggle */}
+                  <div className="flex items-center justify-between p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+                    <div>
+                      <label className="text-xs font-bold text-white uppercase tracking-wider block">Live Goal & Event Notifications</label>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Show real-time notifications for goals, cards, and fouls on the homepage & watch feed</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEnableLiveNotifications(!enableLiveNotifications)}
+                      className="text-emerald-accent hover:opacity-80 transition-all cursor-pointer"
+                    >
+                      {enableLiveNotifications ? (
                         <ToggleRight className="h-8 w-8" />
                       ) : (
                         <ToggleLeft className="h-8 w-8 text-slate-600" />

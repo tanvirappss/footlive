@@ -49,6 +49,7 @@ export async function GET(request: Request) {
         success: true,
         keyEvents,
         commentary,
+        rosters: data.rosters || null,
       });
 
     } catch (err: any) {

@@ -5,7 +5,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2, Trophy, MessageSquare, MapPin } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2, Trophy, MessageSquare, MapPin, Users } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
 import PotPlayer from '@/components/PotPlayer';
@@ -86,6 +86,77 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   return false;
 }
 
+function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    if (type === 'goal') {
+      const playHorn = (freq: number, detuneVal: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        osc.detune.setValueAtTime(detuneVal, ctx.currentTime);
+        
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime + 1.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 2.0);
+      };
+      
+      playHorn(220, -10);
+      playHorn(220, 10);
+      playHorn(330, 0);
+    } else if (type === 'card' || type === 'foul') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.15);
+      
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + 0.2);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+      
+      if (type === 'card') {
+        setTimeout(() => {
+          const ctx2 = new AudioContextClass();
+          const osc2 = ctx2.createOscillator();
+          const gain2 = ctx2.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(1100, ctx2.currentTime);
+          osc2.frequency.linearRampToValueAtTime(1300, ctx2.currentTime + 0.15);
+          gain2.gain.setValueAtTime(0, ctx2.currentTime);
+          gain2.gain.linearRampToValueAtTime(0.15, ctx2.currentTime + 0.05);
+          gain2.gain.setValueAtTime(0.15, ctx2.currentTime + 0.2);
+          gain2.gain.linearRampToValueAtTime(0, ctx2.currentTime + 0.25);
+          osc2.connect(gain2);
+          gain2.connect(ctx2.destination);
+          osc2.start();
+          osc2.stop(ctx2.currentTime + 0.3);
+        }, 350);
+      }
+    }
+  } catch (e) {
+    console.warn('Audio Context failed to play sound:', e);
+  }
+}
+
 export default function UserWatchPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -94,10 +165,17 @@ export default function UserWatchPage() {
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [playError, setPlayError] = useState<string | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
-  const [activeSideTab, setActiveSideTab] = useState<'commentary' | 'events' | 'telemetry'>('commentary');
+  const [activeSideTab, setActiveSideTab] = useState<'commentary' | 'events' | 'telemetry' | 'lineup'>('commentary');
   const [playerKey, setPlayerKey] = useState(0);
   const [sessionId, setSessionId] = useState('web_session');
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{
+    id: string;
+    text: string;
+    type: 'goal' | 'card' | 'foul';
+    clock: string;
+  } | null>(null);
 
   // Health stats
   const [latency, setLatency] = useState('80ms');
@@ -190,7 +268,7 @@ export default function UserWatchPage() {
       }
     },
     enabled: !!espnEventId,
-    refetchInterval: 15 * 1000, // Refetch every 15 seconds for live play-by-play commentary!
+    refetchInterval: 5 * 1000, // Query every 5 seconds for fast updates!
   });
 
   // Fetch match streams
@@ -248,6 +326,38 @@ export default function UserWatchPage() {
       return data || null;
     }
   });
+
+  useEffect(() => {
+    if (systemConfig?.custom_scripts?.enable_live_notifications === false) return;
+    const events = commentaryData?.keyEvents || [];
+    if (events.length > 0) {
+      const latestEvent = events[0];
+      const textLower = (latestEvent.text || '').toLowerCase();
+      const typeLower = (latestEvent.type || '').toLowerCase();
+      const isGoal = typeLower.includes('goal') || textLower.includes('goal!');
+      const isCard = typeLower.includes('card') || typeLower.includes('booking') || textLower.includes('yellow card') || textLower.includes('red card');
+      const isFoul = typeLower.includes('foul') || textLower.includes('foul');
+
+      if ((isGoal || isCard || isFoul) && latestEvent.id !== lastEventId) {
+        if (lastEventId !== null) {
+          const type: 'goal' | 'card' | 'foul' = isGoal ? 'goal' : isCard ? 'card' : 'foul';
+          setNotification({
+            id: latestEvent.id,
+            text: latestEvent.text,
+            type,
+            clock: latestEvent.clock || "0'"
+          });
+          playCelebrationSound(type);
+
+          const t = setTimeout(() => {
+            setNotification(prev => prev?.id === latestEvent.id ? null : prev);
+          }, 6000);
+          return () => clearTimeout(t);
+        }
+        setLastEventId(latestEvent.id);
+      }
+    }
+  }, [commentaryData, lastEventId, systemConfig]);
 
   const getAdForPlacement = (placementKey: string) => {
     const config = adsterra?.custom_scripts?.placements?.[placementKey];
@@ -765,6 +875,17 @@ export default function UserWatchPage() {
                 <Activity className="h-3.5 w-3.5" />
                 Health
               </button>
+              <button
+                onClick={() => setActiveSideTab('lineup')}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeSideTab === 'lineup'
+                    ? 'bg-emerald-accent text-black font-extrabold shadow'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                Lineup
+              </button>
             </div>
 
             {/* Tab content panel */}
@@ -912,10 +1033,126 @@ export default function UserWatchPage() {
                   </div>
                 </div>
               )}
+
+              {activeSideTab === 'lineup' && (
+                <div className="space-y-6">
+                  {!espnEventId ? (
+                    <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                      Lineup feed waiting to connect...
+                    </div>
+                  ) : loadingCommentary ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="h-5 w-5 text-emerald-accent animate-spin" />
+                      <span className="text-[10px] text-slate-500 uppercase font-black mt-2">Loading lineups...</span>
+                    </div>
+                  ) : !commentaryData?.rosters ? (
+                    <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                      No lineup details available for this match
+                    </div>
+                  ) : (() => {
+                    const values = Object.values(commentaryData.rosters);
+                    const homeRoster = values.find((r: any) => r.homeAway === 'home') as any;
+                    const awayRoster = values.find((r: any) => r.homeAway === 'away') as any;
+
+                    if (!homeRoster && !awayRoster) {
+                      return (
+                        <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                          Lineups are not posted yet
+                        </div>
+                      );
+                    }
+
+                    const renderTeamLineup = (rosterData: any, teamName: string) => {
+                      if (!rosterData) return null;
+                      const players = rosterData.roster || [];
+                      const starters = players.filter((p: any) => p.starter);
+                      const subs = players.filter((p: any) => !p.starter);
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                            <h3 className="font-extrabold text-white text-xs uppercase tracking-wider">{teamName}</h3>
+                            {rosterData.formation && (
+                              <span className="px-2 py-0.5 bg-slate-900 text-slate-400 text-[10px] font-black rounded-md border border-slate-800">
+                                Formation: {rosterData.formation}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <h4 className="text-[9px] text-emerald-accent font-black uppercase tracking-widest mb-1.5">Starters</h4>
+                              <div className="grid grid-cols-1 gap-1.5">
+                                {starters.map((p: any, idx: number) => (
+                                  <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2 bg-slate-950/30 rounded-lg border border-slate-900/50">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-5 text-slate-500 font-bold text-right text-[10px]">#{p.jersey}</span>
+                                      <span className="text-slate-200 font-extrabold">{p.athlete?.displayName}</span>
+                                    </div>
+                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{p.position?.displayName}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {subs.length > 0 && (
+                              <div>
+                                <h4 className="text-[9px] text-amber-500 font-black uppercase tracking-widest mb-1.5 mt-3">Substitutes</h4>
+                                <div className="grid grid-cols-1 gap-1.5">
+                                  {subs.map((p: any, idx: number) => (
+                                    <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2 bg-slate-950/20 rounded-lg border border-slate-900/20">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 text-slate-600 font-bold text-right text-[10px]">#{p.jersey}</span>
+                                        <span className="text-slate-400 font-bold">{p.athlete?.displayName}</span>
+                                      </div>
+                                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">{p.position?.displayName}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div className="space-y-6">
+                        {renderTeamLineup(homeRoster, homeName || 'Home')}
+                        {renderTeamLineup(awayRoster, awayName || 'Away')}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </main>
+
+      {notification && (
+        <div className="fixed bottom-6 right-6 max-w-sm w-full bg-slate-950/95 border border-slate-800 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-[9999] flex items-start gap-3 transition-all duration-300">
+          <span className="text-xl shrink-0">
+            {notification.type === 'goal' ? '⚽' : notification.type === 'card' ? '🟨' : '🔔'}
+          </span>
+          <div className="flex-1 space-y-1">
+            <div className="flex justify-between items-center">
+              <span className={`text-[10px] font-black uppercase tracking-widest ${
+                notification.type === 'goal' ? 'text-emerald-accent' : notification.type === 'card' ? 'text-amber-500' : 'text-slate-400'
+              }`}>
+                {notification.type === 'goal' ? 'GOAL ALERT!' : notification.type === 'card' ? 'CARD ISSUED' : 'FOUL REGISTERED'} ({notification.clock})
+              </span>
+              <button 
+                onClick={() => setNotification(null)}
+                className="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-200 font-medium leading-relaxed font-bangla">{notification.text}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

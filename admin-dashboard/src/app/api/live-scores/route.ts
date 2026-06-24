@@ -83,52 +83,121 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
       const liveMinute = comp.status?.displayClock || comp.status?.type?.shortDetail || '';
       const espnEventId = event.id || '';
 
-      // Extract goal details from competition details
-      const details = comp.details || [];
-      const homeGoals: { player: string; minute: string }[] = [];
-      const awayGoals: { player: string; minute: string }[] = [];
+      let homeScorers = '';
+      let awayScorers = '';
 
-      for (const detail of details) {
-        if (detail.type?.text === 'Goal') {
-          const player = detail.athletesInvolved?.[0]?.displayName || 'Unknown';
-          const minute = detail.clock?.displayValue || '';
-          const teamId = detail.team?.id;
-
-          if (teamId === homeComp.id || teamId === homeComp.team?.id) {
-            homeGoals.push({ player, minute });
-          } else if (teamId === awayComp.id || teamId === awayComp.team?.id) {
-            awayGoals.push({ player, minute });
-          } else {
-            // Try matching by detail text which usually contains team name
-            const detailText = (detail.text || '').toLowerCase();
-            if (detailText.includes(homeTeam.toLowerCase())) {
-              homeGoals.push({ player, minute });
-            } else {
-              awayGoals.push({ player, minute });
+      if (espnEventId && (status === 'in' || status === 'post')) {
+        try {
+          const summaryRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${espnEventId}`, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             }
+          });
+          if (summaryRes.ok) {
+            const summaryData = await summaryRes.json();
+            const goals = (summaryData.keyEvents || []).filter((e: any) => e.scoringPlay || e.type?.text?.toLowerCase().includes('goal'));
+            
+            const hGoals: { player: string; minute: string }[] = [];
+            const aGoals: { player: string; minute: string }[] = [];
+
+            for (const goal of goals) {
+              // Extract name of scorer
+              let scorer = goal.participants?.[0]?.athlete?.displayName;
+              if (!scorer && goal.text) {
+                const match = goal.text.match(/Goal!\s+[^.]+\.\s+([^(\n]+)/);
+                if (match) scorer = match[1].trim();
+              }
+              if (!scorer) scorer = 'Unknown Player';
+              
+              const minute = goal.clock?.displayValue || '';
+              
+              const gTeamId = String(goal.team?.id || '');
+              const hId = String(homeComp.id || homeComp.team?.id || '');
+              const aId = String(awayComp.id || awayComp.team?.id || '');
+              
+              if (gTeamId === hId) {
+                hGoals.push({ player: scorer, minute });
+              } else if (gTeamId === aId) {
+                aGoals.push({ player: scorer, minute });
+              } else {
+                // Fallback to text matching
+                const textLower = (goal.text || '').toLowerCase();
+                if (textLower.includes(homeTeam.toLowerCase())) {
+                  hGoals.push({ player: scorer, minute });
+                } else {
+                  aGoals.push({ player: scorer, minute });
+                }
+              }
+            }
+            
+            const formatScorers = (goalsList: { player: string; minute: string }[]) => {
+              const grouped: Record<string, string[]> = {};
+              for (const g of goalsList) {
+                if (!grouped[g.player]) grouped[g.player] = [];
+                grouped[g.player].push(g.minute);
+              }
+              return Object.entries(grouped)
+                .map(([player, mins]) => `${player} (${mins.join(', ')})`)
+                .join(', ');
+            };
+
+            homeScorers = formatScorers(hGoals);
+            awayScorers = formatScorers(aGoals);
           }
+        } catch (err) {
+          console.error(`Failed to fetch summary for event ${espnEventId}:`, err);
         }
       }
 
-      // Format scorers as "Player (min), Player (min, min)" format
-      const formatScorers = (goals: { player: string; minute: string }[]) => {
-        const grouped: Record<string, string[]> = {};
-        for (const g of goals) {
-          if (!grouped[g.player]) grouped[g.player] = [];
-          grouped[g.player].push(g.minute);
+      if (!homeScorers && !awayScorers) {
+        // Fallback to scoreboard details
+        const details = comp.details || [];
+        const homeGoals: { player: string; minute: string }[] = [];
+        const awayGoals: { player: string; minute: string }[] = [];
+
+        for (const detail of details) {
+          if (detail.type?.text === 'Goal') {
+            const player = detail.athletesInvolved?.[0]?.displayName || 'Unknown';
+            const minute = detail.clock?.displayValue || '';
+            const teamId = detail.team?.id;
+
+            if (teamId === homeComp.id || teamId === homeComp.team?.id) {
+              homeGoals.push({ player, minute });
+            } else if (teamId === awayComp.id || teamId === awayComp.team?.id) {
+              awayGoals.push({ player, minute });
+            } else {
+              const detailText = (detail.text || '').toLowerCase();
+              if (detailText.includes(homeTeam.toLowerCase())) {
+                homeGoals.push({ player, minute });
+              } else {
+                awayGoals.push({ player, minute });
+              }
+            }
+          }
         }
-        return Object.entries(grouped)
-          .map(([player, mins]) => `${player} (${mins.join(', ')})`)
-          .join(', ');
-      };
+
+        const formatScorersFallback = (goalsList: { player: string; minute: string }[]) => {
+          const grouped: Record<string, string[]> = {};
+          for (const g of goalsList) {
+            if (!grouped[g.player]) grouped[g.player] = [];
+            grouped[g.player].push(g.minute);
+          }
+          return Object.entries(grouped)
+            .map(([player, mins]) => `${player} (${mins.join(', ')})`)
+            .join(', ');
+        };
+
+        homeScorers = formatScorersFallback(homeGoals);
+        awayScorers = formatScorersFallback(awayGoals);
+      }
 
       results.push({
         homeTeam,
         awayTeam,
         homeScore,
         awayScore,
-        homeScorers: formatScorers(homeGoals),
-        awayScorers: formatScorers(awayGoals),
+        homeScorers,
+        awayScorers,
         status,
         matchDate: event.date || comp.date || '',
         liveMinute,

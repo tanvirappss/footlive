@@ -70,6 +70,12 @@ export default function UserHomePage() {
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({});
   const [selectedChannelUrl, setSelectedChannelUrl] = useState<string | null>(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string>('');
+  const [notification, setNotification] = useState<{
+    id: string;
+    text: string;
+    type: 'goal' | 'card' | 'foul';
+    clock: string;
+  } | null>(null);
 
   // M3U Playlist States
   const [selectedPlaylist, setSelectedPlaylist] = useState<any | null>(null);
@@ -477,7 +483,22 @@ export default function UserHomePage() {
       if (error) throw error;
       return (data || []) as Match[];
     },
-    refetchInterval: 10000,
+    refetchInterval: 5000, // Query matches list every 5 seconds for fast live updates!
+  });
+
+  const { data: espnScores = [] } = useQuery<any[]>({
+    queryKey: ['homepage-espn-scores'],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/live-scores`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.scores || [];
+      } catch (e) {
+        return [];
+      }
+    },
+    refetchInterval: 5000, // Query scoreboard every 5 seconds for instant updates!
   });
 
   const autoFinishEnabled = systemConfig?.custom_scripts?.auto_finish_enabled !== false;
@@ -866,11 +887,11 @@ export default function UserHomePage() {
                   {/* Goal Scorers details */}
                   {(match.home_scorers || match.away_scorers) && (
                     <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-900/50 flex justify-between gap-2 mt-1">
-                      <div className="w-[45%] text-left text-slate-300 font-medium line-clamp-2">
+                      <div className="w-[45%] text-left text-slate-300 font-medium break-words">
                         {match.home_scorers || ""}
                       </div>
                       <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
-                      <div className="w-[45%] text-right text-slate-300 font-medium line-clamp-2">
+                      <div className="w-[45%] text-right text-slate-300 font-medium break-words">
                         {match.away_scorers || ""}
                       </div>
                     </div>
@@ -1292,6 +1313,61 @@ export default function UserHomePage() {
           </div>
         </div>
       )}
+
+      {/* Background commentary event trackers for live matches */}
+      {systemConfig?.custom_scripts?.enable_live_notifications !== false && 
+        matches.filter(isMatchLive).map((m) => {
+          const homeN = m.home_team_id ? m.home_team?.name : m.home_team_custom_name;
+          const awayN = m.away_team_id ? m.away_team?.name : m.away_team_custom_name;
+          const esScore = espnScores.find(es => 
+            (teamsMatch(homeN || '', es.homeTeam) && teamsMatch(awayN || '', es.awayTeam)) ||
+            (teamsMatch(homeN || '', es.awayTeam) && teamsMatch(awayN || '', es.homeTeam))
+          );
+          const eventId = esScore?.espnEventId;
+          if (!eventId) return null;
+          
+          return (
+            <LiveMatchEventTracker 
+              key={m.id}
+              espnEventId={eventId}
+              enableNotifications={systemConfig?.custom_scripts?.enable_live_notifications !== false}
+              onEventTriggered={(event) => {
+                setNotification(event);
+                playCelebrationSound(event.type);
+                
+                setTimeout(() => {
+                  setNotification(prev => prev?.id === event.id ? null : prev);
+                }, 6000);
+              }}
+            />
+          );
+        })
+      }
+
+      {/* Celebratory events notification popup */}
+      {notification && (
+        <div className="fixed bottom-6 right-6 max-w-sm w-full bg-slate-950/95 border border-slate-800 rounded-2xl p-4 shadow-2xl backdrop-blur-xl z-[9999] flex items-start gap-3 transition-all duration-300">
+          <span className="text-xl shrink-0">
+            {notification.type === 'goal' ? '⚽' : notification.type === 'card' ? '🟨' : '🔔'}
+          </span>
+          <div className="flex-1 space-y-1">
+            <div className="flex justify-between items-center">
+              <span className={`text-[10px] font-black uppercase tracking-widest ${
+                notification.type === 'goal' ? 'text-emerald-accent' : notification.type === 'card' ? 'text-amber-500' : 'text-slate-400'
+              }`}>
+                {notification.type === 'goal' ? 'GOAL ALERT!' : notification.type === 'card' ? 'CARD ISSUED' : 'FOUL REGISTERED'} ({notification.clock})
+              </span>
+              <button 
+                onClick={() => setNotification(null)}
+                className="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-200 font-medium leading-relaxed font-bangla">{notification.text}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1338,4 +1414,154 @@ function WebCountdown({ targetTime }: { targetTime: string }) {
       </div>
     </div>
   );
+}
+
+function LiveMatchEventTracker({ 
+  espnEventId, 
+  enableNotifications,
+  onEventTriggered
+}: { 
+  espnEventId: string; 
+  enableNotifications: boolean;
+  onEventTriggered: (event: any) => void;
+}) {
+  const { data } = useQuery({
+    queryKey: ['live-commentary-tracker', espnEventId],
+    queryFn: async () => {
+      const res = await fetch(`/api/live-commentary?event=${espnEventId}`);
+      if (!res.ok) throw new Error('Failed to fetch tracker commentary');
+      return res.json();
+    },
+    enabled: !!espnEventId && enableNotifications,
+    refetchInterval: 5000,
+  });
+
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enableNotifications || !data?.keyEvents || data.keyEvents.length === 0) return;
+    const latestEvent = data.keyEvents[0];
+    
+    const textLower = (latestEvent.text || '').toLowerCase();
+    const typeLower = (latestEvent.type || '').toLowerCase();
+    const isGoal = typeLower.includes('goal') || textLower.includes('goal!');
+    const isCard = typeLower.includes('card') || typeLower.includes('booking') || textLower.includes('yellow card') || textLower.includes('red card');
+    const isFoul = typeLower.includes('foul') || textLower.includes('foul');
+
+    if ((isGoal || isCard || isFoul) && latestEvent.id !== lastEventId) {
+      if (lastEventId !== null) {
+        onEventTriggered({
+          id: latestEvent.id,
+          text: latestEvent.text,
+          type: isGoal ? 'goal' : isCard ? 'card' : 'foul',
+          clock: latestEvent.clock || "0'"
+        });
+      }
+      setLastEventId(latestEvent.id);
+    }
+  }, [data, lastEventId, enableNotifications]);
+
+  return null;
+}
+
+const teamNameAliases: Record<string, string[]> = {
+  'united states': ['usa', 'us', 'united states of america', 'u.s.a.'],
+  'south korea': ['korea republic', 'korea', 'korea rep.', 'republic of korea'],
+  'ivory coast': ["cote d'ivoire", 'côte d\'ivoire', 'cote divoire'],
+  'dr congo': ['democratic republic of congo', 'congo dr', 'dem. rep. congo', 'congo'],
+  'cabo verde': ['cape verde'],
+  'czech republic': ['czechia'],
+  'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
+  'curacao': ['curaçao'],
+  'turkey': ['türkiye', 'turkiye'],
+};
+
+function normalizeTeamName(name: string): string {
+  if (!name) return '';
+  const lower = name.trim().toLowerCase();
+  for (const [canonical, aliases] of Object.entries(teamNameAliases)) {
+    if (lower === canonical || aliases.includes(lower)) {
+      return canonical;
+    }
+  }
+  return lower;
+}
+
+function teamsMatch(dbName: string, espnName: string): boolean {
+  const norm1 = normalizeTeamName(dbName);
+  const norm2 = normalizeTeamName(espnName);
+  if (norm1 === norm2) return true;
+  if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
+  return false;
+}
+
+function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    if (type === 'goal') {
+      const playHorn = (freq: number, detuneVal: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        osc.detune.setValueAtTime(detuneVal, ctx.currentTime);
+        
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime + 1.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 2.0);
+      };
+      
+      playHorn(220, -10);
+      playHorn(220, 10);
+      playHorn(330, 0);
+    } else if (type === 'card' || type === 'foul') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.15);
+      
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + 0.2);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+      
+      if (type === 'card') {
+        setTimeout(() => {
+          const ctx2 = new AudioContextClass();
+          const osc2 = ctx2.createOscillator();
+          const gain2 = ctx2.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(1100, ctx2.currentTime);
+          osc2.frequency.linearRampToValueAtTime(1300, ctx2.currentTime + 0.15);
+          gain2.gain.setValueAtTime(0, ctx2.currentTime);
+          gain2.gain.linearRampToValueAtTime(0.15, ctx2.currentTime + 0.05);
+          gain2.gain.setValueAtTime(0.15, ctx2.currentTime + 0.2);
+          gain2.gain.linearRampToValueAtTime(0, ctx2.currentTime + 0.25);
+          osc2.connect(gain2);
+          gain2.connect(ctx2.destination);
+          osc2.start();
+          osc2.stop(ctx2.currentTime + 0.3);
+        }, 350);
+      }
+    }
+  } catch (e) {
+    console.warn('Audio Context failed to play sound:', e);
+  }
 }

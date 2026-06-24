@@ -265,28 +265,28 @@ export const wc2026Schedule: WCMatch[] = [
     home_team: "Scotland",
     away_team: "Brazil",
     match_date: "2026-06-25",
-    match_time: "02:00"
+    match_time: "04:00"
   },
   {
     tournament_name: "FIFA WORLD CUP 2026, GROUP-C",
     home_team: "Morocco",
     away_team: "Haiti",
     match_date: "2026-06-25",
-    match_time: "02:00"
+    match_time: "04:00"
   },
   {
     tournament_name: "FIFA WORLD CUP 2026, GROUP-B",
     home_team: "Switzerland",
     away_team: "Canada",
     match_date: "2026-06-25",
-    match_time: "07:00"
+    match_time: "01:00"
   },
   {
     tournament_name: "FIFA WORLD CUP 2026, GROUP-B",
     home_team: "Bosnia",
     away_team: "Qatar",
     match_date: "2026-06-25",
-    match_time: "07:00"
+    match_time: "01:00"
   },
   {
     tournament_name: "FIFA WORLD CUP 2026, GROUP-A",
@@ -419,14 +419,14 @@ export const wc2026Schedule: WCMatch[] = [
     home_team: "Algeria",
     away_team: "Austria",
     match_date: "2026-06-28",
-    match_time: "08:00"
+    match_time: "07:00"
   },
   {
     tournament_name: "FIFA WORLD CUP 2026, GROUP-J",
     home_team: "Jordan",
     away_team: "Argentina",
     match_date: "2026-06-28",
-    match_time: "08:00"
+    match_time: "07:00"
   }
 ];
 
