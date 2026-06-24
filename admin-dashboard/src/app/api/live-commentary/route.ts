@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
-        next: { revalidate: 15 } // cache for 15 seconds to prevent rate limiting but keep it realtime
+        cache: 'no-store'
       });
       clearTimeout(timeoutId);
 
@@ -32,7 +32,8 @@ export async function GET(request: Request) {
       const data = await res.json();
       
       // Extract keyEvents and commentary
-      const keyEvents = (data.keyEvents || []).map((e: any) => ({
+      const keyEvents = (data.keyEvents || []).map((e: any, idx: number) => ({
+        id: e.id || `${e.clock?.displayValue || ''}-${e.type?.text || ''}-${e.text || ''}-${idx}`,
         clock: e.clock?.displayValue || '',
         type: e.type?.text || '',
         text: e.text || '',

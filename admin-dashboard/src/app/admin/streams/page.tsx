@@ -626,33 +626,55 @@ export default function StreamsPage() {
                           placeholder="M3U8 Streaming URL"
                           className="flex-1 px-3 py-2.5 glass-input rounded-xl text-xs"
                         />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (idx === 0) return;
-                            const newUrls = [...streamUrls];
-                            const [selected] = newUrls.splice(idx, 1);
-                            newUrls.unshift(selected);
-                            setStreamUrls(newUrls);
-                          }}
-                          className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-                            idx === 0
-                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                              : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
-                          }`}
-                          title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
-                        >
-                          <Star className="h-4 w-4" fill={idx === 0 ? "currentColor" : "none"} />
-                        </button>
-                        {streamUrls.length > 1 && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min="1"
+                            max={streamUrls.length}
+                            value={idx + 1}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val) && val >= 1 && val <= streamUrls.length) {
+                                const targetIdx = val - 1;
+                                if (targetIdx !== idx) {
+                                  const newUrls = [...streamUrls];
+                                  const [selected] = newUrls.splice(idx, 1);
+                                  newUrls.splice(targetIdx, 0, selected);
+                                  setStreamUrls(newUrls);
+                                }
+                              }
+                            }}
+                            className="w-12 px-1 py-2.5 text-center bg-slate-950 border border-slate-900 rounded-xl text-xs text-white font-extrabold focus:outline-none focus:border-slate-800"
+                            title="Set Priority Number"
+                          />
                           <button
                             type="button"
-                            onClick={() => setStreamUrls(streamUrls.filter((_, i) => i !== idx))}
-                            className="p-2.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                            onClick={() => {
+                              if (idx === 0) return;
+                              const newUrls = [...streamUrls];
+                              const [selected] = newUrls.splice(idx, 1);
+                              newUrls.unshift(selected);
+                              setStreamUrls(newUrls);
+                            }}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                              idx === 0
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
+                            }`}
+                            title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
                           >
-                            <Trash2 className="h-4 w-4 text-slate-400" />
+                            <Star className="h-4 w-4" fill={idx === 0 ? "currentColor" : "none"} />
                           </button>
-                        )}
+                          {streamUrls.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setStreamUrls(streamUrls.filter((_, i) => i !== idx))}
+                              className="p-2.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                            >
+                              <Trash2 className="h-4 w-4 text-slate-400" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

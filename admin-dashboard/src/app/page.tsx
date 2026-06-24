@@ -1505,9 +1505,19 @@ function LiveMatchEventTracker({
   });
 
   const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    if (!enableNotifications || !data?.keyEvents || data.keyEvents.length === 0) return;
+    if (!data?.keyEvents) return;
+    if (!isInitialized) {
+      if (data.keyEvents.length > 0) {
+        setLastEventId(data.keyEvents[0].id);
+      }
+      setIsInitialized(true);
+      return;
+    }
+
+    if (data.keyEvents.length === 0) return;
     const latestEvent = data.keyEvents[0];
     
     const textLower = (latestEvent.text || '').toLowerCase();
@@ -1517,7 +1527,7 @@ function LiveMatchEventTracker({
     const isFoul = typeLower.includes('foul') || textLower.includes('foul');
 
     if ((isGoal || isCard || isFoul) && latestEvent.id !== lastEventId) {
-      if (lastEventId !== null) {
+      if (enableNotifications) {
         onEventTriggered({
           id: latestEvent.id,
           text: latestEvent.text,
@@ -1527,7 +1537,7 @@ function LiveMatchEventTracker({
       }
       setLastEventId(latestEvent.id);
     }
-  }, [data, lastEventId, enableNotifications]);
+  }, [data, lastEventId, isInitialized, enableNotifications]);
 
   return null;
 }

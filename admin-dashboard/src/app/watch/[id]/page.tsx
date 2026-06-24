@@ -170,6 +170,7 @@ export default function UserWatchPage() {
   const [sessionId, setSessionId] = useState('web_session');
   const fallbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [lastEventId, setLastEventId] = useState<string | null>(null);
+  const [isCommentaryInitialized, setIsCommentaryInitialized] = useState(false);
   const [notification, setNotification] = useState<{
     id: string;
     text: string;
@@ -329,35 +330,42 @@ export default function UserWatchPage() {
 
   useEffect(() => {
     if (systemConfig?.custom_scripts?.enable_live_notifications === false) return;
-    const events = commentaryData?.keyEvents || [];
-    if (events.length > 0) {
-      const latestEvent = events[0];
-      const textLower = (latestEvent.text || '').toLowerCase();
-      const typeLower = (latestEvent.type || '').toLowerCase();
-      const isGoal = typeLower.includes('goal') || textLower.includes('goal!');
-      const isCard = typeLower.includes('card') || typeLower.includes('booking') || textLower.includes('yellow card') || textLower.includes('red card');
-      const isFoul = typeLower.includes('foul') || textLower.includes('foul');
-
-      if ((isGoal || isCard || isFoul) && latestEvent.id !== lastEventId) {
-        if (lastEventId !== null) {
-          const type: 'goal' | 'card' | 'foul' = isGoal ? 'goal' : isCard ? 'card' : 'foul';
-          setNotification({
-            id: latestEvent.id,
-            text: latestEvent.text,
-            type,
-            clock: latestEvent.clock || "0'"
-          });
-          playCelebrationSound(type);
-
-          const t = setTimeout(() => {
-            setNotification(prev => prev?.id === latestEvent.id ? null : prev);
-          }, 6000);
-          return () => clearTimeout(t);
-        }
-        setLastEventId(latestEvent.id);
+    if (!commentaryData?.keyEvents) return;
+    
+    if (!isCommentaryInitialized) {
+      if (commentaryData.keyEvents.length > 0) {
+        setLastEventId(commentaryData.keyEvents[0].id);
       }
+      setIsCommentaryInitialized(true);
+      return;
     }
-  }, [commentaryData, lastEventId, systemConfig]);
+
+    const events = commentaryData.keyEvents;
+    if (events.length === 0) return;
+    
+    const latestEvent = events[0];
+    const textLower = (latestEvent.text || '').toLowerCase();
+    const typeLower = (latestEvent.type || '').toLowerCase();
+    const isGoal = typeLower.includes('goal') || textLower.includes('goal!');
+    const isCard = typeLower.includes('card') || typeLower.includes('booking') || textLower.includes('yellow card') || textLower.includes('red card');
+    const isFoul = typeLower.includes('foul') || textLower.includes('foul');
+
+    if ((isGoal || isCard || isFoul) && latestEvent.id !== lastEventId) {
+      const type: 'goal' | 'card' | 'foul' = isGoal ? 'goal' : isCard ? 'card' : 'foul';
+      setNotification({
+        id: latestEvent.id,
+        text: latestEvent.text,
+        type,
+        clock: latestEvent.clock || "0'"
+      });
+      playCelebrationSound(type);
+
+      const t = setTimeout(() => {
+        setNotification(prev => prev?.id === latestEvent.id ? null : prev);
+      }, 6000);
+      return () => clearTimeout(t);
+    }
+  }, [commentaryData, lastEventId, isCommentaryInitialized, systemConfig]);
 
   const getAdForPlacement = (placementKey: string) => {
     const config = adsterra?.custom_scripts?.placements?.[placementKey];

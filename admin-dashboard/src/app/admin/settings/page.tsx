@@ -13,7 +13,8 @@ import {
   Globe,
   Sliders,
   Sparkles,
-  MessageSquareCode
+  MessageSquareCode,
+  Star
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -1205,6 +1206,46 @@ export default function SettingsPage() {
                         />
 
                         <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min="1"
+                            max={defaultStreams.length}
+                            value={idx + 1}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val) && val >= 1 && val <= defaultStreams.length) {
+                                const targetIdx = val - 1;
+                                if (targetIdx !== idx) {
+                                  const list = [...defaultStreams];
+                                  const [selected] = list.splice(idx, 1);
+                                  list.splice(targetIdx, 0, selected);
+                                  setDefaultStreams(list);
+                                  saveAndSyncDefaultStreams(list);
+                                }
+                              }
+                            }}
+                            className="w-12 px-1 py-1.5 text-center bg-slate-950 border border-slate-900 rounded-lg text-xs text-white font-extrabold focus:outline-none focus:border-slate-850"
+                            title="Set Priority Number"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (idx === 0) return;
+                              const list = [...defaultStreams];
+                              const [selected] = list.splice(idx, 1);
+                              list.unshift(selected);
+                              setDefaultStreams(list);
+                              saveAndSyncDefaultStreams(list);
+                            }}
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                              idx === 0
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
+                            }`}
+                            title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
+                          >
+                            <Star className="h-3.5 w-3.5" fill={idx === 0 ? "currentColor" : "none"} />
+                          </button>
                           <button
                             type="button"
                             disabled={idx === 0}
