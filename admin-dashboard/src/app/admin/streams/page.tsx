@@ -14,7 +14,9 @@ import {
   Tv, 
   Play, 
   Power,
-  AlertTriangle
+  AlertTriangle,
+  Star,
+  Search
 } from 'lucide-react';
 
 interface Match {
@@ -55,6 +57,7 @@ export default function StreamsPage() {
   const [streamUrls, setStreamUrls] = useState<{ label: string; url: string }[]>([{ label: 'Primary Server', url: '' }]);
   const [importPreviousLinks, setImportPreviousLinks] = useState('no');
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Queries
   const { data: matches = [] } = useQuery<Match[]>({
@@ -294,6 +297,14 @@ export default function StreamsPage() {
     return `${home || 'Home'} vs ${away || 'Away'} (${match.match_date})`;
   };
 
+  const filteredStreams = streams.filter((stream) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase().trim();
+    const matchTitle = getMatchTitle(stream.match).toLowerCase();
+    const sName = (stream.stream_name || '').toLowerCase();
+    return matchTitle.includes(query) || sName.includes(query);
+  });
+
   return (
     <AdminLayout>
       <div className="space-y-8">
@@ -381,14 +392,42 @@ export default function StreamsPage() {
             <p className="text-slate-400 text-sm mt-1">Configure M3U8 sources to enable streaming playback on the mobile application.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6">
-            {streams.map((stream) => (
-              <div 
-                key={stream.id} 
-                className={`glass-panel p-6 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all duration-200 ${
-                  stream.is_enabled ? 'border-card-border hover:border-slate-700' : 'border-red-950/20 opacity-60'
-                }`}
-              >
+          <div className="space-y-6">
+            {/* Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search streams by match or stream name..."
+                className="w-full px-5 py-3.5 pl-12 glass-input rounded-2xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all border border-card-border shadow-inner"
+              />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-all text-[10px] font-bold uppercase tracking-wider bg-slate-950 border border-slate-900 rounded-lg px-2.5 py-1 cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {filteredStreams.length === 0 ? (
+              <div className="glass-panel p-12 text-center rounded-2xl border border-card-border">
+                <Tv className="h-12 w-12 text-slate-700 mx-auto mb-4 animate-pulse" />
+                <h3 className="text-lg font-bold text-white uppercase">No Streams Match Your Query</h3>
+                <p className="text-slate-400 text-sm mt-1">Try a different team name or search keyword.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {filteredStreams.map((stream) => (
+                  <div 
+                    key={stream.id} 
+                    className={`glass-panel p-6 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all duration-200 ${
+                      stream.is_enabled ? 'border-card-border hover:border-slate-700' : 'border-red-950/20 opacity-60'
+                    }`}
+                  >
                 <div className="flex items-center gap-4">
                   <div className={`p-4 bg-slate-900/60 border border-slate-800 rounded-2xl shrink-0 ${
                     stream.is_enabled ? 'text-emerald-accent' : 'text-slate-500'
@@ -461,6 +500,8 @@ export default function StreamsPage() {
                 </div>
               </div>
             ))}
+            </div>
+          )}
           </div>
         )}
 
@@ -585,11 +626,29 @@ export default function StreamsPage() {
                           placeholder="M3U8 Streaming URL"
                           className="flex-1 px-3 py-2.5 glass-input rounded-xl text-xs"
                         />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (idx === 0) return;
+                            const newUrls = [...streamUrls];
+                            const [selected] = newUrls.splice(idx, 1);
+                            newUrls.unshift(selected);
+                            setStreamUrls(newUrls);
+                          }}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                            idx === 0
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                              : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
+                          }`}
+                          title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
+                        >
+                          <Star className="h-4 w-4" fill={idx === 0 ? "currentColor" : "none"} />
+                        </button>
                         {streamUrls.length > 1 && (
                           <button
                             type="button"
                             onClick={() => setStreamUrls(streamUrls.filter((_, i) => i !== idx))}
-                            className="p-2 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                            className="p-2.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
                           >
                             <Trash2 className="h-4 w-4 text-slate-400" />
                           </button>
