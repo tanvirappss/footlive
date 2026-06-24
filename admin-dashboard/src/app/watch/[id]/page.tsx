@@ -435,24 +435,55 @@ export default function UserWatchPage() {
   useEffect(() => {
     if (audioAnnouncements.length === 0) return;
 
-    // Check if audio has already played in this client-side JS load context
-    if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
-      return;
+    // Read play mode from system config
+    const playMode = systemConfig?.custom_scripts?.audio_play_mode || 'session_limit';
+    const selectedAudioId = systemConfig?.custom_scripts?.selected_audio_id;
+
+    if (playMode === 'off') return;
+
+    // In 'refresh' mode: play every time (skip all guards)
+    // In 'session_limit' mode: max 2 plays per browser session
+    // In 'limit_5' mode: max 5 plays per calendar day
+    
+    if (playMode !== 'refresh') {
+      // Check if audio has already played in this client-side JS load context
+      if (typeof window !== 'undefined' && (window as any).__audioPlayedInCurrentLoad) {
+        return;
+      }
     }
 
-    // Read session play count (max 2 plays per session)
-    let playCount = 0;
-    try {
-      const stored = sessionStorage.getItem('audio_play_count');
-      if (stored) playCount = parseInt(stored, 10);
-    } catch (e) {
-      console.error(e);
+    if (playMode === 'limit_5') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      let dailyPlay = { date: todayStr, count: 0 };
+      try {
+        const stored = localStorage.getItem('daily_audio_play');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.date === todayStr) {
+            dailyPlay = parsed;
+          }
+        }
+      } catch (e) {}
+      if (dailyPlay.count >= 5) return;
+    } else if (playMode === 'session_limit') {
+      let playCount = 0;
+      try {
+        const stored = sessionStorage.getItem('audio_play_count');
+        if (stored) playCount = parseInt(stored, 10);
+      } catch (e) {}
+      if (playCount >= 2) return;
     }
-    if (playCount >= 2) return;
 
-    const activeAudio = audioAnnouncements
-      .filter((a: any) => new Date(a.play_at).getTime() <= Date.now())
-      .pop(); // Get the most recently scheduled past audio
+    let activeAudio: any = null;
+    if (selectedAudioId) {
+      activeAudio = audioAnnouncements.find((a: any) => a.id === selectedAudioId);
+    }
+    // Fallback to the latest past audio if selected one is not found or not set
+    if (!activeAudio) {
+      activeAudio = audioAnnouncements
+        .filter((a: any) => new Date(a.play_at).getTime() <= Date.now())
+        .pop(); // Get the most recently scheduled past audio
+    }
 
     let currentAudioElement: HTMLAudioElement | null = null;
     let playTimeout: NodeJS.Timeout | null = null;
@@ -460,14 +491,25 @@ export default function UserWatchPage() {
 
     const playAudioUrl = (url: string) => {
       // Check play count limit again before playing
-      let currentPlayCount = 0;
-      try {
-        const stored = sessionStorage.getItem('audio_play_count');
-        if (stored) currentPlayCount = parseInt(stored, 10);
-      } catch (e) {
-        console.error(e);
+      if (playMode === 'limit_5') {
+        const todayStr = new Date().toISOString().split('T')[0];
+        let dailyPlay = { date: todayStr, count: 0 };
+        try {
+          const stored = localStorage.getItem('daily_audio_play');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed && parsed.date === todayStr) dailyPlay = parsed;
+          }
+        } catch (e) {}
+        if (dailyPlay.count >= 5) return;
+      } else if (playMode === 'session_limit') {
+        let currentPlayCount = 0;
+        try {
+          const stored = sessionStorage.getItem('audio_play_count');
+          if (stored) currentPlayCount = parseInt(stored, 10);
+        } catch (e) {}
+        if (currentPlayCount >= 2) return;
       }
-      if (currentPlayCount >= 2) return;
 
       if (currentAudioElement) {
         currentAudioElement.pause();
@@ -483,7 +525,22 @@ export default function UserWatchPage() {
         playPromise
           .then(() => {
             try {
-              sessionStorage.setItem('audio_play_count', String(currentPlayCount + 1));
+              if (playMode === 'limit_5') {
+                const todayStr = new Date().toISOString().split('T')[0];
+                let dailyPlay = { date: todayStr, count: 0 };
+                const stored = localStorage.getItem('daily_audio_play');
+                if (stored) {
+                  const parsed = JSON.parse(stored);
+                  if (parsed && parsed.date === todayStr) dailyPlay = parsed;
+                }
+                dailyPlay.count += 1;
+                localStorage.setItem('daily_audio_play', JSON.stringify(dailyPlay));
+              } else if (playMode === 'session_limit') {
+                let currentPlayCount = 0;
+                const stored = sessionStorage.getItem('audio_play_count');
+                if (stored) currentPlayCount = parseInt(stored, 10);
+                sessionStorage.setItem('audio_play_count', String(currentPlayCount + 1));
+              }
               (window as any).__audioPlayedInCurrentLoad = true;
             } catch (e) {
               console.error(e);
@@ -542,7 +599,7 @@ export default function UserWatchPage() {
         currentAudioElement = null;
       }
     };
-  }, [audioAnnouncements]);
+  }, [audioAnnouncements, systemConfig]);
 
   if (isLoading) {
     return (

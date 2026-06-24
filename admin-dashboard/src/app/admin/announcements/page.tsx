@@ -518,6 +518,7 @@ export default function AnnouncementsPage() {
                       onChange={(e) => setAudioPlayMode(e.target.value)}
                       className="w-full px-4 py-2.5 glass-input rounded-xl text-xs text-white appearance-none cursor-pointer"
                     >
+                      <option value="off">Off / Disable Audio Alarm</option>
                       <option value="session_limit">Limit to Max 2 Plays per Session (Default)</option>
                       <option value="refresh">Play on Every Refresh / Page Load</option>
                       <option value="limit_5">Limit to Max 5 Plays per Day per User</option>

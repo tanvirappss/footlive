@@ -83,6 +83,8 @@ export default function UserHomePage() {
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [upcomingSearchQuery, setUpcomingSearchQuery] = useState('');
+  const [finishedSearchQuery, setFinishedSearchQuery] = useState('');
 
   const handleChannelSelect = async (chan: any) => {
     const isM3u = chan.url.toLowerCase().includes('.m3u') && !chan.url.toLowerCase().includes('.m3u8');
@@ -303,6 +305,8 @@ export default function UserHomePage() {
     // Read play mode from system config
     const playMode = systemConfig?.custom_scripts?.audio_play_mode || 'session_limit';
     const selectedAudioId = systemConfig?.custom_scripts?.selected_audio_id;
+
+    if (playMode === 'off') return;
 
     // In 'refresh' mode: play every time (skip all guards)
     // In 'session_limit' mode: max 2 plays per browser session
@@ -551,7 +555,25 @@ export default function UserHomePage() {
     )
     .sort((a, b) => new Date(b.match_timestamp).getTime() - new Date(a.match_timestamp).getTime());
 
-  const currentList = whenTab(activeTab, liveList, upcomingList, finishedList);
+  const filterMatches = (list: Match[], query: string) => {
+    if (!query) return list;
+    const lowerQuery = query.toLowerCase().trim();
+    return list.filter(m => {
+      const homeName = (m.home_team?.name || m.home_team_custom_name || '').toLowerCase();
+      const awayName = (m.away_team?.name || m.away_team_custom_name || '').toLowerCase();
+      const tournament = (m.tournament_name || '').toLowerCase();
+      const matchDate = (m.match_date || '').toLowerCase();
+      return homeName.includes(lowerQuery) || 
+             awayName.includes(lowerQuery) || 
+             tournament.includes(lowerQuery) || 
+             matchDate.includes(lowerQuery);
+    });
+  };
+
+  const filteredUpcoming = filterMatches(upcomingList, upcomingSearchQuery);
+  const filteredFinished = filterMatches(finishedList, finishedSearchQuery);
+
+  const currentList = whenTab(activeTab, liveList, filteredUpcoming, filteredFinished);
 
   function whenTab(tab: string, live: Match[], upcoming: Match[], finished: Match[]) {
     if (tab === 'live') return live;
@@ -814,140 +836,186 @@ export default function UserHomePage() {
               <Loader2 className="h-8 w-8 text-emerald-accent animate-spin" />
               <p className="text-sm text-slate-400 mt-4">Loading streaming schedule...</p>
             </div>
-          ) : currentList.length === 0 ? (
-            <div className="glass-panel p-16 text-center rounded-3xl border border-card-border">
-              <Tv className="h-12 w-12 text-slate-700 mx-auto mb-4" />
-              <h3 className="text-lg font-black text-white uppercase font-bangla">{noMatchesTitle}</h3>
-              <p className="text-sm text-slate-400 mt-1 font-bangla">{noMatchesDesc}</p>
-            </div>
           ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {currentList.flatMap((match, index) => {
-              const homeFlag = getTeamFlag(match, 'home');
-              const awayFlag = getTeamFlag(match, 'away');
-              const homeName = getTeamName(match, 'home') || 'Home Team';
-              const awayName = getTeamName(match, 'away') || 'Away Team';
-              
-              const isLive = isMatchLive(match);
-              const isUpcoming = isMatchUpcoming(match);
-
-              const elements = [
-                <div 
-                  key={match.id} 
-                  className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-6 hover:border-slate-800 transition-all duration-200"
-                >
-                  <div className="flex justify-between items-start">
-                    <span className="px-2.5 py-0.5 bg-slate-900 border border-slate-800 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-400">
-                      {match.tournament_name}
-                    </span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                      isLive 
-                        ? 'bg-red-500/10 text-red-400 border-red-500/25 animate-pulse'
-                        : isUpcoming 
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
-                          : 'bg-slate-800 text-slate-500 border-slate-700'
-                    }`}>
-                      {isLive ? `LIVE ${match.live_minute ? `• ${match.live_minute}` : ''}` : match.status}
-                    </span>
-                  </div>
-
-                  {/* Teams and scores */}
-                  <div className="flex items-center justify-between text-center gap-1.5">
-                    <div className="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
-                      <div className="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
-                        {homeFlag ? (
-                          <img src={homeFlag} alt={homeName} className="h-full w-full object-cover rounded-lg" />
-                        ) : (
-                          <span className="text-xs text-slate-500 font-black">HOME</span>
-                        )}
-                      </div>
-                      <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{homeName}</span>
-                    </div>
-
-                    <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
-                      {(isLive || match.status === 'finished' || (autoFinishEnabled && Date.now() >= (new Date(match.match_timestamp).getTime() + matchDurationMins * 60 * 1000))) ? (
-                        <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
-                      ) : (
-                        <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>
-                      )}
-                    </div>
-
-                    <div className="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
-                      <div className="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
-                        {awayFlag ? (
-                          <img src={awayFlag} alt={awayName} className="h-full w-full object-cover rounded-lg" />
-                        ) : (
-                          <span className="text-xs text-slate-500 font-black">AWAY</span>
-                        )}
-                      </div>
-                      <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{awayName}</span>
-                    </div>
-                  </div>
-
-                  {/* Goal Scorers details */}
-                  {(match.home_scorers || match.away_scorers) && (
-                    <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-900/50 flex justify-between gap-2 mt-1">
-                      <div className="w-[45%] text-left text-slate-300 font-medium break-words">
-                        {match.home_scorers || ""}
-                      </div>
-                      <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
-                      <div className="w-[45%] text-right text-slate-300 font-medium break-words">
-                        {match.away_scorers || ""}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Countdown Timer for Upcoming Matches */}
-                  {isUpcoming && <WebCountdown targetTime={match.match_timestamp} />}
-
-                  {/* Stadium & Kickoff Info */}
-                  <div className="text-center space-y-1">
-                    <p className="text-slate-400 text-xs font-bold flex items-center justify-center gap-1">
-                      <MapPin className="h-3.5 w-3.5 text-emerald-accent" />
-                      {match.stadium_name}
-                    </p>
-                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
-                      <CalendarIcon className="h-3 w-3" />
-                      {match.match_date} • {match.match_time.substring(0, 5)}
-                    </p>
-                  </div>
-
-                  {/* Controls */}
-                  <div className="flex gap-4 border-t border-card-border pt-4">
-                    <Link
-                      href={`/details/${match.id}`}
-                      className="flex-1 py-3 border border-slate-850 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
+            <>
+              {/* Search Bar for Upcoming or Finished Matches */}
+              {(activeTab === 'upcoming' || activeTab === 'finished') && (
+                <div className="mb-6 relative">
+                  <input
+                    type="text"
+                    value={activeTab === 'upcoming' ? upcomingSearchQuery : finishedSearchQuery}
+                    onChange={(e) => {
+                      if (activeTab === 'upcoming') {
+                        setUpcomingSearchQuery(e.target.value);
+                      } else {
+                        setFinishedSearchQuery(e.target.value);
+                      }
+                    }}
+                    placeholder={activeTab === 'upcoming' ? "অনুসন্ধান করুন (যেমন: Brazil, Group-A, 2026-06-25)..." : "অনুসন্ধান করুন (যেমন: Argentina, Brazil)..."}
+                    className="w-full px-5 py-3.5 pl-12 glass-input rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-slate-700 transition-all border border-card-border shadow-inner font-bangla"
+                  />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                  {(activeTab === 'upcoming' ? upcomingSearchQuery : finishedSearchQuery) && (
+                    <button
+                      onClick={() => {
+                        if (activeTab === 'upcoming') {
+                          setUpcomingSearchQuery('');
+                        } else {
+                          setFinishedSearchQuery('');
+                        }
+                      }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-all text-xs font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1"
                     >
-                      <Info className="h-4 w-4" />
-                      Details
-                    </Link>
-                    {(isLive || isUpcoming) && (
-                      <Link
-                        href={`/watch/${match.id}`}
-                        className="flex-1 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-black uppercase text-xs tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
-                      >
-                        <Tv className="h-4 w-4" />
-                        {isLive ? 'Watch Live' : 'Watch Feed'}
-                      </Link>
-                    )}
-                  </div>
+                      Clear
+                    </button>
+                  )}
                 </div>
-              ];
+              )}
 
-              if ((index + 1) % 4 === 0) {
-                const ad = getAdForPlacement('betweenMatches');
-                if (ad) {
-                  elements.push(
-                    <div key={`ad-${index}`} className="md:col-span-2 w-full flex justify-center py-4">
-                      {ad}
-                    </div>
-                  );
-                }
-              }
-              return elements;
-            })}
-          </div>
-        )
+              {currentList.length === 0 ? (
+                <div className="glass-panel p-16 text-center rounded-3xl border border-card-border">
+                  <Tv className="h-12 w-12 text-slate-700 mx-auto mb-4" />
+                  <h3 className="text-lg font-black text-white uppercase font-bangla">
+                    {((activeTab === 'upcoming' && upcomingSearchQuery) || (activeTab === 'finished' && finishedSearchQuery))
+                      ? "অনুসন্ধানের সাথে মিল পাওয়া যায়নি!"
+                      : noMatchesTitle}
+                  </h3>
+                  <p className="text-sm text-slate-400 mt-1 font-bangla">
+                    {((activeTab === 'upcoming' && upcomingSearchQuery) || (activeTab === 'finished' && finishedSearchQuery))
+                      ? "দয়া করে অন্য কোনো দলের নাম বা কি-ওয়ার্ড দিয়ে চেষ্টা করুন।"
+                      : noMatchesDesc}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {currentList.flatMap((match, index) => {
+                    const homeFlag = getTeamFlag(match, 'home');
+                    const awayFlag = getTeamFlag(match, 'away');
+                    const homeName = getTeamName(match, 'home') || 'Home Team';
+                    const awayName = getTeamName(match, 'away') || 'Away Team';
+                    
+                    const isLive = isMatchLive(match);
+                    const isUpcoming = isMatchUpcoming(match);
+
+                    const elements = [
+                      <div 
+                        key={match.id} 
+                        className="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-6 hover:border-slate-800 transition-all duration-200"
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className="px-2.5 py-0.5 bg-slate-900 border border-slate-800 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-400">
+                            {match.tournament_name}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                            isLive 
+                              ? 'bg-red-500/10 text-red-400 border-red-500/25 animate-pulse'
+                              : isUpcoming 
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                                : 'bg-slate-800 text-slate-500 border-slate-700'
+                          }`}>
+                            {isLive ? `LIVE ${match.live_minute ? `• ${match.live_minute}` : ''}` : match.status}
+                          </span>
+                        </div>
+
+                        {/* Teams and scores */}
+                        <div className="flex items-center justify-between text-center gap-1.5">
+                          <div className="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
+                            <div className="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
+                              {homeFlag ? (
+                                <img src={homeFlag} alt={homeName} className="h-full w-full object-cover rounded-lg" />
+                              ) : (
+                                <span className="text-xs text-slate-500 font-black">HOME</span>
+                              )}
+                            </div>
+                            <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{homeName}</span>
+                          </div>
+
+                          <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
+                            {(isLive || match.status === 'finished' || (autoFinishEnabled && Date.now() >= (new Date(match.match_timestamp).getTime() + matchDurationMins * 60 * 1000))) ? (
+                              <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
+                            ) : (
+                              <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>
+                            )}
+                          </div>
+
+                          <div className="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
+                            <div className="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
+                              {awayFlag ? (
+                                <img src={awayFlag} alt={awayName} className="h-full w-full object-cover rounded-lg" />
+                              ) : (
+                                <span className="text-xs text-slate-500 font-black">AWAY</span>
+                              )}
+                            </div>
+                            <span className="font-extrabold text-white text-sm line-clamp-1 w-full">{awayName}</span>
+                          </div>
+                        </div>
+
+                        {/* Goal Scorers details */}
+                        {(match.home_scorers || match.away_scorers) && (
+                          <div className="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-900/50 flex justify-between gap-2 mt-1">
+                            <div className="w-[45%] text-left text-slate-300 font-medium break-words">
+                              {match.home_scorers || ""}
+                            </div>
+                            <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+                            <div className="w-[45%] text-right text-slate-300 font-medium break-words">
+                              {match.away_scorers || ""}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Countdown Timer for Upcoming Matches */}
+                        {isUpcoming && <WebCountdown targetTime={match.match_timestamp} />}
+
+                        {/* Stadium & Kickoff Info */}
+                        <div className="text-center space-y-1">
+                          <p className="text-slate-400 text-xs font-bold flex items-center justify-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 text-emerald-accent" />
+                            {match.stadium_name}
+                          </p>
+                          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
+                            <CalendarIcon className="h-3 w-3" />
+                            {match.match_date} • {match.match_time.substring(0, 5)}
+                          </p>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex gap-4 border-t border-card-border pt-4">
+                          <Link
+                            href={`/details/${match.id}`}
+                            className="flex-1 py-3 border border-slate-850 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
+                          >
+                            <Info className="h-4 w-4" />
+                            Details
+                          </Link>
+                          {(isLive || isUpcoming) && (
+                            <Link
+                              href={`/watch/${match.id}`}
+                              className="flex-1 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-black uppercase text-xs tracking-wider rounded-xl transition-all flex items-center justify-center gap-2"
+                            >
+                              <Tv className="h-4 w-4" />
+                              {isLive ? 'Watch Live' : 'Watch Feed'}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    ];
+
+                    if ((index + 1) % 4 === 0) {
+                      const ad = getAdForPlacement('betweenMatches');
+                      if (ad) {
+                        elements.push(
+                          <div key={`ad-${index}`} className="md:col-span-2 w-full flex justify-center py-4">
+                            {ad}
+                          </div>
+                        );
+                      }
+                    }
+                    return elements;
+                  })}
+                </div>
+              )}
+            </>
+          )
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* TV Stream Player */}
