@@ -427,6 +427,34 @@ export const wc2026Schedule: WCMatch[] = [
     away_team: "Argentina",
     match_date: "2026-06-28",
     match_time: "07:00"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, GROUP-F",
+    home_team: "South Africa",
+    away_team: "Canada",
+    match_date: "2026-06-29",
+    match_time: "01:00"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, GROUP-F",
+    home_team: "Czechia",
+    away_team: "South Korea",
+    match_date: "2026-06-29",
+    match_time: "01:00"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, GROUP-E",
+    home_team: "Haiti",
+    away_team: "Scotland",
+    match_date: "2026-06-14",
+    match_time: "07:00"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, GROUP-E",
+    home_team: "Australia",
+    away_team: "Turkey",
+    match_date: "2026-06-14",
+    match_time: "10:00"
   }
 ];
 

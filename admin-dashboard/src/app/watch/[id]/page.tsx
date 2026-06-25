@@ -86,11 +86,41 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   return false;
 }
 
+// Shared AudioContext for mobile compatibility (reuse instead of creating new ones)
+let _sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  try {
+    if (_sharedAudioCtx && _sharedAudioCtx.state !== 'closed') {
+      if (_sharedAudioCtx.state === 'suspended') {
+        _sharedAudioCtx.resume().catch(() => {});
+      }
+      return _sharedAudioCtx;
+    }
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return null;
+    _sharedAudioCtx = new AudioContextClass();
+    return _sharedAudioCtx;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Initialize AudioContext on first user interaction (required for mobile)
+if (typeof window !== 'undefined') {
+  const initAudioOnInteraction = () => {
+    getAudioContext();
+    window.removeEventListener('touchstart', initAudioOnInteraction);
+    window.removeEventListener('click', initAudioOnInteraction);
+  };
+  window.addEventListener('touchstart', initAudioOnInteraction, { once: true });
+  window.addEventListener('click', initAudioOnInteraction, { once: true });
+}
+
 function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
     
     if (type === 'goal') {
       const playHorn = (freq: number, detuneVal: number) => {
@@ -135,20 +165,19 @@ function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
       
       if (type === 'card') {
         setTimeout(() => {
-          const ctx2 = new AudioContextClass();
-          const osc2 = ctx2.createOscillator();
-          const gain2 = ctx2.createGain();
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
           osc2.type = 'sine';
-          osc2.frequency.setValueAtTime(1100, ctx2.currentTime);
-          osc2.frequency.linearRampToValueAtTime(1300, ctx2.currentTime + 0.15);
-          gain2.gain.setValueAtTime(0, ctx2.currentTime);
-          gain2.gain.linearRampToValueAtTime(0.15, ctx2.currentTime + 0.05);
-          gain2.gain.setValueAtTime(0.15, ctx2.currentTime + 0.2);
-          gain2.gain.linearRampToValueAtTime(0, ctx2.currentTime + 0.25);
+          osc2.frequency.setValueAtTime(1100, ctx.currentTime);
+          osc2.frequency.linearRampToValueAtTime(1300, ctx.currentTime + 0.15);
+          gain2.gain.setValueAtTime(0, ctx.currentTime);
+          gain2.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+          gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.2);
+          gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
           osc2.connect(gain2);
-          gain2.connect(ctx2.destination);
+          gain2.connect(ctx.destination);
           osc2.start();
-          osc2.stop(ctx2.currentTime + 0.3);
+          osc2.stop(ctx.currentTime + 0.3);
         }, 350);
       }
     }
@@ -222,20 +251,47 @@ export default function UserWatchPage() {
   });
 
   // Fetch real-time live score updates for this match date to get espnEventId and latest live scores
+  // Query match date + adjacent day to handle timezone edge cases
   const matchDateStr = match ? (() => {
     const d = new Date(match.match_timestamp);
     return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
   })() : null;
 
+  const adjacentDateStr = match ? (() => {
+    const d = new Date(match.match_timestamp);
+    // If match is in first half of UTC day, also check previous day; otherwise check next day
+    const adj = new Date(d);
+    if (d.getUTCHours() < 12) {
+      adj.setUTCDate(adj.getUTCDate() - 1);
+    } else {
+      adj.setUTCDate(adj.getUTCDate() + 1);
+    }
+    return `${adj.getUTCFullYear()}${String(adj.getUTCMonth() + 1).padStart(2, '0')}${String(adj.getUTCDate()).padStart(2, '0')}`;
+  })() : null;
+
   const { data: espnScores = [] } = useQuery<any[]>({
-    queryKey: ['watch-espn-scores', matchDateStr],
+    queryKey: ['watch-espn-scores', matchDateStr, adjacentDateStr],
     queryFn: async () => {
       if (!matchDateStr) return [];
       try {
-        const res = await fetch(`/api/live-scores?date=${matchDateStr}`);
-        if (!res.ok) return [];
-        const data = await res.json();
-        return data.scores || [];
+        const [mainRes, adjRes] = await Promise.all([
+          fetch(`/api/live-scores?date=${matchDateStr}`),
+          adjacentDateStr ? fetch(`/api/live-scores?date=${adjacentDateStr}`).catch(() => null) : Promise.resolve(null)
+        ]);
+        
+        const mainData = mainRes.ok ? await mainRes.json() : { scores: [] };
+        const adjData = adjRes && adjRes.ok ? await adjRes.json() : { scores: [] };
+        
+        // Deduplicate by espnEventId
+        const seen = new Set<string>();
+        const combined: any[] = [];
+        for (const s of [...(mainData.scores || []), ...(adjData.scores || [])]) {
+          if (!seen.has(s.espnEventId)) {
+            seen.add(s.espnEventId);
+            combined.push(s);
+          }
+        }
+        return combined;
       } catch (e) {
         return [];
       }

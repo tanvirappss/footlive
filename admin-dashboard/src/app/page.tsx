@@ -1593,11 +1593,42 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   return false;
 }
 
+// Shared AudioContext for mobile compatibility (reuse instead of creating new ones)
+let _sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  try {
+    if (_sharedAudioCtx && _sharedAudioCtx.state !== 'closed') {
+      // Resume if suspended (mobile browsers suspend after tab switch)
+      if (_sharedAudioCtx.state === 'suspended') {
+        _sharedAudioCtx.resume().catch(() => {});
+      }
+      return _sharedAudioCtx;
+    }
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return null;
+    _sharedAudioCtx = new AudioContextClass();
+    return _sharedAudioCtx;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Initialize AudioContext on first user interaction (required for mobile)
+if (typeof window !== 'undefined') {
+  const initAudioOnInteraction = () => {
+    getAudioContext();
+    window.removeEventListener('touchstart', initAudioOnInteraction);
+    window.removeEventListener('click', initAudioOnInteraction);
+  };
+  window.addEventListener('touchstart', initAudioOnInteraction, { once: true });
+  window.addEventListener('click', initAudioOnInteraction, { once: true });
+}
+
 function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
     
     if (type === 'goal') {
       const playHorn = (freq: number, detuneVal: number) => {
@@ -1642,20 +1673,19 @@ function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
       
       if (type === 'card') {
         setTimeout(() => {
-          const ctx2 = new AudioContextClass();
-          const osc2 = ctx2.createOscillator();
-          const gain2 = ctx2.createGain();
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
           osc2.type = 'sine';
-          osc2.frequency.setValueAtTime(1100, ctx2.currentTime);
-          osc2.frequency.linearRampToValueAtTime(1300, ctx2.currentTime + 0.15);
-          gain2.gain.setValueAtTime(0, ctx2.currentTime);
-          gain2.gain.linearRampToValueAtTime(0.15, ctx2.currentTime + 0.05);
-          gain2.gain.setValueAtTime(0.15, ctx2.currentTime + 0.2);
-          gain2.gain.linearRampToValueAtTime(0, ctx2.currentTime + 0.25);
+          osc2.frequency.setValueAtTime(1100, ctx.currentTime);
+          osc2.frequency.linearRampToValueAtTime(1300, ctx.currentTime + 0.15);
+          gain2.gain.setValueAtTime(0, ctx.currentTime);
+          gain2.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+          gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.2);
+          gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
           osc2.connect(gain2);
-          gain2.connect(ctx2.destination);
+          gain2.connect(ctx.destination);
           osc2.start();
-          osc2.stop(ctx2.currentTime + 0.3);
+          osc2.stop(ctx.currentTime + 0.3);
         }, 350);
       }
     }

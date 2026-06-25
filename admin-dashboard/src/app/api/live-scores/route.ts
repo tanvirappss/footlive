@@ -257,10 +257,27 @@ export async function GET(request: Request) {
     } else if (dateParam) {
       allScores = await fetchESPNScores(dateParam);
     } else {
-      // Default: fetch today's scores
+      // Default: fetch today's AND yesterday's scores to cover timezone edge cases
+      // (e.g., BDT is UTC+6, so a match at 2AM BDT = 8PM UTC previous day)
       const now = new Date();
       const todayStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-      allScores = await fetchESPNScores(todayStr);
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = `${yesterday.getFullYear()}${String(yesterday.getMonth() + 1).padStart(2, '0')}${String(yesterday.getDate()).padStart(2, '0')}`;
+      
+      const [todayScores, yesterdayScores] = await Promise.all([
+        fetchESPNScores(todayStr),
+        fetchESPNScores(yesterdayStr).catch(() => [] as MatchScore[])
+      ]);
+      
+      // Deduplicate by espnEventId
+      const seen = new Set<string>();
+      for (const s of [...todayScores, ...yesterdayScores]) {
+        if (!seen.has(s.espnEventId)) {
+          seen.add(s.espnEventId);
+          allScores.push(s);
+        }
+      }
     }
 
     return NextResponse.json({ success: true, scores: allScores });
