@@ -70,12 +70,77 @@ export default function UserHomePage() {
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({});
   const [selectedChannelUrl, setSelectedChannelUrl] = useState<string | null>(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string>('');
-  const [notification, setNotification] = useState<{
-    id: string;
-    text: string;
-    type: 'goal' | 'card' | 'foul';
-    clock: string;
-  } | null>(null);
+  const [notificationsList, setNotificationsList] = useState<any[]>([]);
+  const [activeToasts, setActiveToasts] = useState<any[]>([]);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('live_notifications_history');
+        if (stored) {
+          setNotificationsList(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error('Failed to load notifications from localStorage', e);
+      }
+    }
+  }, []);
+
+  // Save to localStorage
+  const saveNotifications = (list: any[] | ((prev: any[]) => any[])) => {
+    if (typeof list === 'function') {
+      setNotificationsList(prev => {
+        const updated = list(prev);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('live_notifications_history', JSON.stringify(updated));
+          } catch (e) {}
+        }
+        return updated;
+      });
+    } else {
+      setNotificationsList(list);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('live_notifications_history', JSON.stringify(list));
+        } catch (e) {}
+      }
+    }
+  };
+
+  const handleEventTriggered = (event: { id: string; text: string; type: 'goal' | 'card' | 'foul'; clock: string; matchTitle?: string }) => {
+    const newItem = {
+      id: event.id,
+      text: event.text,
+      type: event.type,
+      clock: event.clock,
+      matchTitle: event.matchTitle,
+      timestamp: Date.now()
+    };
+
+    // Play sound
+    playCelebrationSound(event.type);
+
+    // Save to history list
+    saveNotifications(prev => {
+      if (prev.some(item => item.id === event.id)) return prev;
+      return [newItem, ...prev].slice(0, 50);
+    });
+
+    // Add to active toasts
+    setActiveToasts(prev => {
+      if (prev.some(toast => toast.id === event.id)) return prev;
+      return [...prev, newItem];
+    });
+
+    // Auto dismiss after 5 seconds
+    setTimeout(() => {
+      setActiveToasts(prev => prev.filter(toast => toast.id !== event.id));
+    }, 5000);
+  };
+
 
   // M3U Playlist States
   const [selectedPlaylist, setSelectedPlaylist] = useState<any | null>(null);
@@ -519,6 +584,18 @@ export default function UserHomePage() {
 
   const isMatchLive = (m: Match) => {
     if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
+
+    // Direct ESPN live status override
+    const homeN = m.home_team_id ? m.home_team?.name : m.home_team_custom_name;
+    const awayN = m.away_team_id ? m.away_team?.name : m.away_team_custom_name;
+    const esScore = espnScores.find(es => 
+      (teamsMatch(homeN || '', es.homeTeam) && teamsMatch(awayN || '', es.awayTeam)) ||
+      (teamsMatch(homeN || '', es.awayTeam) && teamsMatch(awayN || '', es.homeTeam))
+    );
+    if (esScore && esScore.status === 'in') {
+      return true;
+    }
+
     const kickoff = new Date(m.match_timestamp).getTime();
     if (autoFinishEnabled && Date.now() >= (kickoff + matchDurationMins * 60 * 1000)) return false; // Finished dynamically
 
@@ -1398,47 +1475,157 @@ export default function UserHomePage() {
             <LiveMatchEventTracker 
               key={m.id}
               espnEventId={eventId}
+              matchTitle={`${homeN} vs ${awayN}`}
               enableNotifications={systemConfig?.custom_scripts?.enable_live_notifications !== false}
-              onEventTriggered={(event) => {
-                setNotification(event);
-                playCelebrationSound(event.type);
-                
-                setTimeout(() => {
-                  setNotification(prev => prev?.id === event.id ? null : prev);
-                }, 4000);
-              }}
+              onEventTriggered={handleEventTriggered}
             />
           );
         })
       }
 
-      {/* Live event notification popup - top of page */}
-      {notification && (
-        <div 
-          className="fixed top-4 left-1/2 -translate-x-1/2 max-w-md w-[calc(100%-2rem)] bg-slate-950/95 border rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl z-[9999] flex items-start gap-3 animate-slideDown"
-          style={{ borderColor: notification.type === 'goal' ? '#10b981' : notification.type === 'card' ? '#f59e0b' : '#64748b' }}
-        >
-          <span className="text-2xl shrink-0">
-            {notification.type === 'goal' ? '⚽' : notification.type === 'card' ? '🟨' : '🔔'}
-          </span>
-          <div className="flex-1 space-y-1 min-w-0">
-            <div className="flex justify-between items-center">
-              <span className={`text-[10px] font-black uppercase tracking-widest ${
-                notification.type === 'goal' ? 'text-emerald-accent' : notification.type === 'card' ? 'text-amber-500' : 'text-slate-400'
-              }`}>
-                {notification.type === 'goal' ? '⚡ GOAL ALERT!' : notification.type === 'card' ? '🟡 CARD ISSUED' : '📢 FOUL REGISTERED'} ({notification.clock})
-              </span>
-              <button 
-                onClick={() => setNotification(null)}
-                className="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer ml-2 shrink-0"
-              >
-                ✕
-              </button>
+      {/* Floating active toasts overlay - top-right (won't cover central elements) */}
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 max-w-md w-[calc(100%-2rem)] sm:w-[380px] pointer-events-none">
+        {activeToasts.map((toast) => (
+          <div 
+            key={toast.id}
+            className="pointer-events-auto bg-slate-950/95 border rounded-2xl p-3.5 shadow-2xl backdrop-blur-xl flex items-start gap-3 animate-slide-in"
+            style={{ 
+              borderColor: toast.type === 'goal' ? '#10b981' : toast.type === 'card' ? '#f59e0b' : '#64748b' 
+            }}
+          >
+            <span className="text-2xl shrink-0">
+              {toast.type === 'goal' ? '⚽' : toast.type === 'card' ? '🟨' : '🔔'}
+            </span>
+            <div className="flex-1 space-y-1 min-w-0">
+              <div className="flex justify-between items-start gap-2">
+                <div className="flex flex-col">
+                  <span className={`text-[10px] font-black uppercase tracking-widest leading-none ${
+                    toast.type === 'goal' ? 'text-emerald-400' : toast.type === 'card' ? 'text-amber-500' : 'text-slate-400'
+                  }`}>
+                    {toast.type === 'goal' ? '⚡ GOAL ALERT!' : toast.type === 'card' ? '🟡 CARD ISSUED' : '📢 FOUL REGISTERED'}
+                  </span>
+                  {toast.matchTitle && (
+                    <span className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 leading-none">
+                      {toast.matchTitle} ({toast.clock})
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setActiveToasts(prev => prev.filter(t => t.id !== toast.id))}
+                  className="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-200 font-medium leading-relaxed font-bangla">{toast.text}</p>
             </div>
-            <p className="text-xs text-slate-200 font-medium leading-relaxed font-bangla">{notification.text}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Floating Notification History Button */}
+      {systemConfig?.custom_scripts?.enable_live_notifications !== false && (
+        <button
+          onClick={() => setIsPanelOpen(true)}
+          className="fixed right-4 bottom-24 z-[999] bg-slate-900/90 border border-slate-800 text-white rounded-full p-3.5 shadow-2xl hover:bg-slate-850 hover:scale-105 active:scale-95 transition-all flex items-center justify-center cursor-pointer group"
+          title="Notification History"
+        >
+          <span className="text-xl">🔔</span>
+          {notificationsList.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-[10px] font-black text-white rounded-full min-w-5 h-5 px-1.5 flex items-center justify-center border border-slate-950 animate-pulse">
+              {notificationsList.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {/* Notification Drawer Sidebar */}
+      <div 
+        className={`fixed inset-y-0 right-0 w-80 sm:w-96 bg-slate-950/95 border-l border-slate-900 shadow-2xl z-[10000] p-5 flex flex-col backdrop-blur-xl transition-transform duration-300 ${
+          isPanelOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Drawer Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-slate-900">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🔔</span>
+            <h3 className="text-sm font-black text-white uppercase tracking-wider">Live Match Alerts</h3>
+            {notificationsList.length > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-slate-400 rounded-full">
+                {notificationsList.length}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {notificationsList.length > 0 && (
+              <button
+                onClick={() => saveNotifications([])}
+                className="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase transition-colors cursor-pointer"
+              >
+                Clear All
+              </button>
+            )}
+            <button
+              onClick={() => setIsPanelOpen(false)}
+              className="text-slate-500 hover:text-white text-base font-bold p-1 cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
         </div>
-      )}
+
+        {/* Drawer Content */}
+        <div className="flex-1 overflow-y-auto py-4 space-y-3 scrollbar-thin">
+          {notificationsList.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 gap-3">
+              <span className="text-4xl opacity-20">🔔</span>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wide">No Alerts Yet</p>
+                <p className="text-[10px] text-slate-600 leading-normal max-w-[200px]">
+                  Real-time goals, cards, and fouls will appear here as they happen in live matches.
+                </p>
+              </div>
+            </div>
+          ) : (
+            notificationsList.map((item) => (
+              <div
+                key={item.id}
+                className="p-3 bg-slate-900/40 border border-slate-900/60 rounded-xl relative group flex gap-2.5 items-start"
+                style={{
+                  borderLeft: `3px solid ${
+                    item.type === 'goal' ? '#10b981' : item.type === 'card' ? '#f59e0b' : '#64748b'
+                  }`
+                }}
+              >
+                <span className="text-lg shrink-0 mt-0.5">
+                  {item.type === 'goal' ? '⚽' : item.type === 'card' ? '🟨' : '🔔'}
+                </span>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                      item.type === 'goal' ? 'text-emerald-400' : item.type === 'card' ? 'text-amber-500' : 'text-slate-400'
+                    }`}>
+                      {item.type === 'goal' ? 'Goal Alert' : item.type === 'card' ? 'Card Alert' : 'Foul Registered'}
+                    </span>
+                    <button
+                      onClick={() => saveNotifications(notificationsList.filter(n => n.id !== item.id))}
+                      className="text-slate-650 hover:text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer absolute top-2 right-2"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {item.matchTitle && (
+                    <p className="text-[9px] text-slate-500 font-bold uppercase leading-none">
+                      {item.matchTitle} ({item.clock})
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-300 font-medium leading-relaxed font-bangla pr-4">{item.text}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1490,11 +1677,13 @@ function WebCountdown({ targetTime }: { targetTime: string }) {
 function LiveMatchEventTracker({ 
   espnEventId, 
   enableNotifications,
-  onEventTriggered
+  onEventTriggered,
+  matchTitle
 }: { 
   espnEventId: string; 
   enableNotifications: boolean;
   onEventTriggered: (event: any) => void;
+  matchTitle: string;
 }) {
   const { data } = useQuery({
     queryKey: ['live-commentary-tracker', espnEventId],
@@ -1550,14 +1739,15 @@ function LiveMatchEventTracker({
             id: event.id,
             text: event.text,
             type,
-            clock: event.clock || "0'"
+            clock: event.clock || "0'",
+            matchTitle
           });
         }
       }
       
       processedEventsRef.current.add(event.id);
     }
-  }, [data, isInitialized, enableNotifications]);
+  }, [data, isInitialized, enableNotifications, matchTitle]);
 
   return null;
 }
@@ -1593,103 +1783,196 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   return false;
 }
 
-// Shared AudioContext for mobile compatibility (reuse instead of creating new ones)
-let _sharedAudioCtx: AudioContext | null = null;
+// Global/local audio elements for chime
+let _audioUnlocked = false;
 
-function getAudioContext(): AudioContext | null {
-  try {
-    if (_sharedAudioCtx && _sharedAudioCtx.state !== 'closed') {
-      // Resume if suspended (mobile browsers suspend after tab switch)
-      if (_sharedAudioCtx.state === 'suspended') {
-        _sharedAudioCtx.resume().catch(() => {});
+function generateNotificationWav(type: 'goal' | 'card' | 'foul' | 'silent') {
+  const sampleRate = 11025;
+  let duration = 0.3; // seconds
+  if (type === 'goal') duration = 0.8;
+  else if (type === 'card') duration = 0.4;
+  else duration = 0.3;
+
+  const numSamples = Math.floor(sampleRate * duration);
+  const buffer = new Uint8Array(44 + numSamples);
+
+  // RIFF header
+  buffer[0] = 0x52; // 'R'
+  buffer[1] = 0x49; // 'I'
+  buffer[2] = 0x46; // 'F'
+  buffer[3] = 0x46; // 'F'
+  
+  const fileSize = 36 + numSamples;
+  buffer[4] = fileSize & 0xff;
+  buffer[5] = (fileSize >> 8) & 0xff;
+  buffer[6] = (fileSize >> 16) & 0xff;
+  buffer[7] = (fileSize >> 24) & 0xff;
+
+  buffer[8] = 0x57;  // 'W'
+  buffer[9] = 0x41;  // 'A'
+  buffer[10] = 0x56; // 'V'
+  buffer[11] = 0x45; // 'E'
+
+  // fmt chunk
+  buffer[12] = 0x66; // 'f'
+  buffer[13] = 0x6d; // 'm'
+  buffer[14] = 0x74; // 't'
+  buffer[15] = 0x20; // ' '
+  
+  buffer[16] = 16;   // Subchunk1Size (16)
+  buffer[17] = 0;
+  buffer[18] = 0;
+  buffer[19] = 0;
+
+  buffer[20] = 1;    // AudioFormat (1 = PCM)
+  buffer[21] = 0;
+  buffer[22] = 1;    // NumChannels (1 = Mono)
+  buffer[23] = 0;
+
+  buffer[24] = sampleRate & 0xff; // SampleRate
+  buffer[25] = (sampleRate >> 8) & 0xff;
+  buffer[26] = (sampleRate >> 16) & 0xff;
+  buffer[27] = (sampleRate >> 24) & 0xff;
+
+  const byteRate = sampleRate;
+  buffer[28] = byteRate & 0xff;
+  buffer[29] = (byteRate >> 8) & 0xff;
+  buffer[30] = (byteRate >> 16) & 0xff;
+  buffer[31] = (byteRate >> 24) & 0xff;
+
+  buffer[32] = 1;    // BlockAlign
+  buffer[33] = 0;
+  buffer[34] = 8;    // BitsPerSample (8)
+  buffer[35] = 0;
+
+  // data chunk
+  buffer[36] = 0x64; // 'd'
+  buffer[37] = 0x61; // 'a'
+  buffer[38] = 0x74; // 't'
+  buffer[39] = 0x61; // 'a'
+
+  buffer[40] = numSamples & 0xff; // Subchunk2Size
+  buffer[41] = (numSamples >> 8) & 0xff;
+  buffer[42] = (numSamples >> 16) & 0xff;
+  buffer[43] = (numSamples >> 24) & 0xff;
+
+  // Generate sound samples (8-bit PCM, 128 is silence)
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    let sampleVal = 128;
+
+    if (type === 'silent') {
+      sampleVal = 128;
+    } else if (type === 'goal') {
+      // Goal: Whistle followed by a celebratory double-beep
+      if (t < 0.2) {
+        // Whistle
+        const freq = 1500 + Math.sin(2 * Math.PI * 20 * t) * 150;
+        const amplitude = 1 - (t / 0.2);
+        sampleVal = 128 + Math.round(amplitude * 60 * Math.sin(2 * Math.PI * freq * t));
+      } else if (t >= 0.25 && t < 0.45) {
+        // High beep
+        const t2 = t - 0.25;
+        const freq = 1200;
+        const amplitude = 1 - (t2 / 0.2);
+        sampleVal = 128 + Math.round(amplitude * 70 * Math.sin(2 * Math.PI * freq * t2));
+      } else if (t >= 0.5 && t < 0.75) {
+        // Second high beep
+        const t3 = t - 0.5;
+        const freq = 1200;
+        const amplitude = 1 - (t3 / 0.25);
+        sampleVal = 128 + Math.round(amplitude * 70 * Math.sin(2 * Math.PI * freq * t3));
       }
-      return _sharedAudioCtx;
+    } else if (type === 'card') {
+      // Card: double alert tone (warning pitch)
+      if (t < 0.15) {
+        const freq = 900;
+        const amplitude = 1 - (t / 0.15);
+        sampleVal = 128 + Math.round(amplitude * 60 * Math.sin(2 * Math.PI * freq * t));
+      } else if (t >= 0.2 && t < 0.35) {
+        const t2 = t - 0.2;
+        const freq = 1000;
+        const amplitude = 1 - (t2 / 0.15);
+        sampleVal = 128 + Math.round(amplitude * 60 * Math.sin(2 * Math.PI * freq * t2));
+      }
+    } else {
+      // Foul: simple clean chime
+      const freq = 650;
+      const amplitude = 1 - (t / 0.3);
+      sampleVal = 128 + Math.round(amplitude * 50 * Math.sin(2 * Math.PI * freq * t));
     }
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return null;
-    _sharedAudioCtx = new AudioContextClass();
-    return _sharedAudioCtx;
+
+    buffer[44 + i] = Math.max(0, Math.min(255, sampleVal));
+  }
+
+  // Convert buffer to base64
+  let binary = '';
+  const len = buffer.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(buffer[i]);
+  }
+  return 'data:audio/wav;base64,' + btoa(binary);
+}
+
+function unlockAudio() {
+  if (_audioUnlocked) return;
+  try {
+    const silentUrl = generateNotificationWav('silent');
+    const audio = new Audio(silentUrl);
+    audio.play().then(() => {
+      _audioUnlocked = true;
+    }).catch(e => {
+      console.warn("Audio unlock failed:", e);
+    });
   } catch (e) {
-    return null;
+    console.warn("Audio unlock error:", e);
   }
 }
 
-// Initialize AudioContext on first user interaction (required for mobile)
+// Setup passive interaction triggers
 if (typeof window !== 'undefined') {
   const initAudioOnInteraction = () => {
-    getAudioContext();
+    unlockAudio();
     window.removeEventListener('touchstart', initAudioOnInteraction);
     window.removeEventListener('click', initAudioOnInteraction);
+    window.removeEventListener('mousedown', initAudioOnInteraction);
+    window.removeEventListener('keydown', initAudioOnInteraction);
   };
-  window.addEventListener('touchstart', initAudioOnInteraction, { once: true });
-  window.addEventListener('click', initAudioOnInteraction, { once: true });
+  window.addEventListener('touchstart', initAudioOnInteraction, { once: true, passive: true });
+  window.addEventListener('click', initAudioOnInteraction, { once: true, passive: true });
+  window.addEventListener('mousedown', initAudioOnInteraction, { once: true, passive: true });
+  window.addEventListener('keydown', initAudioOnInteraction, { once: true, passive: true });
 }
 
 function playCelebrationSound(type: 'goal' | 'card' | 'foul') {
   try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    
-    if (type === 'goal') {
-      const playHorn = (freq: number, detuneVal: number) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        osc.detune.setValueAtTime(detuneVal, ctx.currentTime);
-        
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.2, ctx.currentTime + 1.2);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.0);
-        
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 2.0);
-      };
-      
-      playHorn(220, -10);
-      playHorn(220, 10);
-      playHorn(330, 0);
-    } else if (type === 'card' || type === 'foul') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1000, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(1200, ctx.currentTime + 0.15);
-      
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime + 0.2);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-      
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
-      
-      if (type === 'card') {
-        setTimeout(() => {
-          const osc2 = ctx.createOscillator();
-          const gain2 = ctx.createGain();
-          osc2.type = 'sine';
-          osc2.frequency.setValueAtTime(1100, ctx.currentTime);
-          osc2.frequency.linearRampToValueAtTime(1300, ctx.currentTime + 0.15);
-          gain2.gain.setValueAtTime(0, ctx.currentTime);
-          gain2.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
-          gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.2);
-          gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-          osc2.connect(gain2);
-          gain2.connect(ctx.destination);
-          osc2.start();
-          osc2.stop(ctx.currentTime + 0.3);
-        }, 350);
+    const soundUrl = generateNotificationWav(type);
+    const audio = new Audio(soundUrl);
+    audio.volume = 0.8;
+    audio.play().catch(err => {
+      console.warn('Procedural WAV play failed, attempting Web Audio API context fallback:', err);
+      // Fallback: Web Audio API context
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type === 'goal' ? 'sawtooth' : 'sine';
+          osc.frequency.setValueAtTime(type === 'goal' ? 330 : type === 'card' ? 900 : 650, ctx.currentTime);
+          gain.gain.setValueAtTime(0, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (type === 'goal' ? 0.8 : 0.3));
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + (type === 'goal' ? 0.8 : 0.3));
+        }
+      } catch (innerErr) {
+        console.error('All audio fallbacks failed:', innerErr);
       }
-    }
+    });
   } catch (e) {
-    console.warn('Audio Context failed to play sound:', e);
+    console.warn('Audio play error:', e);
   }
 }
