@@ -94,7 +94,22 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
   // Synchronize fullscreen status
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isCurrentlyFullscreen = !!document.fullscreenElement || !!(document as any).webkitIsFullScreen;
+      setIsFullscreen(isCurrentlyFullscreen);
+      
+      if (isCurrentlyFullscreen) {
+        if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
+          (screen.orientation as any).lock('landscape').catch((err: any) => {
+            console.log('Orientation lock failed on fullscreen change:', err);
+          });
+        }
+      } else {
+        if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
+          try {
+            (screen.orientation as any).unlock();
+          } catch (e) {}
+        }
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -615,15 +630,27 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
     if (!document.fullscreenElement) {
       container.requestFullscreen().then(() => {
         setIsFullscreen(true);
+        if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
+          (screen.orientation as any).lock('landscape').catch(() => {});
+        }
       }).catch((err) => {
         if (video.requestFullscreen) {
-          video.requestFullscreen();
+          video.requestFullscreen().then(() => {
+            if (screen.orientation && typeof (screen.orientation as any).lock === 'function') {
+              (screen.orientation as any).lock('landscape').catch(() => {});
+            }
+          });
         } else if ((video as any).webkitEnterFullscreen) {
           (video as any).webkitEnterFullscreen();
         }
         setIsFullscreen(true);
       });
     } else {
+      if (screen.orientation && typeof (screen.orientation as any).unlock === 'function') {
+        try {
+          (screen.orientation as any).unlock();
+        } catch (e) {}
+      }
       document.exitFullscreen().then(() => {
         setIsFullscreen(false);
       });
