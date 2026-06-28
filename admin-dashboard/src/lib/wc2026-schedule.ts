@@ -455,6 +455,134 @@ export const wc2026Schedule: WCMatch[] = [
     away_team: "Turkey",
     match_date: "2026-06-14",
     match_time: "10:00"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "South Africa",
+    away_team: "Canada",
+    match_date: "2026-06-29",
+    match_time: "01:00",
+    stadium_name: "BMO Field (Toronto)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Brazil",
+    away_team: "Japan",
+    match_date: "2026-06-29",
+    match_time: "23:00",
+    stadium_name: "Estadio Azteca (Mexico City)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Germany",
+    away_team: "Paraguay",
+    match_date: "2026-06-30",
+    match_time: "02:30",
+    stadium_name: "SoFi Stadium (Los Angeles)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Netherlands",
+    away_team: "Morocco",
+    match_date: "2026-06-30",
+    match_time: "07:00",
+    stadium_name: "MetLife Stadium (New York/New Jersey)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Côte d'Ivoire",
+    away_team: "Norway",
+    match_date: "2026-06-30",
+    match_time: "23:00",
+    stadium_name: "AT&T Stadium (Dallas)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "France",
+    away_team: "Sweden",
+    match_date: "2026-07-01",
+    match_time: "03:00",
+    stadium_name: "Gillette Stadium (Boston)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Mexico",
+    away_team: "Ecuador",
+    match_date: "2026-07-01",
+    match_time: "07:00",
+    stadium_name: "Estadio Akron (Guadalajara)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "England",
+    away_team: "DR Congo",
+    match_date: "2026-07-01",
+    match_time: "22:00",
+    stadium_name: "Lincoln Financial Field (Philadelphia)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Belgium",
+    away_team: "Senegal",
+    match_date: "2026-07-02",
+    match_time: "02:00",
+    stadium_name: "Mercedes-Benz Stadium (Atlanta)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "USA",
+    away_team: "Bosnia and Herzegovina",
+    match_date: "2026-07-02",
+    match_time: "06:00",
+    stadium_name: "SoFi Stadium (Los Angeles)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Spain",
+    away_team: "Austria",
+    match_date: "2026-07-03",
+    match_time: "01:00",
+    stadium_name: "Levi's Stadium (San Francisco Bay Area)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Portugal",
+    away_team: "Croatia",
+    match_date: "2026-07-03",
+    match_time: "05:00",
+    stadium_name: "Hard Rock Stadium (Miami)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Switzerland",
+    away_team: "Algeria",
+    match_date: "2026-07-03",
+    match_time: "09:00",
+    stadium_name: "Arrowhead Stadium (Kansas City)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Australia",
+    away_team: "Egypt",
+    match_date: "2026-07-04",
+    match_time: "00:00",
+    stadium_name: "BC Place (Vancouver)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Argentina",
+    away_team: "Cabo Verde",
+    match_date: "2026-07-04",
+    match_time: "04:00",
+    stadium_name: "NRG Stadium (Houston)"
+  },
+  {
+    tournament_name: "FIFA WORLD CUP 2026, ROUND OF 32",
+    home_team: "Colombia",
+    away_team: "Ghana",
+    match_date: "2026-07-04",
+    match_time: "07:30",
+    stadium_name: "Lumen Field (Seattle)"
   }
 ];
 

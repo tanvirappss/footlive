@@ -324,6 +324,9 @@ export default function MatchesPage() {
           if (normalized === 'türkiye' && tName === 'turkey') return true;
           if (normalized === 'cape verde' && tName === 'cabo verde') return true;
           if (normalized === 'cabo verde' && tName === 'cape verde') return true;
+          if (normalized.includes('ivoire') && tName.includes('coast')) return true;
+          if (normalized.includes('coast') && tName.includes('ivoire')) return true;
+          if (normalized.includes('bosnia') && tName.includes('bosnia')) return true;
           return false;
         });
       };
@@ -436,11 +439,13 @@ export default function MatchesPage() {
           match_date: m.match_date,
           match_time: `${m.match_time}:00`,
           match_timestamp: timestampString,
-          stadium_name: getStadiumForTeam(m.tournament_name),
+          stadium_name: m.stadium_name || getStadiumForTeam(m.tournament_name),
           status: 'upcoming',
           home_score: 0,
           away_score: 0,
-          description: `FIFA World Cup 2026 Group Stage match between ${m.home_team} and ${m.away_team}.`
+          description: m.tournament_name.toLowerCase().includes('round of 32') 
+            ? `FIFA World Cup 2026 Round of 32 match between ${m.home_team} and ${m.away_team}.`
+            : `FIFA World Cup 2026 Group Stage match between ${m.home_team} and ${m.away_team}.`
         };
 
         const { data: createdMatch, error: insertMatchError } = await supabase
@@ -492,7 +497,7 @@ export default function MatchesPage() {
       const { error } = await supabase
         .from('matches')
         .delete()
-        .like('tournament_name', 'FIFA WORLD CUP 2026, GROUP-%')
+        .like('tournament_name', 'FIFA WORLD CUP 2026, %')
         .gte('match_date', '2026-06-15');
 
       if (error) throw error;
@@ -1014,7 +1019,7 @@ export default function MatchesPage() {
                   <span className="text-sm font-extrabold text-white uppercase tracking-wider">📅 Auto-Schedule WC 2026</span>
                 </div>
                 <p className="text-xs text-slate-400 mt-2 font-medium">
-                  Enable auto-scheduled World Cup matches (June 15-28) in Bangladesh Time (BST).
+                  Enable auto-scheduled World Cup matches (June 15 - July 4) in Bangladesh Time (BST).
                 </p>
               </div>
               <button
