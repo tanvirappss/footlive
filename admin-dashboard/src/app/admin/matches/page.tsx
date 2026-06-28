@@ -126,6 +126,7 @@ export default function MatchesPage() {
   const [autoFinishEnabled, setAutoFinishEnabled] = useState(true);
   const [populating, setPopulating] = useState(false);
   const [populateSuccess, setPopulateSuccess] = useState<string | null>(null);
+  const [matchFilterTab, setMatchFilterTab] = useState<'active' | 'group_finished'>('active');
 
   // Queries
   const { data: teams = [] } = useQuery<Team[]>({
@@ -935,7 +936,18 @@ export default function MatchesPage() {
     const homeName = getTeamName(match, 'home').toLowerCase();
     const awayName = getTeamName(match, 'away').toLowerCase();
     const query = searchTerm.toLowerCase();
-    return homeName.includes(query) || awayName.includes(query) || match.stadium_name.toLowerCase().includes(query);
+    const matchesSearch = homeName.includes(query) || awayName.includes(query) || match.stadium_name.toLowerCase().includes(query) || match.tournament_name.toLowerCase().includes(query);
+    if (!matchesSearch) return false;
+
+    const isGroupStage = match.tournament_name.toLowerCase().includes('group-');
+    const isFinished = match.status === 'finished';
+
+    if (matchFilterTab === 'group_finished') {
+      return isGroupStage && isFinished;
+    } else {
+      // 'active' tab: show all Round of 32 matches, and any upcoming/live group matches
+      return !isGroupStage || !isFinished;
+    }
   });
 
   // Helper to insert markdown elements into the description textarea
@@ -1212,6 +1224,32 @@ export default function MatchesPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-12 pr-4 py-3.5 glass-input rounded-xl text-sm"
           />
+        </div>
+
+        {/* Tab switchers */}
+        <div className="flex gap-2 p-1 bg-slate-950/60 border border-slate-900 rounded-2xl w-fit">
+          <button
+            type="button"
+            onClick={() => setMatchFilterTab('active')}
+            className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+              matchFilterTab === 'active' 
+                ? 'bg-emerald-accent text-black font-extrabold' 
+                : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+            }`}
+          >
+            🏆 Round of 32 & Active
+          </button>
+          <button
+            type="button"
+            onClick={() => setMatchFilterTab('group_finished')}
+            className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+              matchFilterTab === 'group_finished' 
+                ? 'bg-emerald-accent text-black font-extrabold' 
+                : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+            }`}
+          >
+            🏁 Group Stage (Finished)
+          </button>
         </div>
 
         {/* Matches Grid */}
