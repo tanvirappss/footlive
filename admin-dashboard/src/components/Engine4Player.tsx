@@ -40,135 +40,134 @@ export default function Engine4Player({ url, onError, onPlaying }: Engine4Player
     const video = videoRef.current;
     if (!video) return;
 
-    addLog(`Initializing Engine 4 Player for URL: ${url}`);
+    let hlsInstance: Hls | null = null;
+    let currentUseCredentials = false;
 
-    // Clean up previous HLS instance
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+    // Cross-origin and compatibility settings on native video
+    video.crossOrigin = 'anonymous';
+    video.preload = 'auto';
 
-    if (Hls.isSupported()) {
-      addLog('hls.js is supported in this browser. Setting up advanced engine...');
-      
-      const hls = new Hls({
-        maxMaxBufferLength: 20,
-        enableWorker: true,
-        lowLatencyMode: true,
-        // High resilience loading limits
-        manifestLoadingMaxRetry: 10,
-        manifestLoadingRetryDelay: 1000,
-        levelLoadingMaxRetry: 10,
-        levelLoadingRetryDelay: 1000,
-        fragLoadingMaxRetry: 12,
-        fragLoadingRetryDelay: 1000,
-        // Automatically sync credentials/cookies for session-restricted streams
-        xhrSetup: (xhr, requestUrl) => {
-          xhr.withCredentials = true; // Maintains cookies & active session state
-          // Safe custom header hook for authentication contexts
-          xhr.setRequestHeader('X-Playback-Engine', 'Engine-4');
-          addLog(`Requesting HLS resource: ${requestUrl.substring(0, 80)}...`);
-        }
-      });
-
-      hlsRef.current = hls;
-      hls.loadSource(url);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        addLog('Media attached successfully.');
-      });
-
-      hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-        addLog(`Manifest parsed. Found ${data.levels.length} quality levels.`);
-        
-        // Map qualities
-        const mappedQualities = data.levels.map((level, index) => ({
-          id: index,
-          label: level.height ? `${level.height}p` : `Level ${index + 1}`
-        }));
-        setQualities([{ id: -1, label: 'Auto' }, ...mappedQualities]);
-        
-        video.play().then(() => {
-          setIsPlaying(true);
-          if (onPlaying) onPlaying();
-        }).catch(err => {
-          addLog('Autoplay blocked. User gesture required.');
-        });
-      });
-
-      // Handle quality level switches
-      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-        const levelIndex = data.level;
-        if (levelIndex === -1) {
-          setCurrentQuality('Auto');
-        } else {
-          const matched = hls.levels[levelIndex];
-          setCurrentQuality(matched?.height ? `${matched.height}p` : `Level ${levelIndex + 1}`);
-        }
-      });
-
-      // Custom Error handling & Token/Session recovery
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        const errorType = data.type;
-        const errorDetails = data.details;
-        const errorFatal = data.fatal;
-
-        addLog(`[Error] type: ${errorType}, details: ${errorDetails}, fatal: ${errorFatal}`);
-
-        if (errorDetails === 'manifestLoadError' || errorDetails === 'levelLoadError') {
-          const responseCode = (data.response as any)?.status;
-          addLog(`Load error response code: ${responseCode || 'unknown'}`);
-
-          if (responseCode === 403 || responseCode === 401) {
-            addLog('Session authorization error (403/401). Retrying with active cookie state...');
-            setRetryCount(prev => prev + 1);
-            
-            // Automatic retry token refresh delay
-            setTimeout(() => {
-              hls.loadSource(url);
-            }, 2000);
-          }
-        }
-
-        if (errorFatal) {
-          switch (errorType) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              addLog('Fatal network error. Recovering startLoad...');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              addLog('Fatal media error. Recovering media...');
-              hls.recoverMediaError();
-              break;
-            default:
-              addLog('Fatal unrecoverable error. Destroying and restarting engine...');
-              hls.destroy();
-              if (onError) onError(`Fatal HLS Error: ${errorDetails}`);
-              break;
-          }
-        }
-      });
-
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      addLog('Using native Safari HLS player.');
-      video.src = url;
-      
-      // Native event listeners
-      video.addEventListener('playing', () => {
+    // Autoplay helper matching PremiumPlayer
+    const attemptPlay = (el: HTMLVideoElement) => {
+      addLog('Attempting autoplay...');
+      el.play().then(() => {
         setIsPlaying(true);
         if (onPlaying) onPlaying();
+        addLog('Playback started successfully.');
+      }).catch((err) => {
+        addLog('Unmuted autoplay blocked. Muting stream and retrying...');
+        el.muted = true;
+        setIsMuted(true);
+        el.play().then(() => {
+          setIsPlaying(true);
+          if (onPlaying) onPlaying();
+          addLog('Muted autoplay started successfully.');
+        }).catch((playErr) => {
+          addLog(`Critical: Autoplay failed. Click play manually. Error: ${playErr.message}`);
+        });
       });
-      video.addEventListener('error', () => {
-        addLog('Native HLS playback error.');
-        if (onError) onError('Native HLS source loading failed.');
-      });
-    } else {
-      addLog('Error: HLS streaming not supported in this browser.');
-      if (onError) onError('HLS playback is not supported by your browser.');
-    }
+    };
 
-    // Orientation lock listener for fullscreen changes
+    const initPlayer = (withCreds: boolean) => {
+      addLog(`Initializing HLS client (Credentials: ${withCreds})`);
+      
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          maxMaxBufferLength: 20,
+          enableWorker: true,
+          lowLatencyMode: true,
+          manifestLoadingMaxRetry: 10,
+          manifestLoadingRetryDelay: 1000,
+          levelLoadingMaxRetry: 10,
+          levelLoadingRetryDelay: 1000,
+          fragLoadingMaxRetry: 12,
+          fragLoadingRetryDelay: 1000,
+          xhrSetup: (xhr, requestUrl) => {
+            xhr.withCredentials = withCreds;
+            addLog(`Requesting: ${requestUrl.substring(0, 60)}...`);
+          }
+        });
+
+        hlsInstance = hls;
+        hlsRef.current = hls;
+
+        hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          addLog(`Manifest parsed. Found ${data.levels.length} quality levels.`);
+          const mappedQualities = data.levels.map((level, index) => ({
+            id: index,
+            label: level.height ? `${level.height}p` : `Level ${index + 1}`
+          }));
+          setQualities([{ id: -1, label: 'Auto' }, ...mappedQualities]);
+          attemptPlay(video);
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+          const levelIndex = data.level;
+          if (levelIndex === -1) {
+            setCurrentQuality('Auto');
+          } else {
+            const matched = hls.levels[levelIndex];
+            setCurrentQuality(matched?.height ? `${matched.height}p` : `Level ${levelIndex + 1}`);
+          }
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          const errorType = data.type;
+          const errorDetails = data.details;
+          const errorFatal = data.fatal;
+
+          addLog(`[HLS Error] ${errorDetails} (Fatal: ${errorFatal})`);
+
+          if (errorDetails === 'manifestLoadError' || errorDetails === 'levelLoadError') {
+            const responseCode = (data.response as any)?.status;
+            addLog(`HTTP status: ${responseCode || 'unknown'}`);
+
+            if ((responseCode === 403 || responseCode === 401 || responseCode === 0) && !withCreds) {
+              addLog('Authorization/CORS error detected. Switching credentials mode to TRUE and retrying...');
+              currentUseCredentials = true;
+              initPlayer(true);
+              return;
+            }
+          }
+
+          if (errorFatal) {
+            switch (errorType) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                addLog('Fatal network error. Retrying startLoad...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                addLog('Fatal media error. Recovering media...');
+                hls.recoverMediaError();
+                break;
+              default:
+                addLog('Fatal error. Re-initializing player...');
+                initPlayer(currentUseCredentials);
+                break;
+            }
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        addLog('Using native iOS Safari HLS player.');
+        video.src = url;
+        attemptPlay(video);
+      } else {
+        addLog('HLS not supported in this browser.');
+        if (onError) onError('HLS playback is not supported by your browser.');
+      }
+    };
+
+    initPlayer(currentUseCredentials);
+
+    // Fullscreen orientation lock listener
     const handleFullscreenChange = () => {
       const isCurrentlyFullscreen = !!document.fullscreenElement || !!(document as any).webkitIsFullScreen;
       setIsFullscreen(isCurrentlyFullscreen);
@@ -192,9 +191,8 @@ export default function Engine4Player({ url, onError, onPlaying }: Engine4Player
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      if (hlsInstance) {
+        hlsInstance.destroy();
       }
     };
   }, [url]);
@@ -283,6 +281,8 @@ export default function Engine4Player({ url, onError, onPlaying }: Engine4Player
         className="w-full h-full object-contain"
         onClick={togglePlay}
         playsInline
+        autoPlay
+        muted
       />
 
       {/* Control Overlay */}
