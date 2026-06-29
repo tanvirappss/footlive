@@ -1,0 +1,10 @@
+{
+  "name": "footlive-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "cd admin-dashboard && npm install",
+    "build": "cd admin-dashboard && npm run build",
+    "start": "cd admin-dashboard && npm run start"
+  }
+}

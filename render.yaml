@@ -6,9 +6,8 @@ services:
     name: footlive-streaming-platform
     env: node
     plan: free
-    rootDir: admin-dashboard
-    buildCommand: npm install && npm run build
-    startCommand: npm run start
+    buildCommand: cd admin-dashboard && npm install && npm run build
+    startCommand: cd admin-dashboard && npm run start
     envVars:
       - key: NODE_VERSION
         value: 20
