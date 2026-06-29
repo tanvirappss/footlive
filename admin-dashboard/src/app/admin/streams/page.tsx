@@ -139,7 +139,7 @@ export default function StreamsPage() {
   const activePlayer = systemConfig?.custom_scripts?.active_player || 'player_1';
 
   const updateActivePlayerMutation = useMutation({
-    mutationFn: async (player: 'player_1' | 'player_2' | 'pot_player') => {
+    mutationFn: async (player: 'player_1' | 'player_2' | 'pot_player' | 'player_4') => {
       const existingScripts = systemConfig?.custom_scripts || {};
       const updatedScripts = {
         ...existingScripts,
@@ -332,7 +332,7 @@ export default function StreamsPage() {
               <span className="text-sm font-extrabold text-white uppercase tracking-wider">📺 Active Streaming Video Player</span>
             </div>
             <p className="text-xs text-slate-400 mt-2 font-medium max-w-xl">
-              Toggle between **Player 1** (Standard player using hls.js), **Player 2** (Premium Super Speed Player with speed selector, quality selector, and PiP), and **Pot Player** (Futuristic clone player that plays all link formats speedily). This setting affects the website and the Android application.
+              Toggle between **Player 1** (Standard player), **Player 2** (Premium Super Speed Player), **Pot Player** (Futuristic clone player), and **Player 4** (Engine-4 Adaptive HLS Token Bypass). This setting affects the website and the Android application.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 bg-slate-950/40 p-1.5 rounded-2xl border border-slate-900">
@@ -365,6 +365,16 @@ export default function StreamsPage() {
               }`}
             >
               Pot Player (Clone)
+            </button>
+            <button
+              onClick={() => updateActivePlayerMutation.mutate('player_4')}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer ${
+                activePlayer === 'player_4'
+                  ? 'bg-slate-800 text-emerald-accent border border-card-border shadow-lg'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Player 4 (Engine-4)
             </button>
           </div>
         </div>

@@ -9,6 +9,7 @@ import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2, Trophy, 
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
 import PotPlayer from '@/components/PotPlayer';
+import Engine4Player from '@/components/Engine4Player';
 import AdsterraAd from '@/components/AdsterraAd';
 
 interface Team {
@@ -984,6 +985,13 @@ export default function UserWatchPage() {
               />
             ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
               <PotPlayer 
+                key={playerKey}
+                url={activeUrl} 
+                onError={handleStreamError} 
+                onPlaying={handlePlaying}
+              />
+            ) : systemConfig?.custom_scripts?.active_player === 'player_4' ? (
+              <Engine4Player 
                 key={playerKey}
                 url={activeUrl} 
                 onError={handleStreamError} 

@@ -19,6 +19,7 @@ import {
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
 import PotPlayer from '@/components/PotPlayer';
+import Engine4Player from '@/components/Engine4Player';
 import AdsterraAd from '@/components/AdsterraAd';
 import { syncLiveMatchScores } from '@/lib/auto-score-updater';
 
@@ -1106,6 +1107,11 @@ export default function UserHomePage() {
                   />
                 ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
                   <PotPlayer 
+                    url={selectedChannelUrl} 
+                    onError={(err) => console.error(err)} 
+                  />
+                ) : systemConfig?.custom_scripts?.active_player === 'player_4' ? (
+                  <Engine4Player 
                     url={selectedChannelUrl} 
                     onError={(err) => console.error(err)} 
                   />
