@@ -878,31 +878,38 @@ export default function UserWatchPage() {
   const activeUrl = streamUrls[currentUrlIndex];
 
   const handleStreamError = (errorMsg: string) => {
-    setPlayError(errorMsg);
-    setIsReconnecting(true);
-    setBufferState('Stalled');
+    console.warn(`[Stream Fallback] Error on index ${currentUrlIndex}: ${errorMsg}`);
 
     // Clear any pending switch
     if (fallbackTimeoutRef.current) {
       clearTimeout(fallbackTimeoutRef.current);
     }
 
-    // Switch to next backup stream after 3 seconds (giving stream time to try loaded fallback internally)
-    fallbackTimeoutRef.current = setTimeout(() => {
-      if (currentUrlIndex < streamUrls.length - 1) {
-        setCurrentUrlIndex(prev => prev + 1);
-        setPlayError(null);
-        setIsReconnecting(false);
-        setBufferState('Healthy');
-      } else {
-        // Recycle back to primary
+    const nextIndex = (currentUrlIndex + 1) % streamUrls.length;
+
+    if (nextIndex === 0) {
+      // Cycle back to primary means all links failed. Show connection error UI.
+      setPlayError(errorMsg);
+      setIsReconnecting(true);
+      setBufferState('Stalled');
+
+      // Schedule another try on primary in 8 seconds
+      fallbackTimeoutRef.current = setTimeout(() => {
         setCurrentUrlIndex(0);
         setPlayError(null);
         setIsReconnecting(false);
         setBufferState('Healthy');
-      }
-      fallbackTimeoutRef.current = null;
-    }, 3000);
+        fallbackTimeoutRef.current = null;
+      }, 8000);
+    } else {
+      // Switch immediately and smoothly in the background
+      setBufferState('Stalled');
+      
+      fallbackTimeoutRef.current = setTimeout(() => {
+        setCurrentUrlIndex(nextIndex);
+        fallbackTimeoutRef.current = null;
+      }, 150);
+    }
   };
 
   const handlePlaying = () => {
