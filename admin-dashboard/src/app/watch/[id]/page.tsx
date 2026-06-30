@@ -87,6 +87,27 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   return false;
 }
 
+function getYouTubeEmbedUrl(url: string): string {
+  if (!url) return '';
+  let videoId = '';
+  try {
+    if (url.includes('youtube.com/embed/')) {
+      return url;
+    }
+    if (url.includes('youtu.be/')) {
+      videoId = url.split('youtu.be/')[1]?.split(/[?#]/)[0] || '';
+    } else if (url.includes('youtube.com/watch')) {
+      const urlParams = new URLSearchParams(url.split('?')[1] || '');
+      videoId = urlParams.get('v') || '';
+    } else if (url.includes('youtube.com/v/')) {
+      videoId = url.split('/v/')[1]?.split(/[?#]/)[0] || '';
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0` : url;
+}
+
 // Global/local audio elements for chime
 let _audioUnlocked = false;
 
@@ -849,7 +870,31 @@ export default function UserWatchPage() {
   const noStreamsTitle = uiTexts.no_streams_title || (ticker as any)?.no_streams_title || 'No Streams Configured';
   const noStreamsDesc = uiTexts.no_streams_desc || (ticker as any)?.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.';
 
-  if (streams.length === 0) {
+  // 1. Gather database streams
+  let dbStreamItems: { label: string; url: string }[] = [];
+  if (streams.length > 0) {
+    const stream = streams[0];
+    dbStreamItems = Array.isArray(stream.urls) && stream.urls.length > 0
+      ? stream.urls
+      : [
+          { label: 'Primary', url: stream.primary_url },
+          { label: 'Backup 1', url: stream.backup_url_1 },
+          { label: 'Backup 2', url: stream.backup_url_2 },
+          { label: 'Backup 3', url: stream.backup_url_3 }
+        ].filter((item): item is { label: string; url: string } => !!item.url);
+  }
+
+  // 2. Add YouTube stream if enabled
+  const youtubeLiveEnabled = systemConfig?.custom_scripts?.youtube_live_enabled;
+  const youtubeLiveUrl = systemConfig?.custom_scripts?.youtube_live_url;
+  const youtubeLiveLabel = systemConfig?.custom_scripts?.youtube_live_label || 'robeeee';
+
+  const streamItems = [...dbStreamItems];
+  if (youtubeLiveEnabled && youtubeLiveUrl) {
+    streamItems.push({ label: youtubeLiveLabel, url: youtubeLiveUrl });
+  }
+
+  if (streamItems.length === 0) {
     return (
       <div className="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col items-center justify-center p-6 text-center">
         <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
@@ -862,20 +907,10 @@ export default function UserWatchPage() {
     );
   }
 
-  const stream = streams[0];
-  const streamItems = Array.isArray(stream.urls) && stream.urls.length > 0
-    ? stream.urls
-    : [
-        { label: 'Primary', url: stream.primary_url },
-        { label: 'Backup 1', url: stream.backup_url_1 },
-        { label: 'Backup 2', url: stream.backup_url_2 },
-        { label: 'Backup 3', url: stream.backup_url_3 }
-      ].filter((item): item is { label: string; url: string } => !!item.url);
-
   const streamUrls = streamItems.map(item => item.url);
   const streamLabels = streamItems.map(item => item.label || 'Server');
 
-  const activeUrl = streamUrls[currentUrlIndex];
+  const activeUrl = streamUrls[currentUrlIndex] || streamUrls[0];
 
   const handleStreamError = (errorMsg: string) => {
     console.warn(`[Stream Fallback] Error on index ${currentUrlIndex}: ${errorMsg}`);
@@ -983,7 +1018,18 @@ export default function UserWatchPage() {
           {getAdForPlacement('watchAbovePlayer')}
 
           <div className="aspect-video w-full relative">
-            {systemConfig?.custom_scripts?.active_player === 'player_2' ? (
+            {activeUrl && (activeUrl.includes('youtube.com') || activeUrl.includes('youtu.be')) ? (
+              <iframe
+                key={playerKey}
+                src={getYouTubeEmbedUrl(activeUrl)}
+                title="YouTube Video Player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                className="w-full h-full rounded-2xl overflow-hidden border border-card-border"
+                onLoad={handlePlaying}
+              />
+            ) : systemConfig?.custom_scripts?.active_player === 'player_2' ? (
               <PremiumPlayer 
                 key={playerKey}
                 url={activeUrl} 
@@ -1012,7 +1058,7 @@ export default function UserWatchPage() {
                 onPlaying={handlePlaying}
               />
             )}
-            {isReconnecting && (
+            {!(activeUrl && (activeUrl.includes('youtube.com') || activeUrl.includes('youtu.be'))) && isReconnecting && (
               <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">
                 <LoaderComponent message="Reconnecting stream feed..." />
               </div>
@@ -1020,7 +1066,7 @@ export default function UserWatchPage() {
           </div>
 
           {/* Feedback alerts */}
-          {playError && (
+          {!(activeUrl && (activeUrl.includes('youtube.com') || activeUrl.includes('youtu.be'))) && playError && (
             <div className="p-4 bg-red-950/20 border border-red-500/25 rounded-2xl text-red-400 text-xs font-bold flex flex-col gap-1">
               <span className="uppercase text-red-500">Stream Connection Error</span>
               <p className="font-medium text-slate-300">{playError}. Attempting automated backup switch in 3 seconds...</p>

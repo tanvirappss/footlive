@@ -64,6 +64,10 @@ fun StreamingScreen(
     val streamsFlow = remember(matchId) { viewModel.getStreamsForMatch(matchId) }
     val streams by streamsFlow.collectAsState(initial = emptyList())
 
+    val isYoutubeEnabled = remember { viewModel.isYoutubeLiveEnabled() }
+    val youtubeUrl = remember { viewModel.getYoutubeLiveUrl() }
+    val youtubeLabel = remember { viewModel.getYoutubeLiveLabel() }
+
     var isFullscreen by remember { mutableStateOf(false) }
     var isInPipMode by remember { mutableStateOf(false) }
 
@@ -95,7 +99,8 @@ fun StreamingScreen(
         }
     }
 
-    if (streams.isEmpty()) {
+    val hasYoutubeStream = isYoutubeEnabled && !youtubeUrl.isNullOrEmpty()
+    if (streams.isEmpty() && !hasYoutubeStream) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -109,15 +114,24 @@ fun StreamingScreen(
             }
         }
     } else {
-        val stream = streams.first()
-        val streamUrls = remember(stream) {
-            listOfNotNull(
-                stream.primaryUrl,
-                stream.backupUrl1,
-                stream.backupUrl2,
-                stream.backupUrl3
-            )
+        val stream = streams.firstOrNull()
+        val streamItems = remember(streams, isYoutubeEnabled, youtubeUrl, youtubeLabel) {
+            val list = mutableListOf<Pair<String, String>>()
+            if (streams.isNotEmpty()) {
+                val s = streams.first()
+                if (!s.primaryUrl.isNullOrEmpty()) list.add("Primary" to s.primaryUrl)
+                if (!s.backupUrl1.isNullOrEmpty()) list.add("Backup 1" to s.backupUrl1)
+                if (!s.backupUrl2.isNullOrEmpty()) list.add("Backup 2" to s.backupUrl2)
+                if (!s.backupUrl3.isNullOrEmpty()) list.add("Backup 3" to s.backupUrl3)
+            }
+            if (isYoutubeEnabled && !youtubeUrl.isNullOrEmpty()) {
+                list.add(youtubeLabel to youtubeUrl)
+            }
+            list
         }
+
+        val streamUrls = remember(streamItems) { streamItems.map { it.second } }
+        val streamLabels = remember(streamItems) { streamItems.map { it.first } }
 
         var currentUrlIndex by remember { mutableStateOf(0) }
         var playError by remember { mutableStateOf<String?>(null) }
@@ -142,12 +156,23 @@ fun StreamingScreen(
             }
         }
 
+        val activeUrl = remember(streamUrls, currentUrlIndex) {
+            streamUrls.getOrNull(currentUrlIndex) ?: ""
+        }
+        val isYouTube = remember(activeUrl) {
+            activeUrl.contains("youtube.com") || activeUrl.contains("youtu.be")
+        }
+
         fun playUrl(url: String) {
             playError = null
             isReconnecting = false
-            val mediaItem = MediaItem.fromUri(url)
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
+            if (url.isNotEmpty() && !url.contains("youtube.com") && !url.contains("youtu.be")) {
+                val mediaItem = MediaItem.fromUri(url)
+                exoPlayer.setMediaItem(mediaItem)
+                exoPlayer.prepare()
+            } else {
+                exoPlayer.stop()
+            }
         }
 
         fun setQuality(quality: String) {
@@ -218,8 +243,10 @@ fun StreamingScreen(
         }
 
         // Play active stream url
-        LaunchedEffect(currentUrlIndex, stream) {
-            playUrl(streamUrls[currentUrlIndex])
+        LaunchedEffect(currentUrlIndex, streamItems) {
+            if (currentUrlIndex < streamUrls.size) {
+                playUrl(streamUrls[currentUrlIndex])
+            }
         }
 
         DisposableEffect(exoPlayer) {
@@ -231,36 +258,44 @@ fun StreamingScreen(
 
         if (isInPipMode) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = false
-                            layoutParams = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isYouTube) {
+                    YouTubeWebViewPlayer(url = activeUrl, modifier = Modifier.fillMaxSize())
+                } else {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = false
+                                layoutParams = FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         } else if (isFullscreen) {
             // Fullscreen Landscape Player
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = true
-                            layoutParams = FrameLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (isYouTube) {
+                    YouTubeWebViewPlayer(url = activeUrl, modifier = Modifier.fillMaxSize())
+                } else {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = true
+                                layoutParams = FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
                 // Fullscreen controls
                 Row(
@@ -448,19 +483,23 @@ fun StreamingScreen(
                         .height(220.dp)
                         .background(Color.Black)
                 ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                player = exoPlayer
-                                useController = true
-                                layoutParams = FrameLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (isYouTube) {
+                        YouTubeWebViewPlayer(url = activeUrl, modifier = Modifier.fillMaxSize())
+                    } else {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    player = exoPlayer
+                                    useController = true
+                                    layoutParams = FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
                     // Fullscreen control
                     IconButton(
@@ -478,7 +517,7 @@ fun StreamingScreen(
                     }
 
                     // Loading/reconnecting states
-                    if (isReconnecting || bufferState == "Buffering...") {
+                    if (!isYouTube && (isReconnecting || bufferState == "Buffering...")) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -575,7 +614,7 @@ fun StreamingScreen(
                                         }
                                 ) {
                                     Text(
-                                        text = if (idx == 0) "Primary" else "Backup $idx",
+                                        text = streamLabels.getOrElse(idx) { "Feed ${idx + 1}" },
                                         color = if (isSelected) Color.Black else Color.White,
                                         fontWeight = FontWeight.Black,
                                         fontSize = 11.sp
@@ -771,4 +810,57 @@ fun TelemetryRow(label: String, value: String) {
         Text(text = label, color = SlateMedium, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Text(text = value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
     }
+}
+
+fun getYouTubeEmbedUrl(url: String): String {
+    if (url.contains("youtube.com/embed/")) {
+        return url
+    }
+    val videoId = if (url.contains("youtu.be/")) {
+        url.substringAfter("youtu.be/").substringBefore("?").substringBefore("#")
+    } else if (url.contains("youtube.com/watch")) {
+        val queryParams = url.substringAfter("?", "").split("&")
+        queryParams.find { it.startsWith("v=") }?.substringAfter("v=")?.substringBefore("#") ?: ""
+    } else if (url.contains("youtube.com/v/")) {
+        url.substringAfter("youtube.com/v/").substringBefore("?").substringBefore("#")
+    } else {
+        ""
+    }
+    return if (videoId.isNotEmpty()) {
+        "https://www.youtube.com/embed/$videoId?autoplay=1"
+    } else {
+        url
+    }
+}
+
+@Composable
+fun YouTubeWebViewPlayer(url: String, modifier: Modifier = Modifier) {
+    val embedUrl = remember(url) {
+        getYouTubeEmbedUrl(url)
+    }
+    AndroidView(
+        factory = { context ->
+            android.webkit.WebView(context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                settings.javaScriptEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false
+                settings.domStorageEnabled = true
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
+                
+                webChromeClient = android.webkit.WebChromeClient()
+                webViewClient = android.webkit.WebViewClient()
+                loadUrl(embedUrl)
+            }
+        },
+        update = { webView ->
+            if (webView.url != embedUrl) {
+                webView.loadUrl(embedUrl)
+            }
+        },
+        modifier = modifier
+    )
 }

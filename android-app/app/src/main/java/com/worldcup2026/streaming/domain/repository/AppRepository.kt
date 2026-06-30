@@ -13,6 +13,9 @@ interface AppRepository {
     fun getActivePlayer(): String
     fun getMatchDurationMins(): Int
     fun getMatchLiveBeforeMins(): Int
+    fun isYoutubeLiveEnabled(): Boolean
+    fun getYoutubeLiveUrl(): String
+    fun getYoutubeLiveLabel(): String
 
     suspend fun syncAllData()
     suspend fun recordAnalyticsEvent(eventName: String, metadata: Map<String, Any> = emptyMap())

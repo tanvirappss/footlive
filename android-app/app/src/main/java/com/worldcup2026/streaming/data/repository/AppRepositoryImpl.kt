@@ -91,6 +91,15 @@ class AppRepositoryImpl @Inject constructor(
                     if (scripts.has("match_live_before_minutes")) {
                         matchLiveBeforeMins = scripts.get("match_live_before_minutes").asInt
                     }
+                    if (scripts.has("youtube_live_enabled")) {
+                        youtubeLiveEnabled = scripts.get("youtube_live_enabled").asBoolean
+                    }
+                    if (scripts.has("youtube_live_url")) {
+                        youtubeLiveUrl = scripts.get("youtube_live_url").asString
+                    }
+                    if (scripts.has("youtube_live_label")) {
+                        youtubeLiveLabel = scripts.get("youtube_live_label").asString
+                    }
                 }
             }
 
@@ -221,10 +230,16 @@ class AppRepositoryImpl @Inject constructor(
     override fun getActivePlayer(): String = activePlayer
     override fun getMatchDurationMins(): Int = matchDurationMins
     override fun getMatchLiveBeforeMins(): Int = matchLiveBeforeMins
+    override fun isYoutubeLiveEnabled(): Boolean = youtubeLiveEnabled
+    override fun getYoutubeLiveUrl(): String = youtubeLiveUrl
+    override fun getYoutubeLiveLabel(): String = youtubeLiveLabel
 
     companion object {
         private var activePlayer: String = "player_1"
         private var matchDurationMins: Int = 105
         private var matchLiveBeforeMins: Int = 10
+        private var youtubeLiveEnabled: Boolean = false
+        private var youtubeLiveUrl: String = ""
+        private var youtubeLiveLabel: String = "robeeee"
     }
 }

@@ -82,6 +82,9 @@ class MainViewModel @Inject constructor(
     }
 
     fun getActivePlayer(): String = repository.getActivePlayer()
+    fun isYoutubeLiveEnabled(): Boolean = repository.isYoutubeLiveEnabled()
+    fun getYoutubeLiveUrl(): String = repository.getYoutubeLiveUrl()
+    fun getYoutubeLiveLabel(): String = repository.getYoutubeLiveLabel()
 
     fun recordViewEvent(matchId: String, matchTitle: String) {
         viewModelScope.launch {

@@ -70,6 +70,13 @@ export default function SettingsPage() {
   const [forceAllLive, setForceAllLive] = useState(false);
   const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
 
+  // YouTube Live Stream States
+  const [youtubeLiveEnabled, setYoutubeLiveEnabled] = useState(false);
+  const [youtubeLiveUrl, setYoutubeLiveUrl] = useState('');
+  const [youtubeLiveLabel, setYoutubeLiveLabel] = useState('robeeee');
+  const [updatingYoutubeLive, setUpdatingYoutubeLive] = useState(false);
+  const [youtubeLiveSuccess, setYoutubeLiveSuccess] = useState(false);
+
   // Social Share & SEO Meta States
   const [metaTitle, setMetaTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
@@ -143,6 +150,9 @@ export default function SettingsPage() {
         setForceAllLive(!!data.custom_scripts?.force_all_live);
         setAutoScheduleEnabled(!!data.custom_scripts?.auto_schedule_enabled);
         setAutoPopulateDefaultStreams(data.custom_scripts?.auto_populate_default_streams !== false);
+        setYoutubeLiveEnabled(!!data.custom_scripts?.youtube_live_enabled);
+        setYoutubeLiveUrl(data.custom_scripts?.youtube_live_url || '');
+        setYoutubeLiveLabel(data.custom_scripts?.youtube_live_label || 'robeeee');
         
         const uiTexts = data.custom_scripts?.app_ui_texts;
         if (uiTexts) {
@@ -200,6 +210,51 @@ export default function SettingsPage() {
       await fetchSystemConfig();
     } catch (err) {
       console.error('Failed to update SystemConfig:', err);
+    }
+  };
+
+  // Submit YouTube Live Stream Settings
+  const handleYoutubeLiveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingYoutubeLive(true);
+    setYoutubeLiveSuccess(false);
+    try {
+      const existingScripts = systemConfigData?.custom_scripts || {};
+      const updatedScripts = {
+        ...existingScripts,
+        youtube_live_enabled: youtubeLiveEnabled,
+        youtube_live_url: youtubeLiveUrl,
+        youtube_live_label: youtubeLiveLabel || 'robeeee'
+      };
+      if (systemConfigId) {
+        const { error } = await supabase
+          .from('ad_networks')
+          .update({
+            custom_scripts: updatedScripts
+          })
+          .eq('id', systemConfigId);
+        if (error) throw error;
+      } else {
+        const { data: created, error } = await supabase
+          .from('ad_networks')
+          .insert([{
+            network_name: 'SystemConfig',
+            is_enabled: true,
+            custom_scripts: updatedScripts
+          }])
+          .select()
+          .single();
+        if (error) throw error;
+        if (created) setSystemConfigId(created.id);
+      }
+      setYoutubeLiveSuccess(true);
+      await fetchSystemConfig();
+      setTimeout(() => setYoutubeLiveSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save YouTube stream settings.');
+    } finally {
+      setUpdatingYoutubeLive(false);
     }
   };
 
@@ -1111,187 +1166,265 @@ export default function SettingsPage() {
 
           {/* STREAM CONFIG TAB */}
           {activeTab === 'streams' && (
-            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
-              <div>
-                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Tv className="h-5 w-5 text-emerald-accent" />
-                  Default m3u8 Stream Links
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Configure default streaming fallbacks. Drag-and-drop or use the arrows to set their priority list order.
-                </p>
-              </div>
-
-              <div className="flex justify-between items-center p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+            <>
+              <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
                 <div>
-                  <span className="text-xs font-extrabold text-white uppercase tracking-wider block">🔗 Auto-Populate Streams</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                    Automatically link 'Default m3u8 Stream Links' when creating auto-scheduled matches.
+                  <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Tv className="h-5 w-5 text-emerald-accent" />
+                    Default m3u8 Stream Links
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Configure default streaming fallbacks. Drag-and-drop or use the arrows to set their priority list order.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleToggleAutoPopulateDefaultStreams}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    autoPopulateDefaultStreams ? 'bg-emerald-500' : 'bg-slate-800'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      autoPopulateDefaultStreams ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
 
-              <form onSubmit={handleDefaultStreamsSubmit} className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Priority List ({defaultStreams.length} links)</span>
+                <div className="flex justify-between items-center p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+                  <div>
+                    <span className="text-xs font-extrabold text-white uppercase tracking-wider block">🔗 Auto-Populate Streams</span>
+                    <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                      Automatically link 'Default m3u8 Stream Links' when creating auto-scheduled matches.
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setDefaultStreams([...defaultStreams, { label: `Server ${defaultStreams.length + 1}`, url: '' }])}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-accent border border-slate-800 text-[10px] font-black uppercase rounded-lg transition-colors cursor-pointer"
+                    onClick={handleToggleAutoPopulateDefaultStreams}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      autoPopulateDefaultStreams ? 'bg-emerald-500' : 'bg-slate-800'
+                    }`}
                   >
-                    + Add More Link
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        autoPopulateDefaultStreams ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
-                  {defaultStreams.length === 0 ? (
-                    <div className="text-center py-6 border border-dashed border-card-border rounded-xl">
-                      <p className="text-xs text-slate-500 font-medium">No default links configured yet.</p>
-                    </div>
-                  ) : (
-                    defaultStreams.map((item, idx) => (
-                      <div
-                        key={idx}
-                        draggable
-                        onDragStart={() => handleDragStart(idx)}
-                        onDragOver={(e) => handleDragOver(e, idx)}
-                        onDragEnd={handleDragEnd}
-                        className={`flex gap-2 items-center p-2.5 bg-slate-950/40 border border-slate-900/60 rounded-xl cursor-move transition-all ${
-                          draggedIndex === idx ? 'opacity-40 scale-[0.99] border-emerald-500/40' : 'hover:border-slate-800'
-                        }`}
-                      >
-                        <div className="flex flex-col items-center justify-center text-slate-600 px-1 select-none">
-                          <span className="text-[10px] font-black text-slate-500 mb-0.5">#{idx + 1}</span>
-                          <span className="text-[9px]">☰</span>
-                        </div>
+                <form onSubmit={handleDefaultStreamsSubmit} className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">Priority List ({defaultStreams.length} links)</span>
+                    <button
+                      type="button"
+                      onClick={() => setDefaultStreams([...defaultStreams, { label: `Server ${defaultStreams.length + 1}`, url: '' }])}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-emerald-accent border border-slate-800 text-[10px] font-black uppercase rounded-lg transition-colors cursor-pointer"
+                    >
+                      + Add More Link
+                    </button>
+                  </div>
 
-                        <input
-                          type="text"
-                          required
-                          value={item.label}
-                          onChange={(e) => {
-                            const list = [...defaultStreams];
-                            list[idx].label = e.target.value;
-                            setDefaultStreams(list);
-                          }}
-                          onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
-                          placeholder="Label (e.g. Server 1)"
-                          className="w-1/3 px-3 py-2 glass-input rounded-xl text-xs"
-                        />
-                        <input
-                          type="url"
-                          required
-                          value={item.url}
-                          onChange={(e) => {
-                            const list = [...defaultStreams];
-                            list[idx].url = e.target.value;
-                            setDefaultStreams(list);
-                          }}
-                          onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
-                          placeholder="M3U8 Streaming URL"
-                          className="flex-1 px-3 py-2 glass-input rounded-xl text-xs"
-                        />
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <input
-                            type="number"
-                            min="1"
-                            max={defaultStreams.length}
-                            value={idx + 1}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              if (!isNaN(val) && val >= 1 && val <= defaultStreams.length) {
-                                const targetIdx = val - 1;
-                                if (targetIdx !== idx) {
-                                  const list = [...defaultStreams];
-                                  const [selected] = list.splice(idx, 1);
-                                  list.splice(targetIdx, 0, selected);
-                                  setDefaultStreams(list);
-                                  saveAndSyncDefaultStreams(list);
-                                }
-                              }
-                            }}
-                            className="w-12 px-1 py-1.5 text-center bg-slate-950 border border-slate-900 rounded-lg text-xs text-white font-extrabold focus:outline-none focus:border-slate-850"
-                            title="Set Priority Number"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (idx === 0) return;
-                              const list = [...defaultStreams];
-                              const [selected] = list.splice(idx, 1);
-                              list.unshift(selected);
-                              setDefaultStreams(list);
-                              saveAndSyncDefaultStreams(list);
-                            }}
-                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                              idx === 0
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
-                            }`}
-                            title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
-                          >
-                            <Star className="h-3.5 w-3.5" fill={idx === 0 ? "currentColor" : "none"} />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => moveStreamItem(idx, 'up')}
-                            className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                            title="Move Up"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === defaultStreams.length - 1}
-                            onClick={() => moveStreamItem(idx, 'down')}
-                            className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                            title="Move Down"
-                          >
-                            ▼
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteStreamItem(idx)}
-                            className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer"
-                            title="Delete Link"
-                          >
-                            ✕
-                          </button>
-                        </div>
+                  <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                    {defaultStreams.length === 0 ? (
+                      <div className="text-center py-6 border border-dashed border-card-border rounded-xl">
+                        <p className="text-xs text-slate-500 font-medium">No default links configured yet.</p>
                       </div>
-                    ))
-                  )}
+                    ) : (
+                      defaultStreams.map((item, idx) => (
+                        <div
+                          key={idx}
+                          draggable
+                          onDragStart={() => handleDragStart(idx)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex gap-2 items-center p-2.5 bg-slate-950/40 border border-slate-900/60 rounded-xl cursor-move transition-all ${
+                            draggedIndex === idx ? 'opacity-40 scale-[0.99] border-emerald-500/40' : 'hover:border-slate-800'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center justify-center text-slate-600 px-1 select-none">
+                            <span className="text-[10px] font-black text-slate-500 mb-0.5">#{idx + 1}</span>
+                            <span className="text-[9px]">☰</span>
+                          </div>
+
+                          <input
+                            type="text"
+                            required
+                            value={item.label}
+                            onChange={(e) => {
+                              const list = [...defaultStreams];
+                              list[idx].label = e.target.value;
+                              setDefaultStreams(list);
+                            }}
+                            onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
+                            placeholder="Label (e.g. Server 1)"
+                            className="w-1/3 px-3 py-2 glass-input rounded-xl text-xs"
+                          />
+                          <input
+                            type="url"
+                            required
+                            value={item.url}
+                            onChange={(e) => {
+                              const list = [...defaultStreams];
+                              list[idx].url = e.target.value;
+                              setDefaultStreams(list);
+                            }}
+                            onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
+                            placeholder="M3U8 Streaming URL"
+                            className="flex-1 px-3 py-2 glass-input rounded-xl text-xs"
+                          />
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="number"
+                              min="1"
+                              max={defaultStreams.length}
+                              value={idx + 1}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!isNaN(val) && val >= 1 && val <= defaultStreams.length) {
+                                  const targetIdx = val - 1;
+                                  if (targetIdx !== idx) {
+                                    const list = [...defaultStreams];
+                                    const [selected] = list.splice(idx, 1);
+                                    list.splice(targetIdx, 0, selected);
+                                    setDefaultStreams(list);
+                                    saveAndSyncDefaultStreams(list);
+                                  }
+                                }
+                              }}
+                              className="w-12 px-1 py-1.5 text-center bg-slate-950 border border-slate-900 rounded-lg text-xs text-white font-extrabold focus:outline-none focus:border-slate-850"
+                              title="Set Priority Number"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (idx === 0) return;
+                                const list = [...defaultStreams];
+                                const [selected] = list.splice(idx, 1);
+                                list.unshift(selected);
+                                setDefaultStreams(list);
+                                saveAndSyncDefaultStreams(list);
+                              }}
+                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                idx === 0
+                                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                  : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
+                              }`}
+                              title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
+                            >
+                              <Star className="h-3.5 w-3.5" fill={idx === 0 ? "currentColor" : "none"} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => moveStreamItem(idx, 'up')}
+                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                              title="Move Up"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === defaultStreams.length - 1}
+                              onClick={() => moveStreamItem(idx, 'down')}
+                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                              title="Move Down"
+                            >
+                              ▼
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteStreamItem(idx)}
+                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer"
+                              title="Delete Link"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex justify-between items-center border-t border-card-border pt-4">
+                    {defaultStreamsSuccess ? (
+                      <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Default stream priority list saved!</p>
+                    ) : <div />}
+                    <button
+                      type="submit"
+                      disabled={updatingDefaultStreams}
+                      className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {updatingDefaultStreams ? 'Saving...' : 'Save Default Links'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* YouTube Stream Config Card */}
+              <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4 mt-6">
+                <div>
+                  <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Tv className="h-5 w-5 text-emerald-accent" />
+                    YouTube Live Stream Settings (Robeeee)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enable and configure a YouTube livestream option to show up among the match transmission channels.
+                  </p>
                 </div>
 
-                <div className="flex justify-between items-center border-t border-card-border pt-4">
-                  {defaultStreamsSuccess ? (
-                    <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ Default stream priority list saved!</p>
-                  ) : <div />}
-                  <button
-                    type="submit"
-                    disabled={updatingDefaultStreams}
-                    className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {updatingDefaultStreams ? 'Saving...' : 'Save Default Links'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                <form onSubmit={handleYoutubeLiveSubmit} className="space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+                    <div>
+                      <span className="text-xs font-extrabold text-white uppercase tracking-wider block">🔗 Enable YouTube Livestream</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                        Toggle this option to display/embed the YouTube livestream inside match stream lists.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setYoutubeLiveEnabled(!youtubeLiveEnabled)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        youtubeLiveEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          youtubeLiveEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Button/Channel Label</label>
+                      <input
+                        type="text"
+                        required
+                        value={youtubeLiveLabel}
+                        onChange={(e) => setYoutubeLiveLabel(e.target.value)}
+                        placeholder="e.g. robeeee"
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">YouTube Livestream URL</label>
+                      <input
+                        type="url"
+                        required
+                        value={youtubeLiveUrl}
+                        onChange={(e) => setYoutubeLiveUrl(e.target.value)}
+                        placeholder="e.g. https://www.youtube.com/watch?v=DrUMQOrLgUA"
+                        className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center border-t border-card-border pt-4">
+                    {youtubeLiveSuccess ? (
+                      <p className="text-xs text-emerald-accent font-bold animate-pulse">✓ YouTube stream settings saved!</p>
+                    ) : <div />}
+                    <button
+                      type="submit"
+                      disabled={updatingYoutubeLive}
+                      className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {updatingYoutubeLive ? 'Saving...' : 'Save YouTube Stream'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </>
           )}
 
           {/* APP UI TEXTS TAB */}
