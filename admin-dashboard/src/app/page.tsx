@@ -14,7 +14,11 @@ import {
   ShieldAlert,
   X,
   ArrowLeft,
-  Search
+  Search,
+  Plus,
+  Upload,
+  Link as LinkIcon,
+  Trash2
 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
@@ -151,6 +155,94 @@ export default function UserHomePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [upcomingSearchQuery, setUpcomingSearchQuery] = useState('');
   const [finishedSearchQuery, setFinishedSearchQuery] = useState('');
+
+  // User M3U Upload States
+  const [isAddChannelModalOpen, setIsAddChannelModalOpen] = useState(false);
+  const [addChannelName, setAddChannelName] = useState('');
+  const [addChannelUrl, setAddChannelUrl] = useState('');
+  const [addChannelSubmitting, setAddChannelSubmitting] = useState(false);
+  const [addChannelError, setAddChannelError] = useState<string | null>(null);
+
+  const handleAddChannelSubmit = async () => {
+    if (!addChannelName.trim() || !addChannelUrl.trim()) {
+      setAddChannelError('Name and URL are required.');
+      return;
+    }
+    setAddChannelSubmitting(true);
+    setAddChannelError(null);
+    try {
+      const { error } = await supabase
+        .from('m3u_channels')
+        .insert([{
+          name: addChannelName.trim(),
+          url: addChannelUrl.trim(),
+          logo_url: '',
+          is_enabled: true
+        }]);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['user-channels'] });
+      setIsAddChannelModalOpen(false);
+      setAddChannelName('');
+      setAddChannelUrl('');
+    } catch (err: any) {
+      setAddChannelError(err.message || 'Failed to add channel.');
+    } finally {
+      setAddChannelSubmitting(false);
+    }
+  };
+
+  const handleM3uFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAddChannelSubmitting(true);
+    setAddChannelError(null);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n');
+      const entries: { name: string; url: string }[] = [];
+      let currentName = '';
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('#EXTINF:')) {
+          const commaIdx = line.lastIndexOf(',');
+          currentName = commaIdx !== -1 ? line.substring(commaIdx + 1).trim() : 'Unnamed Channel';
+        } else if (line && !line.startsWith('#')) {
+          entries.push({ name: currentName || `Channel ${entries.length + 1}`, url: line });
+          currentName = '';
+        }
+      }
+      if (entries.length === 0) {
+        setAddChannelError('No valid channels found in the M3U file.');
+        return;
+      }
+      const rows = entries.map(e => ({
+        name: e.name,
+        url: e.url,
+        logo_url: '',
+        is_enabled: true
+      }));
+      const { error } = await supabase.from('m3u_channels').insert(rows);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['user-channels'] });
+      setIsAddChannelModalOpen(false);
+      setAddChannelName('');
+      setAddChannelUrl('');
+    } catch (err: any) {
+      setAddChannelError(err.message || 'Failed to import M3U file.');
+    } finally {
+      setAddChannelSubmitting(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteUserChannel = async (channelId: string) => {
+    try {
+      await supabase.from('m3u_channels').delete().eq('id', channelId);
+      queryClient.invalidateQueries({ queryKey: ['user-channels'] });
+    } catch (err) {
+      console.error('Failed to delete channel:', err);
+    }
+  };
 
   const handleChannelSelect = async (chan: any) => {
     const isM3u = chan.url.toLowerCase().includes('.m3u') && !chan.url.toLowerCase().includes('.m3u8');
@@ -1263,9 +1355,18 @@ export default function UserHomePage() {
             ) : (
               // Main Channels List Mode
               <>
-                <div>
-                  <h3 className="font-black text-xs text-white uppercase tracking-wider">M3U TV Channels</h3>
-                  <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5">Click server to load player</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-xs text-white uppercase tracking-wider">M3U TV Channels</h3>
+                    <p className="text-[9px] text-slate-500 font-bold uppercase mt-0.5">Click server to load player</p>
+                  </div>
+                  <button
+                    onClick={() => { setAddChannelError(null); setAddChannelName(''); setAddChannelUrl(''); setIsAddChannelModalOpen(true); }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-black uppercase tracking-wider hover:bg-emerald-500/20 transition-all cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Channel
+                  </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-2.5 max-h-[350px] pr-1">
@@ -1283,16 +1384,18 @@ export default function UserHomePage() {
                       const isM3u = chan.url.toLowerCase().includes('.m3u') && !chan.url.toLowerCase().includes('.m3u8');
                       
                       return (
-                        <button
+                        <div
                           key={chan.id}
-                          onClick={() => handleChannelSelect(chan)}
-                          className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                          className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between ${
                             isPlaying 
                               ? 'bg-emerald-500/10 border-emerald-accent text-white shadow-lg shadow-emerald-500/5' 
                               : 'bg-slate-950/40 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
                           }`}
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <button
+                            onClick={() => handleChannelSelect(chan)}
+                            className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer text-left"
+                          >
                             <div className="h-8 w-11 bg-slate-900/60 rounded-xl overflow-hidden border border-card-border flex items-center justify-center shrink-0">
                               {chan.logo_url ? (
                                 <img src={chan.logo_url} alt="" className="h-full w-full object-cover" />
@@ -1306,13 +1409,22 @@ export default function UserHomePage() {
                                 {isM3u ? '📁 M3U Playlist' : '📺 Direct Stream'}
                               </span>
                             </div>
+                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isPlaying && (
+                              <span className="text-[9px] font-black text-emerald-accent uppercase tracking-widest">
+                                Active
+                              </span>
+                            )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteUserChannel(chan.id); }}
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-600 hover:text-red-400 transition-all cursor-pointer"
+                              title="Remove channel"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                          {isPlaying && (
-                            <span className="text-[9px] font-black text-emerald-accent uppercase tracking-widest shrink-0">
-                              Active
-                            </span>
-                          )}
-                        </button>
+                        </div>
                       );
                     })
                   )}
@@ -1323,6 +1435,75 @@ export default function UserHomePage() {
         </div>
       )}
       </main>
+
+      {/* Add Channel Modal */}
+      {isAddChannelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 w-full max-w-md space-y-5 shadow-2xl shadow-black/50">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-black text-white uppercase tracking-wider">Add Channel / M3U</h2>
+              <button onClick={() => setIsAddChannelModalOpen(false)} className="p-2 rounded-xl hover:bg-slate-800 transition-all cursor-pointer">
+                <X className="h-4 w-4 text-slate-400" />
+              </button>
+            </div>
+
+            {addChannelError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-bold">
+                {addChannelError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Channel Name</label>
+                <input
+                  type="text"
+                  value={addChannelName}
+                  onChange={(e) => setAddChannelName(e.target.value)}
+                  placeholder="e.g. Sports HD, BTV Live"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-800 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">Stream URL or M3U Link</label>
+                <input
+                  type="url"
+                  value={addChannelUrl}
+                  onChange={(e) => setAddChannelUrl(e.target.value)}
+                  placeholder="https://example.com/stream.m3u or .m3u8"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-800 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 transition-all"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleAddChannelSubmit}
+              disabled={addChannelSubmitting}
+              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {addChannelSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LinkIcon className="h-4 w-4" />}
+              Add Link
+            </button>
+
+            <div className="relative flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-800" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">or upload file</span>
+              <div className="flex-1 h-px bg-slate-800" />
+            </div>
+
+            <label className="w-full py-3 rounded-xl bg-slate-900/60 border border-dashed border-slate-700 hover:border-emerald-500/50 text-slate-400 hover:text-emerald-400 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <Upload className="h-4 w-4" />
+              Upload M3U File
+              <input
+                type="file"
+                accept=".m3u,.m3u8,.txt"
+                onChange={handleM3uFileUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Before Footer Ad */}
       {getAdForPlacement('beforeFooter')}
