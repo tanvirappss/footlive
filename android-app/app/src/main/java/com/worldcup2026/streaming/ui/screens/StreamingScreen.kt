@@ -812,19 +812,43 @@ fun TelemetryRow(label: String, value: String) {
     }
 }
 
-fun getYouTubeEmbedUrl(url: String): String {
-    if (url.contains("youtube.com/embed/")) {
-        return url
+fun getYouTubeWatchUrl(url: String): String {
+    // Extract video ID from any YouTube URL format
+    val videoId = when {
+        url.contains("youtu.be/") ->
+            url.substringAfter("youtu.be/").substringBefore("?").substringBefore("#")
+        url.contains("youtube.com/watch") -> {
+            val queryParams = url.substringAfter("?", "").split("&")
+            queryParams.find { it.startsWith("v=") }?.substringAfter("v=")?.substringBefore("#") ?: ""
+        }
+        url.contains("youtube.com/embed/") ->
+            url.substringAfter("youtube.com/embed/").substringBefore("?").substringBefore("#")
+        url.contains("youtube.com/v/") ->
+            url.substringAfter("youtube.com/v/").substringBefore("?").substringBefore("#")
+        url.contains("youtube.com/live/") ->
+            url.substringAfter("youtube.com/live/").substringBefore("?").substringBefore("#")
+        else -> ""
     }
-    val videoId = if (url.contains("youtu.be/")) {
-        url.substringAfter("youtu.be/").substringBefore("?").substringBefore("#")
-    } else if (url.contains("youtube.com/watch")) {
-        val queryParams = url.substringAfter("?", "").split("&")
-        queryParams.find { it.startsWith("v=") }?.substringAfter("v=")?.substringBefore("#") ?: ""
-    } else if (url.contains("youtube.com/v/")) {
-        url.substringAfter("youtube.com/v/").substringBefore("?").substringBefore("#")
+    return if (videoId.isNotEmpty()) {
+        "https://m.youtube.com/watch?v=$videoId"
     } else {
-        ""
+        url
+    }
+}
+
+// Keep old name as alias for web watch page compatibility
+fun getYouTubeEmbedUrl(url: String): String {
+    val videoId = when {
+        url.contains("youtube.com/embed/") -> return url
+        url.contains("youtu.be/") ->
+            url.substringAfter("youtu.be/").substringBefore("?").substringBefore("#")
+        url.contains("youtube.com/watch") -> {
+            val queryParams = url.substringAfter("?", "").split("&")
+            queryParams.find { it.startsWith("v=") }?.substringAfter("v=")?.substringBefore("#") ?: ""
+        }
+        url.contains("youtube.com/v/") ->
+            url.substringAfter("youtube.com/v/").substringBefore("?").substringBefore("#")
+        else -> ""
     }
     return if (videoId.isNotEmpty()) {
         "https://www.youtube.com/embed/$videoId?autoplay=1"
@@ -835,32 +859,8 @@ fun getYouTubeEmbedUrl(url: String): String {
 
 @Composable
 fun YouTubeWebViewPlayer(url: String, modifier: Modifier = Modifier) {
-    val embedUrl = remember(url) {
-        getYouTubeEmbedUrl(url)
-    }
-    val htmlContent = remember(embedUrl) {
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-                iframe { width: 100%; height: 100%; border: none; }
-            </style>
-        </head>
-        <body>
-            <iframe 
-                src="$embedUrl"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerpolicy="strict-origin-when-cross-origin"
-                allowfullscreen>
-            </iframe>
-        </body>
-        </html>
-        """.trimIndent()
-    }
+    val watchUrl = remember(url) { getYouTubeWatchUrl(url) }
+
     AndroidView(
         factory = { context ->
             android.webkit.WebView(context).apply {
@@ -868,33 +868,51 @@ fun YouTubeWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                settings.javaScriptEnabled = true
-                settings.mediaPlaybackRequiresUserGesture = false
-                settings.domStorageEnabled = true
-                settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
                 setBackgroundColor(android.graphics.Color.BLACK)
-                
+
+                settings.apply {
+                    javaScriptEnabled = true
+                    mediaPlaybackRequiresUserGesture = false
+                    domStorageEnabled = true
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
+                    allowContentAccess = true
+                    setSupportMultipleWindows(false)
+                    userAgentString = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                }
+
                 webChromeClient = android.webkit.WebChromeClient()
-                webViewClient = android.webkit.WebViewClient()
-                loadDataWithBaseURL(
-                    "https://www.youtube.com",
-                    htmlContent,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: android.webkit.WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        val reqUrl = request?.url?.toString() ?: return false
+                        // Keep YouTube navigation inside the WebView
+                        if (reqUrl.contains("youtube.com") || reqUrl.contains("youtu.be") || reqUrl.contains("google.com")) {
+                            return false
+                        }
+                        // Block external navigation
+                        return true
+                    }
+                }
+
+                loadUrl(watchUrl)
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL(
-                "https://www.youtube.com",
-                htmlContent,
-                "text/html",
-                "UTF-8",
-                null
-            )
+            val currentUrl = webView.url ?: ""
+            val currentVideoId = if (currentUrl.contains("v=")) {
+                currentUrl.substringAfter("v=").substringBefore("&")
+            } else ""
+            val newVideoId = if (watchUrl.contains("v=")) {
+                watchUrl.substringAfter("v=").substringBefore("&")
+            } else ""
+            if (newVideoId.isNotEmpty() && currentVideoId != newVideoId) {
+                webView.loadUrl(watchUrl)
+            }
         },
         modifier = modifier
     )
 }
+
