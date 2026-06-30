@@ -58,6 +58,13 @@ export async function syncLiveMatchScores(
   const autoUpdateScores = systemConfig?.custom_scripts?.auto_update_scores !== false;
   if (!autoUpdateScores) return false;
 
+  // Run knockout scheduler sync asynchronously in the background
+  try {
+    syncKnockoutMatches(supabase);
+  } catch (koErr) {
+    console.error('Failed to sync knockout matches:', koErr);
+  }
+
   // Only process matches that are live or finished
   const relevantMatches = matches.filter(m => 
     m.status === 'live' || m.status === 'half_time' || m.status === 'finished' ||
@@ -199,4 +206,275 @@ export async function syncLiveMatchScores(
     await Promise.all(promises);
   }
   return updatedAny;
+}
+
+function convertToBangladeshTime(isoString: string): { matchDate: string; matchTime: string; timestampString: string } {
+  const d = new Date(isoString);
+  // Add 6 hours to get BDT (Bangladesh Time is UTC+6)
+  const bdtOffset = 6 * 60 * 60 * 1000;
+  const bdtDate = new Date(d.getTime() + bdtOffset);
+  
+  const yr = bdtDate.getUTCFullYear();
+  const mo = String(bdtDate.getUTCMonth() + 1).padStart(2, '0');
+  const dy = String(bdtDate.getUTCDate()).padStart(2, '0');
+  
+  const hr = String(bdtDate.getUTCHours()).padStart(2, '0');
+  const min = String(bdtDate.getUTCMinutes()).padStart(2, '0');
+  
+  const matchDate = `${yr}-${mo}-${dy}`;
+  const matchTime = `${hr}:${min}:00`;
+  const timestampString = d.toISOString();
+  
+  return { matchDate, matchTime, timestampString };
+}
+
+function isPlaceholderTeam(name: string): boolean {
+  if (!name) return true;
+  const lower = name.toLowerCase();
+  return lower.includes('winner') || 
+         lower.includes('runner') || 
+         lower.includes('tbd') || 
+         lower.includes('to be decided') || 
+         lower.includes('group') ||
+         /^[a-z]\d+$/.test(lower);
+}
+
+function getRoundName(event: any): string {
+  const noteText = event.competitions?.[0]?.notes?.[0]?.text?.toLowerCase() || '';
+  if (noteText.includes('round of 16')) return 'FIFA WORLD CUP 2026, ROUND OF 16';
+  if (noteText.includes('quarter')) return 'FIFA WORLD CUP 2026, QUARTER-FINALS';
+  if (noteText.includes('semi')) return 'FIFA WORLD CUP 2026, SEMI-FINALS';
+  if (noteText.includes('third place') || noteText.includes('3rd place')) return 'FIFA WORLD CUP 2026, THIRD PLACE PLAY-OFF';
+  if (noteText.includes('final')) return 'FIFA WORLD CUP 2026, FINAL';
+  
+  // Fallback by date range (UTC date)
+  const d = new Date(event.date);
+  const day = d.getUTCDate();
+  const month = d.getUTCMonth() + 1;
+  
+  if (month === 7) {
+    if (day >= 4 && day <= 7) return 'FIFA WORLD CUP 2026, ROUND OF 16';
+    if (day >= 9 && day <= 11) return 'FIFA WORLD CUP 2026, QUARTER-FINALS';
+    if (day >= 14 && day <= 15) return 'FIFA WORLD CUP 2026, SEMI-FINALS';
+    if (day === 18) return 'FIFA WORLD CUP 2026, THIRD PLACE PLAY-OFF';
+    if (day === 19) return 'FIFA WORLD CUP 2026, FINAL';
+  }
+  return 'FIFA WORLD CUP 2026, KNOCKOUT STAGE';
+}
+
+async function getOrCreateTeam(supabase: SupabaseClient, espnTeam: any): Promise<string | null> {
+  const name = espnTeam.displayName || espnTeam.name || '';
+  if (!name) return null;
+
+  // 1. Try to find existing team
+  const { data: existing } = await supabase
+    .from('teams')
+    .select('id')
+    .ilike('name', name)
+    .maybeSingle();
+
+  if (existing) {
+    return existing.id;
+  }
+
+  const normalized = normalizeTeamName(name);
+  const { data: existingAlias } = await supabase
+    .from('teams')
+    .select('id')
+    .ilike('name', normalized)
+    .maybeSingle();
+
+  if (existingAlias) {
+    return existingAlias.id;
+  }
+
+  // 2. Not found, create it dynamically
+  const abbreviation = espnTeam.abbreviation || name.substring(0, 3).toUpperCase();
+  const logoUrl = espnTeam.logo || null;
+  
+  const nameLower = name.toLowerCase();
+  const countryCodeMap: Record<string, string> = {
+    'argentina': 'ar', 'brazil': 'br', 'france': 'fr', 'germany': 'de',
+    'spain': 'es', 'england': 'gb-eng', 'portugal': 'pt', 'belgium': 'be',
+    'netherlands': 'nl', 'italy': 'it', 'croatia': 'hr', 'uruguay': 'uy',
+    'usa': 'us', 'united states': 'us', 'mexico': 'mx', 'canada': 'ca',
+    'japan': 'jp', 'south korea': 'kr', 'australia': 'au', 'morocco': 'ma',
+    'senegal': 'sn', 'ecuador': 'ec', 'switzerland': 'ch', 'colombia': 'co',
+    'ghana': 'gh', 'chile': 'cl', 'turkey': 'tr', 'türkiye': 'tr',
+    'saudi arabia': 'sa', 'egypt': 'eg', 'algeria': 'dz', 'tunisia': 'tn',
+    'cabo verde': 'cv', 'cape verde': 'cv', 'cote d\'ivoire': 'ci',
+    'ivory coast': 'ci', 'south africa': 'za', 'sweden': 'se',
+    'norway': 'no', 'iraq': 'iq', 'jordan': 'jo', 'dr congo': 'cd',
+    'uzbekistan': 'uz', 'haiti': 'ht'
+  };
+  const flagCode = countryCodeMap[nameLower] || countryCodeMap[normalized] || null;
+  const flagUrl = flagCode ? `https://flagcdn.com/w320/${flagCode}.png` : logoUrl;
+
+  const newTeam = {
+    name,
+    short_name: abbreviation,
+    country_name: name,
+    country_code: (flagCode || 'XX').toUpperCase(),
+    flag_url: flagUrl,
+    logo_url: logoUrl,
+    region: 'World Cup',
+    is_enabled: true
+  };
+
+  const { data: created, error } = await supabase
+    .from('teams')
+    .insert([newTeam])
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('Failed to auto-create team:', error);
+    return null;
+  }
+  return created?.id || null;
+}
+
+export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<void> {
+  const isBrowser = typeof window !== 'undefined';
+  const nowTime = Date.now();
+  if (isBrowser) {
+    const lastSyncStr = localStorage.getItem('last_knockout_sync_time');
+    const lastSync = lastSyncStr ? parseInt(lastSyncStr, 10) : 0;
+    if (nowTime - lastSync < 30 * 60 * 1000) {
+      // Rate-limited to once every 30 minutes
+      return;
+    }
+    localStorage.setItem('last_knockout_sync_time', String(nowTime));
+  }
+
+  try {
+    // Generate dates: 10-day sliding window from today (constrained within knockout dates June 28 - July 20)
+    const start = new Date();
+    const minDate = new Date('2026-06-28');
+    const maxDate = new Date('2026-07-20');
+    const current = start < minDate ? minDate : (start > maxDate ? maxDate : start);
+    
+    const knockoutDates: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const d = new Date(current);
+      d.setDate(current.getDate() + i);
+      if (d > maxDate) break;
+      
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const dy = String(d.getDate()).padStart(2, '0');
+      knockoutDates.push(`${yr}${mo}${dy}`);
+    }
+
+    if (knockoutDates.length === 0) return;
+
+    // Fetch dates in parallel
+    const fetches = knockoutDates.map(async (dateStr) => {
+      try {
+        const res = await fetch(`/api/live-scores?date=${dateStr}`);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.scores || [];
+      } catch {
+        return [];
+      }
+    });
+
+    const results = await Promise.all(fetches);
+    const espnEvents: any[] = [];
+    for (const r of results) {
+      espnEvents.push(...r);
+    }
+
+    if (espnEvents.length === 0) return;
+
+    // Fetch default stream template config
+    const { data: tickerData } = await supabase
+      .from('ticker_settings')
+      .select('default_streams')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    const defaultStreamsList = Array.isArray(tickerData?.default_streams) ? tickerData.default_streams : [];
+
+    for (const event of espnEvents) {
+      const homeTeamName = event.homeTeam || '';
+      const awayTeamName = event.awayTeam || '';
+      
+      // Only process when both teams are decided (no placeholder names like TBD or Winner of Match 50)
+      if (isPlaceholderTeam(homeTeamName) || isPlaceholderTeam(awayTeamName)) {
+        continue;
+      }
+
+      const homeId = await getOrCreateTeam(supabase, { displayName: homeTeamName });
+      const awayId = await getOrCreateTeam(supabase, { displayName: awayTeamName });
+
+      if (!homeId || !awayId) continue;
+
+      // Check if match already exists by team IDs
+      const { data: existingMatch } = await supabase
+        .from('matches')
+        .select('*')
+        .or(`and(home_team_id.eq.${homeId},away_team_id.eq.${awayId}),and(home_team_id.eq.${awayId},away_team_id.eq.${homeId})`)
+        .maybeSingle();
+
+      const bdt = convertToBangladeshTime(event.matchDate);
+
+      if (existingMatch) {
+        // Match exists, update date/time if changed
+        const dateDiffers = existingMatch.match_date !== bdt.matchDate;
+        const timeDiffers = existingMatch.match_time.substring(0, 5) !== bdt.matchTime.substring(0, 5);
+        
+        if (dateDiffers || timeDiffers) {
+          await supabase
+            .from('matches')
+            .update({
+              match_date: bdt.matchDate,
+              match_time: bdt.matchTime,
+              match_timestamp: bdt.timestampString
+            })
+            .eq('id', existingMatch.id);
+        }
+      } else {
+        // Create upcoming knockout match automatically
+        const roundName = getRoundName(event);
+        const matchData = {
+          tournament_name: roundName,
+          home_team_id: homeId,
+          away_team_id: awayId,
+          match_date: bdt.matchDate,
+          match_time: bdt.matchTime,
+          match_timestamp: bdt.timestampString,
+          stadium_name: 'MetLife Stadium (New York/New Jersey)',
+          status: 'upcoming',
+          home_score: 0,
+          away_score: 0,
+          description: `FIFA World Cup 2026 match between ${homeTeamName} and ${awayTeamName}.`
+        };
+
+        const { data: createdMatch } = await supabase
+          .from('matches')
+          .insert([matchData])
+          .select()
+          .single();
+
+        if (createdMatch && defaultStreamsList.length > 0) {
+          const streamData = {
+            match_id: createdMatch.id,
+            stream_name: 'Main Server',
+            primary_url: defaultStreamsList[0]?.url || '',
+            backup_url_1: defaultStreamsList[1]?.url || null,
+            backup_url_2: defaultStreamsList[2]?.url || null,
+            backup_url_3: defaultStreamsList[3]?.url || null,
+            is_enabled: true,
+            urls: defaultStreamsList
+          };
+          await supabase.from('streams').insert([streamData]);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('syncKnockoutMatches failed:', err);
+  }
 }

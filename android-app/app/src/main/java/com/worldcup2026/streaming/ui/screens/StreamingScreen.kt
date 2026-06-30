@@ -853,12 +853,12 @@ fun YouTubeWebViewPlayer(url: String, modifier: Modifier = Modifier) {
                 
                 webChromeClient = android.webkit.WebChromeClient()
                 webViewClient = android.webkit.WebViewClient()
-                loadUrl(embedUrl)
+                loadUrl(embedUrl, mapOf("Referer" to "https://www.youtube.com"))
             }
         },
         update = { webView ->
             if (webView.url != embedUrl) {
-                webView.loadUrl(embedUrl)
+                webView.loadUrl(embedUrl, mapOf("Referer" to "https://www.youtube.com"))
             }
         },
         modifier = modifier
