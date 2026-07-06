@@ -88,10 +88,13 @@ export default function SettingsPage() {
   // App UI Texts States
   const [tickerBadge, setTickerBadge] = useState('⚡ NEWS TICKER');
   const [headerSubtitle, setHeaderSubtitle] = useState('Premium Streaming Portal');
+  const [tabStreamingName, setTabStreamingName] = useState('📺 Streaming Now');
   const [tabLiveName, setTabLiveName] = useState('🔴 Live Now');
   const [tabUpcomingName, setTabUpcomingName] = useState('📅 Upcoming Fixtures');
   const [tabFinishedName, setTabFinishedName] = useState('🏁 Finished Matches');
   const [tabChannelsName, setTabChannelsName] = useState('📺 Live Channels');
+  const [enableStreamingNow, setEnableStreamingNow] = useState(true);
+  const [enableLiveTabAutoSwitch, setEnableLiveTabAutoSwitch] = useState(true);
   const [noMatchesTitle, setNoMatchesTitle] = useState('NO MATCHES BROADCASTS');
   const [noMatchesDesc, setNoMatchesDesc] = useState('There are no active matches in this tab. Tune in during kickoff schedules.');
   const [noStreamsTitle, setNoStreamsTitle] = useState('No Streams Configured');
@@ -153,11 +156,14 @@ export default function SettingsPage() {
         setYoutubeLiveEnabled(!!data.custom_scripts?.youtube_live_enabled);
         setYoutubeLiveUrl(data.custom_scripts?.youtube_live_url || '');
         setYoutubeLiveLabel(data.custom_scripts?.youtube_live_label || 'robeeee');
+        setEnableStreamingNow(data.custom_scripts?.enable_streaming_now !== false);
+        setEnableLiveTabAutoSwitch(data.custom_scripts?.enable_live_tab_auto_switch !== false);
         
         const uiTexts = data.custom_scripts?.app_ui_texts;
         if (uiTexts) {
           setTickerBadge(uiTexts.ticker_badge || '⚡ NEWS TICKER');
           setHeaderSubtitle(uiTexts.header_subtitle || 'Premium Streaming Portal');
+          setTabStreamingName(uiTexts.tab_streaming_name || '📺 Streaming Now');
           setTabLiveName(uiTexts.tab_live_name || '🔴 Live Now');
           setTabUpcomingName(uiTexts.tab_upcoming_name || '📅 Upcoming Fixtures');
           setTabFinishedName(uiTexts.tab_finished_name || '🏁 Finished Matches');
@@ -560,6 +566,7 @@ export default function SettingsPage() {
       const uiTexts = {
         ticker_badge: tickerBadge,
         header_subtitle: headerSubtitle,
+        tab_streaming_name: tabStreamingName,
         tab_live_name: tabLiveName,
         tab_upcoming_name: tabUpcomingName,
         tab_finished_name: tabFinishedName,
@@ -578,6 +585,8 @@ export default function SettingsPage() {
           .update({
             custom_scripts: {
               ...existingScripts,
+              enable_streaming_now: enableStreamingNow,
+              enable_live_tab_auto_switch: enableLiveTabAutoSwitch,
               app_ui_texts: uiTexts
             }
           })
@@ -593,6 +602,8 @@ export default function SettingsPage() {
               force_all_live: forceAllLive,
               auto_schedule_enabled: autoScheduleEnabled,
               auto_populate_default_streams: autoPopulateDefaultStreams,
+              enable_streaming_now: enableStreamingNow,
+              enable_live_tab_auto_switch: enableLiveTabAutoSwitch,
               app_ui_texts: uiTexts
             }
           }])
@@ -1472,6 +1483,16 @@ export default function SettingsPage() {
                     <h4 className="text-xs font-black text-white uppercase tracking-widest border-b border-card-border pb-1.5">2. Match Tab Labels</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Streaming Tab</label>
+                        <input
+                          type="text"
+                          required
+                          value={tabStreamingName}
+                          onChange={(e) => setTabStreamingName(e.target.value)}
+                          className="w-full px-3 py-2.5 glass-input rounded-xl text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Now Tab</label>
                         <input
                           type="text"
@@ -1563,6 +1584,58 @@ export default function SettingsPage() {
                         onChange={(e) => setNoStreamsDesc(e.target.value)}
                         className="w-full px-4 py-3 glass-input rounded-xl text-sm resize-none"
                       />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Streaming Now & Auto-Switch settings */}
+                <div className="space-y-4 border-t border-card-border pt-6 mt-6">
+                  <h4 className="text-xs font-black text-white uppercase tracking-widest border-b border-card-border pb-1.5">5. Streaming Now & Auto-Switch Settings</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Streaming Now Toggle */}
+                    <div className="flex justify-between items-center p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+                      <div>
+                        <span className="text-xs font-extrabold text-white uppercase tracking-wider block">📺 Enable 'Streaming Now' Tab</span>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                          Show the 'Streaming Now' player as the default landing tab on the homepage.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnableStreamingNow(!enableStreamingNow)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          enableStreamingNow ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            enableStreamingNow ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Auto Switch Live Toggles */}
+                    <div className="flex justify-between items-center p-4 bg-slate-950/40 border border-slate-900 rounded-xl">
+                      <div>
+                        <span className="text-xs font-extrabold text-white uppercase tracking-wider block">⚡ Auto-Switch to 'Live Now' Tab</span>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                          Automatically switch the homepage tab to 'Live Now' 10 minutes before any match starts.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnableLiveTabAutoSwitch(!enableLiveTabAutoSwitch)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          enableLiveTabAutoSwitch ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            enableLiveTabAutoSwitch ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
                 </div>

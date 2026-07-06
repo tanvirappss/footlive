@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import { useBlackScreenDetector } from './useBlackScreenDetector';
 import { 
   Play, 
   Pause, 
@@ -28,6 +29,8 @@ export default function PotPlayer({ url, onError, onPlaying }: PotPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+
+  useBlackScreenDetector(videoRef, url, onError);
   const dashPlayerRef = useRef<any>(null);
 
   // States
@@ -467,6 +470,7 @@ export default function PotPlayer({ url, onError, onPlaying }: PotPlayerProps) {
         ref={videoRef}
         autoPlay
         playsInline
+        crossOrigin="anonymous"
         className="w-full h-full object-contain cursor-pointer"
         onClick={handlePlayPause}
         onDoubleClick={toggleFullscreen}

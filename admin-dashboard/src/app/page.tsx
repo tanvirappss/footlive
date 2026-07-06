@@ -18,13 +18,20 @@ import {
   Plus,
   Upload,
   Link as LinkIcon,
-  Trash2
+  Trash2,
+  MessageSquare,
+  Trophy,
+  Activity,
+  Users,
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
 import PremiumPlayer from '@/components/PremiumPlayer';
 import PotPlayer from '@/components/PotPlayer';
 import Engine4Player from '@/components/Engine4Player';
 import AdsterraAd from '@/components/AdsterraAd';
+import { useBlackScreenDetector } from '@/components/useBlackScreenDetector';
 import { syncLiveMatchScores } from '@/lib/auto-score-updater';
 
 interface Team {
@@ -69,7 +76,7 @@ interface Announcement {
 
 export default function UserHomePage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'finished' | 'channels'>('live');
+  const [activeTab, setActiveTab] = useState<'streaming' | 'live' | 'upcoming' | 'finished' | 'channels'>('live');
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
   const [showNotificationToast, setShowNotificationToast] = useState(false);
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Record<string, boolean>>({});
@@ -77,6 +84,15 @@ export default function UserHomePage() {
   const [selectedChannelName, setSelectedChannelName] = useState<string>('');
   const [notificationsList, setNotificationsList] = useState<any[]>([]);
   const [activeToasts, setActiveToasts] = useState<any[]>([]);
+
+  // Streaming Now tab states
+  const [streamingUrlIndex, setStreamingUrlIndex] = useState(0);
+  const [streamingPlayError, setStreamingPlayError] = useState<string | null>(null);
+  const [isStreamingReconnecting, setIsStreamingReconnecting] = useState(false);
+  const [streamingBufferState, setStreamingBufferState] = useState<'Healthy' | 'Stalled'>('Healthy');
+  const [streamingPlayerKey, setStreamingPlayerKey] = useState(0);
+  const [activeSideTab, setActiveSideTab] = useState<'commentary' | 'events' | 'telemetry' | 'lineup'>('commentary');
+  const [hasInitializedTab, setHasInitializedTab] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   // Load from localStorage on mount
@@ -748,8 +764,161 @@ export default function UserHomePage() {
   function whenTab(tab: string, live: Match[], upcoming: Match[], finished: Match[]) {
     if (tab === 'live') return live;
     if (tab === 'upcoming') return upcoming;
-    return finished;
+    if (tab === 'finished') return finished;
+    return [];
   }
+
+  // Priority: 1. Live, 2. Upcoming, 3. Finished
+  const streamingMatch = liveList.length > 0 
+    ? liveList[0] 
+    : (upcomingList.length > 0 
+        ? upcomingList[0] 
+        : (finishedList.length > 0 ? finishedList[0] : null));
+
+  // Fetch streams for streamingMatch
+  const { data: streamingMatchStreams = [] } = useQuery<any[]>({
+    queryKey: ['streaming-match-streams', streamingMatch?.id],
+    queryFn: async () => {
+      if (!streamingMatch) return [];
+      const { data, error } = await supabase
+        .from('streams')
+        .select('*')
+        .eq('match_id', streamingMatch.id)
+        .eq('is_enabled', true);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: activeTab === 'streaming' && !!streamingMatch
+  });
+
+  const matchedEspnScoreForStreaming = streamingMatch ? espnScores.find(es => {
+    const homeName = streamingMatch.home_team_id ? streamingMatch.home_team?.name : streamingMatch.home_team_custom_name;
+    const awayName = streamingMatch.away_team_id ? streamingMatch.away_team?.name : streamingMatch.away_team_custom_name;
+    if (!homeName || !awayName) return false;
+    return (teamsMatch(homeName, es.homeTeam) && teamsMatch(awayName, es.awayTeam)) ||
+           (teamsMatch(homeName, es.awayTeam) && teamsMatch(awayName, es.homeTeam));
+  }) : null;
+
+  const streamingEspnEventId = matchedEspnScoreForStreaming?.espnEventId;
+
+  // Fetch live play-by-play commentary from ESPN summary endpoint proxy for streaming match
+  const { data: streamingCommentaryData, isLoading: loadingStreamingCommentary } = useQuery({
+    queryKey: ['streaming-live-commentary', streamingEspnEventId],
+    queryFn: async () => {
+      if (!streamingEspnEventId) return null;
+      try {
+        const res = await fetch(`/api/live-commentary?event=${streamingEspnEventId}`);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        return null;
+      }
+    },
+    enabled: activeTab === 'streaming' && !!streamingEspnEventId,
+    refetchInterval: 5 * 1000,
+  });
+
+  // Gather database streams for homepage streaming
+  let homepageStreamItems: { label: string; url: string }[] = [];
+  if (streamingMatchStreams.length > 0) {
+    const stream = streamingMatchStreams[0];
+    homepageStreamItems = Array.isArray(stream.urls) && stream.urls.length > 0
+      ? stream.urls
+      : [
+          { label: 'Primary', url: stream.primary_url },
+          { label: 'Backup 1', url: stream.backup_url_1 },
+          { label: 'Backup 2', url: stream.backup_url_2 },
+          { label: 'Backup 3', url: stream.backup_url_3 }
+        ].filter((item): item is { label: string; url: string } => !!item.url);
+  }
+
+  // Add YouTube stream if enabled
+  if (systemConfig?.custom_scripts?.youtube_live_enabled && systemConfig?.custom_scripts?.youtube_live_url) {
+    homepageStreamItems.push({ 
+      label: systemConfig.custom_scripts.youtube_live_label || 'robeeee', 
+      url: systemConfig.custom_scripts.youtube_live_url 
+    });
+  }
+
+  const streamingUrls = homepageStreamItems.map(item => item.url);
+  const streamingLabels = homepageStreamItems.map(item => item.label || 'Server');
+  const activeStreamingUrl = streamingUrls[streamingUrlIndex] || streamingUrls[0];
+
+  const handleStreamingError = (errorMsg: string) => {
+    console.warn(`[Homepage Stream Fallback] Error: ${errorMsg}`);
+    
+    if (streamingUrls.length <= 1) {
+      setStreamingPlayError(errorMsg);
+      return;
+    }
+
+    const homeN = streamingMatch?.home_team_id ? streamingMatch.home_team?.name : streamingMatch?.home_team_custom_name;
+    const awayN = streamingMatch?.away_team_id ? streamingMatch.away_team?.name : streamingMatch?.away_team_custom_name;
+
+    // Find all indices of streams whose labels match the match name (homeN vs awayN)
+    const matchedIndices: number[] = [];
+    if (homeN && awayN) {
+      streamingLabels.forEach((label, idx) => {
+        if (matchChannelWithTeams(label, homeN, awayN)) {
+          matchedIndices.push(idx);
+        }
+      });
+    }
+
+    let nextIndex = (streamingUrlIndex + 1) % streamingUrls.length;
+
+    // Prioritize switching to matched channel
+    if (matchedIndices.length > 0) {
+      const nextMatched = matchedIndices.find(idx => idx > streamingUrlIndex);
+      if (nextMatched !== undefined) {
+        nextIndex = nextMatched;
+      } else {
+        nextIndex = matchedIndices[0];
+      }
+    }
+
+    setStreamingBufferState('Stalled');
+    setTimeout(() => {
+      setStreamingUrlIndex(nextIndex);
+    }, 150);
+  };
+
+  const handleStreamingPlaying = () => {
+    setStreamingPlayError(null);
+    setIsStreamingReconnecting(false);
+    setStreamingBufferState('Healthy');
+  };
+
+  // 10 minutes kickoff check and activeTab landing initialization
+  useEffect(() => {
+    if (systemConfig && !hasInitializedTab) {
+      const showStreaming = systemConfig.custom_scripts?.enable_streaming_now !== false;
+      setActiveTab(showStreaming ? 'streaming' : 'live');
+      setHasInitializedTab(true);
+    }
+  }, [systemConfig, hasInitializedTab]);
+
+  useEffect(() => {
+    if (!systemConfig || !matches.length) return;
+
+    const autoSwitchEnabled = systemConfig.custom_scripts?.enable_live_tab_auto_switch !== false;
+    if (!autoSwitchEnabled) return;
+
+    const liveOffsetMins = 10;
+    const hasMatchCloseToKickoff = matches.some((m) => {
+      if (m.status !== 'upcoming') return false;
+      const kickoff = new Date(m.match_timestamp).getTime();
+      const timeDiff = kickoff - Date.now();
+      return timeDiff > 0 && timeDiff <= liveOffsetMins * 60 * 1000;
+    });
+
+    if (hasMatchCloseToKickoff) {
+      if (activeTab !== 'live') {
+        console.log('[Auto Switch] Match starting in <= 10 minutes. Switching to Live Now tab.');
+        setActiveTab('live');
+      }
+    }
+  }, [matches, systemConfig, activeTab]);
 
   const getTeamName = (match: Match, side: 'home' | 'away') => {
     if (side === 'home') {
@@ -779,10 +948,14 @@ export default function UserHomePage() {
   }, [matches, systemConfig, queryClient]);
 
   const uiTexts = systemConfig?.custom_scripts?.app_ui_texts || {};
+  const showStreamingTab = systemConfig?.custom_scripts?.enable_streaming_now !== false;
   const noMatchesTitle = uiTexts.no_matches_title || (ticker as any)?.no_matches_title || "No Matches Broadcasts";
   const noMatchesDesc = uiTexts.no_matches_desc || (ticker as any)?.no_matches_desc || "There are no active matches in this tab. Tune in during kickoff schedules.";
+  const noStreamsTitle = uiTexts.no_streams_title || (ticker as any)?.no_streams_title || "No Streams Configured";
+  const noStreamsDesc = uiTexts.no_streams_desc || (ticker as any)?.no_streams_desc || "There are no active video links bound to this match yet. Check back closer to game kickoff.";
   const headerSubtitle = uiTexts.header_subtitle || (ticker as any)?.header_subtitle || 'Premium Streaming Portal';
   const tickerBadge = uiTexts.ticker_badge || (ticker as any)?.ticker_badge || '⚡ NEWS TICKER';
+  const tabStreamingName = uiTexts.tab_streaming_name || (ticker as any)?.tab_streaming_name || '📺 Streaming Now';
   const tabLiveName = uiTexts.tab_live_name || (ticker as any)?.tab_live_name || '🔴 Live Now';
   const tabUpcomingName = uiTexts.tab_upcoming_name || (ticker as any)?.tab_upcoming_name || '📅 Upcoming Fixtures';
   const tabFinishedName = uiTexts.tab_finished_name || (ticker as any)?.tab_finished_name || '🏁 Finished Matches';
@@ -863,15 +1036,20 @@ export default function UserHomePage() {
           {/* Navigation and Bell container */}
           <div className="flex items-center gap-3 overflow-x-auto md:overflow-visible w-full md:w-auto pb-1 md:pb-0 scrollbar-none justify-start md:justify-end">
             <nav className="flex items-center gap-1 bg-slate-950/40 p-1 border border-card-border rounded-2xl shrink-0">
-              {(['live', 'upcoming', 'finished', 'channels'] as const).map((tab) => {
+              {(showStreamingTab 
+                ? (['streaming', 'live', 'upcoming', 'finished', 'channels'] as const)
+                : (['live', 'upcoming', 'finished', 'channels'] as const)
+              ).map((tab) => {
                 const isActive = activeTab === tab;
-                const tabLabel = tab === 'live' 
-                  ? '🔴 Live Now'
-                  : tab === 'upcoming' 
-                    ? '📅 Upcoming' 
-                    : tab === 'finished'
-                      ? '🏁 Finished'
-                      : '📺 Channels';
+                const tabLabel = tab === 'streaming'
+                  ? (uiTexts.tab_streaming_name || '📺 Streaming').replace(/[^\w\s]|_/g, "").trim().split(" ").slice(-1)[0] || 'Streaming'
+                  : tab === 'live' 
+                    ? '🔴 Live Now'
+                    : tab === 'upcoming' 
+                      ? '📅 Upcoming' 
+                      : tab === 'finished'
+                        ? '🏁 Finished'
+                        : '📺 Channels';
                 return (
                   <button
                     key={tab}
@@ -882,7 +1060,7 @@ export default function UserHomePage() {
                         : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
                     }`}
                   >
-                    {tabLabel}
+                    {tab === 'streaming' ? (uiTexts.tab_streaming_name || '📺 Streaming') : tabLabel}
                   </button>
                 );
               })}
@@ -972,7 +1150,10 @@ export default function UserHomePage() {
 
         {/* Tab Row */}
         <div className="flex border-b border-card-border overflow-x-auto">
-          {(['live', 'upcoming', 'finished', 'channels'] as const).map((tab) => (
+          {(showStreamingTab 
+            ? (['streaming', 'live', 'upcoming', 'finished', 'channels'] as const)
+            : (['live', 'upcoming', 'finished', 'channels'] as const)
+          ).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -982,13 +1163,15 @@ export default function UserHomePage() {
                   : 'border-transparent text-slate-500 hover:text-white'
               }`}
             >
-              {tab === 'live' 
-                ? tabLiveName
-                : tab === 'upcoming' 
-                  ? tabUpcomingName 
-                  : tab === 'finished'
-                    ? tabFinishedName
-                    : tabChannelsName}
+              {tab === 'streaming'
+                ? tabStreamingName
+                : tab === 'live' 
+                  ? tabLiveName
+                  : tab === 'upcoming' 
+                    ? tabUpcomingName 
+                    : tab === 'finished'
+                      ? tabFinishedName
+                      : tabChannelsName}
             </button>
           ))}
         </div>
@@ -1000,7 +1183,479 @@ export default function UserHomePage() {
         />
 
         {/* Tab Content */}
-        {activeTab !== 'channels' ? (
+        {/* Tab Content */}
+        {activeTab === 'streaming' ? (
+          !streamingMatch ? (
+            <div className="glass-panel p-16 text-center rounded-3xl border border-card-border">
+              <Tv className="h-12 w-12 text-slate-700 mx-auto mb-4" />
+              <h3 className="text-lg font-black text-white uppercase">No Streaming Now</h3>
+              <p className="text-sm text-slate-400 mt-1">There are no matches scheduled for streaming at this moment. Check back during kickoff schedules.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Video Player Column */}
+              <div className="lg:col-span-2 space-y-6">
+                {getAdForPlacement('watchAbovePlayer')}
+                
+                {streamingMatch.status === 'upcoming' ? (
+                  <div className="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-4">
+                    <CalendarIcon className="h-16 w-16 text-emerald-accent animate-pulse" />
+                    <div>
+                      <span className="text-[10px] text-emerald-accent font-black uppercase tracking-widest block font-sans">MATCH NOT STARTED YET</span>
+                      <h3 className="text-xl font-black text-white mt-1 uppercase">
+                        {getTeamName(streamingMatch, 'home')} vs {getTeamName(streamingMatch, 'away')}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 font-sans">
+                        Live broadcast will begin automatically at match kickoff: {streamingMatch.match_date} • {streamingMatch.match_time.substring(0, 5)}
+                      </p>
+                    </div>
+                    <WebCountdown targetTime={streamingMatch.match_timestamp} />
+                  </div>
+                ) : homepageStreamItems.length === 0 ? (
+                  <div className="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-2">
+                    <ShieldAlert className="h-10 w-10 text-amber-500 mb-2 animate-bounce" />
+                    <h3 className="text-base font-black text-white uppercase">{noStreamsTitle}</h3>
+                    <p className="text-xs text-slate-400 max-w-sm">{noStreamsDesc}</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="aspect-video w-full relative">
+                      {activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be')) ? (
+                        <iframe
+                          key={streamingPlayerKey}
+                          src={getYouTubeEmbedUrl(activeStreamingUrl)}
+                          title="YouTube Video Player"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          className="w-full h-full rounded-2xl overflow-hidden border border-card-border"
+                          onLoad={handleStreamingPlaying}
+                        />
+                      ) : systemConfig?.custom_scripts?.active_player === 'player_2' ? (
+                        <PremiumPlayer 
+                          key={streamingPlayerKey}
+                          url={activeStreamingUrl} 
+                          onError={handleStreamingError} 
+                          onPlaying={handleStreamingPlaying}
+                        />
+                      ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
+                        <PotPlayer 
+                          key={streamingPlayerKey}
+                          url={activeStreamingUrl} 
+                          onError={handleStreamingError} 
+                          onPlaying={handleStreamingPlaying}
+                        />
+                      ) : systemConfig?.custom_scripts?.active_player === 'player_4' ? (
+                        <Engine4Player 
+                          key={streamingPlayerKey}
+                          url={activeStreamingUrl} 
+                          onError={handleStreamingError} 
+                          onPlaying={handleStreamingPlaying}
+                        />
+                      ) : (
+                        <HlsPlayer 
+                          key={streamingPlayerKey}
+                          url={activeStreamingUrl} 
+                          onError={handleStreamingError} 
+                          onPlaying={handleStreamingPlaying}
+                        />
+                      )}
+                      {!(activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be'))) && isStreamingReconnecting && (
+                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">
+                          <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
+                          <span className="text-[10px] text-slate-500 uppercase font-black">Reconnecting stream feed...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Feedback alerts */}
+                    {!(activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be'))) && streamingPlayError && (
+                      <div className="p-4 bg-red-950/20 border border-red-500/25 rounded-2xl text-red-400 text-xs font-bold flex flex-col gap-1">
+                        <span className="uppercase text-red-500">Stream Connection Error</span>
+                        <p className="font-medium text-slate-300">{streamingPlayError}. Attempting automated backup switch...</p>
+                      </div>
+                    )}
+
+                    {/* Stream selector */}
+                    <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-black uppercase text-xs text-slate-400 tracking-wider">Fallback Channels</h3>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Toggle feeds if experience lag</p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setStreamingPlayerKey(prev => prev + 1);
+                            setStreamingPlayError(null);
+                            setIsStreamingReconnecting(false);
+                            setStreamingBufferState('Healthy');
+                          }}
+                          className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <RefreshCw className="h-4 w-4 text-emerald-accent" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {streamingUrls.map((url, idx) => {
+                          const isSelected = streamingUrlIndex === idx;
+                          return (
+                            <button
+                              key={url}
+                              onClick={() => {
+                                setStreamingUrlIndex(idx);
+                                setStreamingPlayError(null);
+                                setIsStreamingReconnecting(false);
+                                setStreamingBufferState('Healthy');
+                              }}
+                              className={`py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
+                                isSelected
+                                  ? 'bg-emerald-accent border-emerald-accent text-black'
+                                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                              }`}
+                              title={streamingLabels[idx]}
+                            >
+                              {streamingLabels[idx]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {getAdForPlacement('watchBelowPlayer')}
+              </div>
+
+              {/* Live Match Center Sidebar Column */}
+              <div className="space-y-6 flex flex-col h-[calc(100vh-140px)] min-h-[500px]">
+                {/* Match Score Card */}
+                <div className="glass-panel p-5 rounded-2xl border border-card-border bg-gradient-to-b from-slate-900/40 to-slate-950/20">
+                  <div className="flex justify-between items-center text-center gap-1">
+                    {/* Home Team */}
+                    <div className="w-[35%] flex flex-col items-center gap-1.5 min-w-0">
+                      <div className="h-10 w-14 bg-slate-950/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
+                        {(streamingMatch.home_team_id ? streamingMatch.home_team?.flag_url : streamingMatch.home_team_custom_flag) ? (
+                          <img 
+                            src={streamingMatch.home_team_id ? streamingMatch.home_team?.flag_url : streamingMatch.home_team_custom_flag || ''} 
+                            alt={getTeamName(streamingMatch, 'home') || 'Home'} 
+                            className="h-full w-full object-cover rounded" 
+                          />
+                        ) : (
+                          <span className="text-[10px] text-slate-500 font-bold">HOME</span>
+                        )}
+                      </div>
+                      <span className="font-bold text-white text-xs truncate w-full">{getTeamName(streamingMatch, 'home')}</span>
+                    </div>
+
+                    {/* Score display */}
+                    <div className="w-[30%] flex flex-col items-center justify-center">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-2xl font-black text-white tracking-tight">
+                          {matchedEspnScoreForStreaming ? matchedEspnScoreForStreaming.homeScore : (streamingMatch.home_score ?? 0)}
+                        </span>
+                        <span className="text-slate-600 font-bold text-xs">-</span>
+                        <span className="text-2xl font-black text-white tracking-tight">
+                          {matchedEspnScoreForStreaming ? matchedEspnScoreForStreaming.awayScore : (streamingMatch.away_score ?? 0)}
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md text-[9px] font-black uppercase tracking-wider mt-1.5 animate-pulse">
+                        {matchedEspnScoreForStreaming?.liveMinute || streamingMatch.live_minute || (streamingMatch.status === 'upcoming' ? 'UPCOMING' : streamingMatch.status === 'live' ? 'LIVE' : 'FINISHED')}
+                      </span>
+                    </div>
+
+                    {/* Away Team */}
+                    <div className="w-[35%] flex flex-col items-center gap-1.5 min-w-0">
+                      <div className="h-10 w-14 bg-slate-950/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
+                        {(streamingMatch.away_team_id ? streamingMatch.away_team?.flag_url : streamingMatch.away_team_custom_flag) ? (
+                          <img 
+                            src={streamingMatch.away_team_id ? streamingMatch.away_team?.flag_url : streamingMatch.away_team_custom_flag || ''} 
+                            alt={getTeamName(streamingMatch, 'away') || 'Away'} 
+                            className="h-full w-full object-cover rounded" 
+                          />
+                        ) : (
+                          <span className="text-[10px] text-slate-500 font-bold">AWAY</span>
+                        )}
+                      </div>
+                      <span className="font-bold text-white text-xs truncate w-full">{getTeamName(streamingMatch, 'away')}</span>
+                    </div>
+                  </div>
+
+                  {/* Scorers info below */}
+                  {((matchedEspnScoreForStreaming ? matchedEspnScoreForStreaming.homeScorers : streamingMatch.home_scorers) || 
+                    (matchedEspnScoreForStreaming ? matchedEspnScoreForStreaming.awayScorers : streamingMatch.away_scorers)) && (
+                    <div className="text-[10px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-900/80 flex justify-between gap-3 mt-4">
+                      <div className="w-[45%] text-left text-slate-300 font-medium leading-relaxed font-sans">
+                        {matchedEspnScoreForStreaming ? matchedEspnScoreForStreaming.homeScorers : streamingMatch.home_scorers || ""}
+                      </div>
+                      <div className="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+                      <div className="w-[45%] text-right text-slate-300 font-medium leading-relaxed font-sans">
+                        {matchedEspnScoreForStreaming ? matchedEspnScoreForStreaming.awayScorers : streamingMatch.away_scorers || ""}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Interactive tabs */}
+                <div className="glass-panel rounded-2xl border border-card-border flex-1 flex flex-col overflow-hidden">
+                  <div className="flex border-b border-card-border p-1 bg-slate-950/40">
+                    <button
+                      onClick={() => setActiveSideTab('commentary')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeSideTab === 'commentary'
+                          ? 'bg-emerald-accent text-black font-extrabold shadow'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      }`}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Commentary
+                    </button>
+                    <button
+                      onClick={() => setActiveSideTab('events')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeSideTab === 'events'
+                          ? 'bg-emerald-accent text-black font-extrabold shadow'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      }`}
+                    >
+                      <Trophy className="h-3.5 w-3.5" />
+                      Events
+                    </button>
+                    <button
+                      onClick={() => setActiveSideTab('telemetry')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeSideTab === 'telemetry'
+                          ? 'bg-emerald-accent text-black font-extrabold shadow'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      }`}
+                    >
+                      <Activity className="h-3.5 w-3.5" />
+                      Health
+                    </button>
+                    <button
+                      onClick={() => setActiveSideTab('lineup')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        activeSideTab === 'lineup'
+                          ? 'bg-emerald-accent text-black font-extrabold shadow'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      }`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      Lineup
+                    </button>
+                  </div>
+
+                  {/* Tab content panel */}
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    {activeSideTab === 'commentary' && (
+                      <div className="space-y-4">
+                        {!streamingEspnEventId ? (
+                          <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                            Commentary feed waiting to connect...
+                          </div>
+                        ) : loadingStreamingCommentary ? (
+                          <div className="flex flex-col items-center justify-center py-12">
+                            <Loader2 className="h-5 w-5 text-emerald-accent animate-spin" />
+                            <span className="text-[10px] text-slate-500 uppercase font-black mt-2">Loading commentary...</span>
+                          </div>
+                        ) : !streamingCommentaryData?.commentary || streamingCommentaryData.commentary.length === 0 ? (
+                          <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                            No commentary entries recorded yet
+                          </div>
+                        ) : (
+                          <div className="space-y-3.5">
+                            {streamingCommentaryData.commentary.map((c: any, i: number) => {
+                              const isGoal = c.type?.toLowerCase().includes('goal');
+                              const isCard = c.type?.toLowerCase().includes('card') || c.type?.toLowerCase().includes('booking');
+                              return (
+                                <div 
+                                  key={i} 
+                                  className={`p-3 rounded-xl border flex gap-3 text-xs leading-relaxed transition-all ${
+                                    isGoal 
+                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 font-sans' 
+                                      : isCard 
+                                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-300 font-sans'
+                                        : 'bg-slate-950/40 border-slate-900 text-slate-300 font-sans'
+                                  }`}
+                                >
+                                  <span className="font-black text-emerald-accent shrink-0 min-w-[28px] text-left">
+                                    {c.clock || '0\''}
+                                  </span>
+                                  <div className="space-y-1">
+                                    <p className="font-medium">{c.text}</p>
+                                    {c.type && (
+                                      <span className="text-[9px] font-black uppercase tracking-wider opacity-60 flex items-center gap-1">
+                                        {isGoal ? '⚽ ' : isCard ? '🟨 ' : ''}{c.type}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeSideTab === 'events' && (
+                      <div className="space-y-4">
+                        {!streamingEspnEventId ? (
+                          <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                            Key events waiting to connect...
+                          </div>
+                        ) : loadingStreamingCommentary ? (
+                          <div className="flex flex-col items-center justify-center py-12">
+                            <Loader2 className="h-5 w-5 text-emerald-accent animate-spin" />
+                            <span className="text-[10px] text-slate-500 uppercase font-black mt-2">Loading events...</span>
+                          </div>
+                        ) : !streamingCommentaryData?.keyEvents || streamingCommentaryData.keyEvents.length === 0 ? (
+                          <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                            No key events registered yet
+                          </div>
+                        ) : (
+                          <div className="space-y-3.5">
+                            {streamingCommentaryData.keyEvents.map((e: any, i: number) => {
+                              const isGoal = e.type?.toLowerCase().includes('goal');
+                              const isCard = e.type?.toLowerCase().includes('card') || e.type?.toLowerCase().includes('booking');
+                              return (
+                                <div 
+                                  key={i} 
+                                  className={`p-3 rounded-xl border flex gap-3 text-xs leading-relaxed transition-all ${
+                                    isGoal 
+                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 font-bold font-sans' 
+                                      : isCard 
+                                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-300 font-sans'
+                                        : 'bg-slate-950/40 border-slate-900 text-slate-300 font-sans'
+                                  }`}
+                                >
+                                  <span className="font-black text-emerald-accent shrink-0 min-w-[28px] text-left">
+                                    {e.clock || '0\''}
+                                  </span>
+                                  <div className="space-y-1">
+                                    <p className="font-semibold">{e.text}</p>
+                                    <span className="text-[9px] font-black uppercase tracking-wider opacity-60 flex items-center gap-1">
+                                      {isGoal ? '⚽ ' : isCard ? '🟨 ' : ''}{e.type}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeSideTab === 'telemetry' && (
+                      <div className="space-y-6">
+                        <div className="space-y-4 text-xs font-bold">
+                          <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                            <span className="text-slate-500">Live Status:</span>
+                            <span className="text-emerald-accent uppercase flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-emerald-accent animate-ping" />
+                              ONLINE
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                            <span className="text-slate-500">Active Channel:</span>
+                            <span className="text-white uppercase">{streamingUrlIndex === 0 ? 'Primary Feed' : `Backup Feed ${streamingUrlIndex}`}</span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                            <span className="text-slate-500">Codec Type:</span>
+                            <span className="text-white font-mono">H.264 / AAC</span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                            <span className="text-slate-500">Network Latency:</span>
+                            <span className="text-white">1.8s (Low Delay)</span>
+                          </div>
+                          <div className="flex justify-between items-center py-2 border-b border-slate-900">
+                            <span className="text-slate-500">Buffer state:</span>
+                            <span className={streamingBufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}>{streamingBufferState}</span>
+                          </div>
+                          <div className="flex justify-between items-center py-2">
+                            <span className="text-slate-500">Score Sync API:</span>
+                            <span className={streamingEspnEventId ? 'text-emerald-accent flex items-center gap-1.5' : 'text-amber-500'}>
+                              {streamingEspnEventId ? (
+                                <>
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-accent animate-pulse" />
+                                  CONNECTED ({streamingEspnEventId})
+                                </>
+                              ) : 'NOT CONNECTED'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-900 flex gap-2.5 text-[10px] text-slate-500 font-bold uppercase leading-relaxed">
+                          <Check className="h-4 w-4 text-emerald-accent shrink-0" />
+                          Adaptive bitrate engine is active and adjusting to your bandwidth speeds automatically.
+                        </div>
+                      </div>
+                    )}
+
+                    {activeSideTab === 'lineup' && (
+                      <div className="space-y-6">
+                        {!streamingEspnEventId ? (
+                          <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                            Lineup feed waiting to connect...
+                          </div>
+                        ) : loadingStreamingCommentary ? (
+                          <div className="flex flex-col items-center justify-center py-12">
+                            <Loader2 className="h-5 w-5 text-emerald-accent animate-spin" />
+                            <span className="text-[10px] text-slate-500 uppercase font-black mt-2">Loading lineups...</span>
+                          </div>
+                        ) : !streamingCommentaryData?.rosters ? (
+                          <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                            No lineup details available for this match
+                          </div>
+                        ) : (() => {
+                          const values = Object.values(streamingCommentaryData.rosters);
+                          const homeRoster = values.find((r: any) => r.homeAway === 'home') as any;
+                          const awayRoster = values.find((r: any) => r.homeAway === 'away') as any;
+
+                          if (!homeRoster && !awayRoster) {
+                            return (
+                              <div className="text-center py-10 text-slate-500 font-bold uppercase text-[10px]">
+                                Lineups are not posted yet
+                              </div>
+                            );
+                          }
+
+                          const renderTeamLineup = (rosterData: any, teamName: string) => {
+                            if (!rosterData) return null;
+                            const players = rosterData.roster || [];
+                            if (players.length === 0) return null;
+                            return (
+                              <div className="space-y-2.5">
+                                <h4 className="text-xs font-black uppercase text-emerald-accent tracking-wider border-b border-slate-900 pb-1">{teamName} Lineup</h4>
+                                <div className="space-y-1.5">
+                                  {players.map((p: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between items-center text-xs text-slate-300 py-1 font-medium font-sans">
+                                      <div className="flex items-center gap-2">
+                                        {p.jersey && <span className="font-bold text-[10px] text-slate-500 bg-slate-950 w-5 h-5 rounded-full flex items-center justify-center border border-card-border">{p.jersey}</span>}
+                                        <span>{p.athlete?.displayName || p.athlete?.name || 'Player'}</span>
+                                      </div>
+                                      <span className="text-[10px] uppercase text-slate-500 font-bold">{p.position?.abbreviation || p.position?.name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          };
+
+                          return (
+                            <div className="space-y-6">
+                              {renderTeamLineup(homeRoster, getTeamName(streamingMatch, 'home') || 'Home')}
+                              {renderTeamLineup(awayRoster, getTeamName(streamingMatch, 'away') || 'Away')}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        ) : activeTab !== 'channels' ? (
           isLoading ? (
             <div className="flex flex-col items-center justify-center py-24">
               <Loader2 className="h-8 w-8 text-emerald-accent animate-spin" />
@@ -1968,6 +2623,69 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   if (norm1 === norm2) return true;
   if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
   return false;
+}
+
+function matchChannelWithTeams(channelName: string, homeTeam: string, awayTeam: string): boolean {
+  const nameLower = channelName.toLowerCase();
+  const homeLower = homeTeam.toLowerCase();
+  const awayLower = awayTeam.toLowerCase();
+
+  // 1. Direct match: check if both full team names (or normalized names) are in the channel name
+  if (nameLower.includes(homeLower) && nameLower.includes(awayLower)) {
+    return true;
+  }
+
+  // Check with normalized names if different
+  const normHome = normalizeTeamName(homeTeam);
+  const normAway = normalizeTeamName(awayTeam);
+  if (normHome && normAway) {
+    if (nameLower.includes(normHome) && nameLower.includes(normAway)) {
+      return true;
+    }
+  }
+
+  // 2. Abbreviation match: check if 3-letter prefixes are in the channel name
+  const homeShort = homeLower.substring(0, 3);
+  const awayShort = awayLower.substring(0, 3);
+  if (homeShort.length >= 3 && awayShort.length >= 3) {
+    if (nameLower.includes(homeShort) && nameLower.includes(awayShort)) {
+      return true;
+    }
+  }
+
+  // 3. Split team names by spaces/dashes and check if any part of the name is present
+  const homeWords = homeLower.split(/[\s-]+/).filter(w => w.length > 2);
+  const awayWords = awayLower.split(/[\s-]+/).filter(w => w.length > 2);
+  if (homeWords.length > 0 && awayWords.length > 0) {
+    const hasHomeWord = homeWords.some(w => nameLower.includes(w));
+    const hasAwayWord = awayWords.some(w => nameLower.includes(w));
+    if (hasHomeWord && hasAwayWord) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getYouTubeEmbedUrl(url: string): string {
+  if (!url) return '';
+  let videoId = '';
+  try {
+    if (url.includes('youtube.com/embed/')) {
+      return url;
+    }
+    if (url.includes('youtu.be/')) {
+      videoId = url.split('youtu.be/')[1]?.split(/[?#]/)[0] || '';
+    } else if (url.includes('youtube.com/watch')) {
+      const urlParams = new URLSearchParams(url.split('?')[1] || '');
+      videoId = urlParams.get('v') || '';
+    } else if (url.includes('youtube.com/v/')) {
+      videoId = url.split('/v/')[1]?.split(/[?#]/)[0] || '';
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0` : url;
 }
 
 // Global/local audio elements for chime

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import Hls from 'hls.js';
+import { useBlackScreenDetector } from './useBlackScreenDetector';
 
 interface HlsPlayerProps {
   url: string;
@@ -12,6 +13,8 @@ interface HlsPlayerProps {
 export default function HlsPlayer({ url, onError, onPlaying }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+
+  useBlackScreenDetector(videoRef, url, onError);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -147,6 +150,7 @@ export default function HlsPlayer({ url, onError, onPlaying }: HlsPlayerProps) {
         controls
         autoPlay
         playsInline
+        crossOrigin="anonymous"
         className="w-full h-full object-contain focus:outline-none"
       />
     </div>

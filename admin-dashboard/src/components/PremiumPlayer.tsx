@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import { useBlackScreenDetector } from './useBlackScreenDetector';
 import { 
   Play, 
   Pause, 
@@ -56,6 +57,8 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const dashPlayerRef = useRef<any>(null);
+
+  useBlackScreenDetector(videoRef, url, onError);
 
   // States
   const [isPlaying, setIsPlaying] = useState(false);
@@ -684,6 +687,7 @@ export default function PremiumPlayer({ url, onError, onPlaying }: PremiumPlayer
         ref={videoRef}
         autoPlay
         playsInline
+        crossOrigin="anonymous"
         className="w-full h-full object-contain cursor-pointer"
         onClick={(e) => {
           e.stopPropagation();

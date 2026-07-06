@@ -87,6 +87,48 @@ function teamsMatch(dbName: string, espnName: string): boolean {
   return false;
 }
 
+function matchChannelWithTeams(channelName: string, homeTeam: string, awayTeam: string): boolean {
+  const nameLower = channelName.toLowerCase();
+  const homeLower = homeTeam.toLowerCase();
+  const awayLower = awayTeam.toLowerCase();
+
+  // 1. Direct match: check if both full team names (or normalized names) are in the channel name
+  if (nameLower.includes(homeLower) && nameLower.includes(awayLower)) {
+    return true;
+  }
+
+  // Check with normalized names if different
+  const normHome = normalizeTeamName(homeTeam);
+  const normAway = normalizeTeamName(awayTeam);
+  if (normHome && normAway) {
+    if (nameLower.includes(normHome) && nameLower.includes(normAway)) {
+      return true;
+    }
+  }
+
+  // 2. Abbreviation match: check if 3-letter prefixes are in the channel name
+  const homeShort = homeLower.substring(0, 3);
+  const awayShort = awayLower.substring(0, 3);
+  if (homeShort.length >= 3 && awayShort.length >= 3) {
+    if (nameLower.includes(homeShort) && nameLower.includes(awayShort)) {
+      return true;
+    }
+  }
+
+  // 3. Split team names by spaces/dashes and check if any part of the name is present
+  const homeWords = homeLower.split(/[\s-]+/).filter(w => w.length > 2);
+  const awayWords = awayLower.split(/[\s-]+/).filter(w => w.length > 2);
+  if (homeWords.length > 0 && awayWords.length > 0) {
+    const hasHomeWord = homeWords.some(w => nameLower.includes(w));
+    const hasAwayWord = awayWords.some(w => nameLower.includes(w));
+    if (hasHomeWord && hasAwayWord) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function getYouTubeEmbedUrl(url: string): string {
   if (!url) return '';
   let videoId = '';
@@ -920,9 +962,32 @@ export default function UserWatchPage() {
       clearTimeout(fallbackTimeoutRef.current);
     }
 
-    const nextIndex = (currentUrlIndex + 1) % streamUrls.length;
+    const homeN = match?.home_team_id ? match.home_team?.name : match?.home_team_custom_name;
+    const awayN = match?.away_team_id ? match.away_team?.name : match?.away_team_custom_name;
 
-    if (nextIndex === 0) {
+    // Find all indices of streams whose labels match the match name (homeN vs awayN)
+    const matchedIndices: number[] = [];
+    if (homeN && awayN) {
+      streamLabels.forEach((label, idx) => {
+        if (matchChannelWithTeams(label, homeN, awayN)) {
+          matchedIndices.push(idx);
+        }
+      });
+    }
+
+    let nextIndex = (currentUrlIndex + 1) % streamUrls.length;
+
+    // If there are channels matching the match title, prioritize switching to one of them
+    if (matchedIndices.length > 0) {
+      const nextMatched = matchedIndices.find(idx => idx > currentUrlIndex);
+      if (nextMatched !== undefined) {
+        nextIndex = nextMatched;
+      } else {
+        nextIndex = matchedIndices[0]; // loop back to first matched
+      }
+    }
+
+    if (nextIndex === 0 && matchedIndices.length === 0) {
       // Cycle back to primary means all links failed. Show connection error UI.
       setPlayError(errorMsg);
       setIsReconnecting(true);

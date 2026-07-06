@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import { useBlackScreenDetector } from './useBlackScreenDetector';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
   RotateCcw, Settings, Info, AlertTriangle, Activity 
@@ -18,6 +19,8 @@ export default function Engine4Player({ url, onError, onPlaying }: Engine4Player
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   
+  useBlackScreenDetector(videoRef, url, onError);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -283,6 +286,7 @@ export default function Engine4Player({ url, onError, onPlaying }: Engine4Player
         playsInline
         autoPlay
         muted
+        crossOrigin="anonymous"
       />
 
       {/* Control Overlay */}
