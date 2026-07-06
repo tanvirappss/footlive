@@ -1,0 +1,2289 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html>
+<html xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+<head>
+  <b:include data='blog' name='all-head-content'/>
+  <title><data:blog.pageTitle/></title>
+  
+  <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' name='viewport'/>
+  
+  <!-- CSS Skin -->
+  <b:skin><![CDATA[
+    /* Reset and Core Styles */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #090c10;
+      color: #f0f3f8;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      scroll-behavior: smooth;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090c10;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #10b981;
+    }
+
+    /* Premium Glassmorphic Inputs & Panels */
+    .glass-panel {
+      background: rgba(15, 22, 36, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .glass-input {
+      background: rgba(8, 12, 21, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      transition: all 0.2s ease;
+    }
+    .glass-input:focus {
+      border-color: #10b981;
+      background: rgba(8, 12, 21, 0.8);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+      outline: none;
+    }
+
+    /* Grid system & custom helpers */
+    .animate-pulse-slow {
+      animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+
+    /* News Ticker Animation */
+    @keyframes marquee {
+      0% {
+        transform: translate3d(0, 0, 0);
+      }
+      100% {
+        transform: translate3d(-100%, 0, 0);
+      }
+    }
+    .animate-marquee {
+      display: inline-block;
+      padding-left: 100%;
+      animation: marquee 35s linear infinite;
+    }
+    .animate-marquee:hover {
+      animation-play-state: paused;
+    }
+
+    /* Font modifiers */
+    .font-bangla {
+      font-family: 'Hind Siliguri', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    }
+
+    /* Layout-safe ad containers */
+    .ad-container {
+      overflow: hidden;
+      max-width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0;
+    }
+  ]]></b:skin>
+
+  <!-- External Fonts & JS Libraries -->
+  <link href='https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&amp;display=swap' rel='stylesheet'/>
+  <link href='https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&amp;display=swap' rel='stylesheet'/>
+  <script src='https://cdn.tailwindcss.com'></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'card-border': 'rgba(255,255,255,0.06)',
+            'emerald-accent': '#10b981'
+          }
+        }
+      }
+    }
+  </script>
+  <script src='https://cdn.jsdelivr.net/npm/hls.js@1.6.16'></script>
+  <script src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.js'></script>
+  <script src='https://unpkg.com/lucide@latest'></script>
+</head>
+<body>
+
+  <!-- Dynamic SPA Root (Placed outside sections to prevent Blog widget wrapper block on 0 posts) -->
+  <div id='app-root'>
+    <div class='flex flex-col items-center justify-center min-h-screen bg-[#090c10]'>
+      <div class='animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-emerald-500'></div>
+      <p class='text-sm text-slate-400 mt-4 font-semibold uppercase tracking-wider'>Portal matches is connecting...</p>
+    </div>
+  </div>
+
+  <!-- Debug Overlay for Client errors -->
+  <div id="debug-error-overlay" class="fixed bottom-4 left-4 z-50 bg-red-955/95 border border-red-500 text-red-400 p-4 rounded-2xl text-xs font-mono max-w-md hidden shadow-2xl"></div>
+
+  <!-- Hidden Section for Blogger compilation requirements -->
+  <div style='display: none !important;'>
+    <b:section id='blogger-required-section' showaddelement='yes'>
+      <b:widget id='Blog1' locked='false' title='Blog Posts' type='Blog'/>
+    </b:section>
+  </div>
+
+  <!-- Core JavaScript SPA Code -->
+  <script type='text/javascript'>
+    //<![CDATA[
+    
+    // Global Error Handling overlay
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error("Global Error Caught:", message, "at", source, ":", lineno);
+      const errDiv = document.getElementById('debug-error-overlay');
+      if (errDiv) {
+        errDiv.style.display = 'block';
+        errDiv.innerHTML = `<strong class="text-white block mb-1">⚠️ Client-Side Error</strong>
+          <span class="block">Msg: ${message}</span>
+          <span class="block">Line: ${lineno}</span>`;
+      }
+      return false;
+    };
+
+    // 1. Supabase Credentials
+    const supabaseUrl = 'https://wkikuysbirrcmbextkvp.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndraWt1eXNiaXJyY21iZXh0a3ZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExODIzNDEsImV4cCI6MjA5Njc1ODM0MX0.eNrSGZFdjNEoy1OE1w9Zj3OwyIw1lZCRdOHIRiP-IBA';
+    let supabaseDb = null;
+
+    // 2. Base Endpoint URL for Dashboard Actions
+    const BACKEND_BASE = 'https://kheledao.kheledao.workers.dev';
+
+    // 3. Application State Object
+    const state = {
+      activeTab: 'live',            // 'streaming' | 'live' | 'upcoming' | 'finished' | 'channels'
+      matches: [],
+      espnScores: [],
+      channels: [],
+      announcements: [],
+      systemConfig: null,
+      tickerSettings: null,
+      adsterra: null,
+      dismissedAnnouncements: {},
+      
+      // View counts & Active viewers metrics
+      totalViews: 0,
+      liveCount: 0,
+      isNoticeModalOpen: false,
+
+      // Watch mode state
+      watchMatchId: null,
+      streamingMatch: null,
+      activeStreamIndex: 0,
+      playerError: null,
+      reconnecting: false,
+      bufferState: 'Healthy',
+      activeSideTab: 'commentary',  // 'commentary' | 'events' | 'telemetry' | 'lineup'
+      commentaryData: null,
+      loadingCommentary: false,
+      playerKey: 0,
+      
+      // TV Channel mode state
+      watchChannelId: null,
+      selectedChannelUrl: null,
+      selectedChannelName: '',
+      
+      // Search filters
+      upcomingQuery: '',
+      finishedQuery: '',
+      channelsQuery: '',
+      
+      // Initialization flags
+      hasInitializedTab: false,
+      loading: true
+    };
+
+    // 4. Timer handles
+    let globalInterval = null;
+    let commentaryInterval = null;
+    let detectorInterval = null;
+    let blackFrameCount = 0;
+    let hlsRef = { current: null };
+
+    // 5. Utility alias maps
+    const teamNameAliases = {
+      'united states': ['usa', 'us', 'united states of america', 'u.s.a.'],
+      'south korea': ['korea republic', 'korea', 'korea rep.', 'republic of korea'],
+      'ivory coast': ["cote d'ivoire", 'côte d\'ivoire', 'cote divoire'],
+      'dr congo': ['democratic republic of congo', 'congo dr', 'dem. rep. congo', 'congo'],
+      'cabo verde': ['cape verde'],
+      'czech republic': ['czechia'],
+      'bosnia': ['bosnia and herzegovina', 'bosnia &amp; herzegovina', 'bosnia-herzegovina'],
+      'curacao': ['curaçao'],
+      'turkey': ['türkiye', 'turkiye']
+    };
+
+    function normalizeTeamName(name) {
+      if (!name) return '';
+      const lower = name.trim().toLowerCase();
+      for (const [canonical, aliases] of Object.entries(teamNameAliases)) {
+        if (lower === canonical || aliases.includes(lower)) {
+          return canonical;
+        }
+      }
+      return lower;
+    }
+
+    function teamsMatch(dbName, espnName) {
+      const norm1 = normalizeTeamName(dbName);
+      const norm2 = normalizeTeamName(espnName);
+      if (norm1 === norm2) return true;
+      if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
+      return false;
+    }
+
+    function matchChannelWithTeams(channelName, homeTeam, awayTeam) {
+      if (!channelName || !homeTeam || !awayTeam) return false;
+      const nameLower = channelName.toLowerCase();
+      const homeLower = homeTeam.toLowerCase();
+      const awayLower = awayTeam.toLowerCase();
+
+      if (nameLower.includes(homeLower) && nameLower.includes(awayLower)) return true;
+
+      const normHome = normalizeTeamName(homeTeam);
+      const normAway = normalizeTeamName(awayTeam);
+      if (normHome && normAway && nameLower.includes(normHome) && nameLower.includes(normAway)) return true;
+
+      const homeShort = homeLower.substring(0, 3);
+      const awayShort = awayLower.substring(0, 3);
+      if (homeShort.length >= 3 && awayShort.length >= 3 && nameLower.includes(homeShort) && nameLower.includes(awayShort)) return true;
+
+      const homeWords = homeLower.split(/[\s-]+/).filter(w => w.length > 2);
+      const awayWords = awayLower.split(/[\s-]+/).filter(w => w.length > 2);
+      if (homeWords.length > 0 && awayWords.length > 0) {
+        const hasHomeWord = homeWords.some(w => nameLower.includes(w));
+        const hasAwayWord = awayWords.some(w => nameLower.includes(w));
+        if (hasHomeWord && hasAwayWord) return true;
+      }
+      return false;
+    }
+
+    function getYouTubeEmbedUrl(url) {
+      if (!url) return '';
+      let videoId = '';
+      try {
+        if (url.includes('youtube.com/embed/')) return url;
+        if (url.includes('youtu.be/')) {
+          videoId = url.split('youtu.be/')[1]?.split(/[?#]/)[0] || '';
+        } else if (url.includes('youtube.com/watch')) {
+          const urlParams = new URLSearchParams(url.split('?')[1] || '');
+          videoId = urlParams.get('v') || '';
+        } else if (url.includes('youtube.com/v/')) {
+          videoId = url.split('/v/')[1]?.split(/[?#]/)[0] || '';
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0` : url;
+    }
+
+    // 6. Router logic mapping
+    function routeHash() {
+      const params = new URLSearchParams(window.location.search);
+      const watch = params.get('watch');
+      const channel = params.get('channel');
+      
+      if (watch) {
+        state.watchMatchId = watch;
+        state.watchChannelId = null;
+      } else if (channel) {
+        state.watchChannelId = channel;
+        state.watchMatchId = null;
+      } else {
+        state.watchMatchId = null;
+        state.watchChannelId = null;
+      }
+      
+      state.playerError = null;
+      state.reconnecting = false;
+      state.bufferState = 'Healthy';
+      state.activeStreamIndex = 0;
+      
+      render();
+      if (state.watchMatchId) {
+        loadWatchMatchDetails();
+      } else if (state.watchChannelId) {
+        loadWatchChannelDetails();
+      }
+    }
+
+    function navigate(paramsMap) {
+      const url = new URL(window.location.href);
+      for (const [key, val] of Object.entries(paramsMap)) {
+        if (val === null) {
+          url.searchParams.delete(key);
+        } else {
+          url.searchParams.set(key, val);
+        }
+      }
+      window.history.pushState({}, '', url.toString());
+      routeHash();
+    }
+
+    window.addEventListener('popstate', routeHash);
+
+    // 7. Initial loading and polling
+    async function initApp() {
+      try {
+        // Wait for window.supabase (up to 10 seconds)
+        let retries = 0;
+        while (!window.supabase && retries < 100) {
+          await new Promise(r => setTimeout(r, 100));
+          retries++;
+        }
+        
+        if (!window.supabase) {
+          throw new Error("Supabase script failed to load from CDN. Please check your internet connection.");
+        }
+        
+        // Initialize supabaseDb instance safely
+        supabaseDb = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+        await Promise.all([
+          fetchSystemConfig(),
+          fetchTickerSettings(),
+          fetchAdsterraConfig(),
+          fetchMatches(),
+          fetchAnnouncements(),
+          fetchChannels(),
+          fetchEspnScores()
+        ]);
+        
+        // Fetch view counters
+        await fetchCounters();
+
+        // Tab landing default
+        if (state.systemConfig && !state.hasInitializedTab) {
+          const showStreaming = state.systemConfig.custom_scripts?.enable_streaming_now !== false;
+          state.activeTab = showStreaming ? 'streaming' : 'live';
+          state.hasInitializedTab = true;
+        }
+        
+        state.loading = false;
+        routeHash();
+        
+        // Polling loop every 6 seconds
+        if (globalInterval) clearInterval(globalInterval);
+        globalInterval = setInterval(async () => {
+          await Promise.all([
+            fetchMatches(),
+            fetchEspnScores(),
+            fetchChannels(),
+            fetchCounters()
+          ]);
+          checkKickoffAutoSwitch();
+          render();
+        }, 6000);
+        
+        // Global countdown timer loop
+        initMatchCountdowns();
+        
+      } catch (err) {
+        console.error('Fatal initialization error:', err);
+        const errDiv = document.getElementById('debug-error-overlay');
+        if (errDiv) {
+          errDiv.style.display = 'block';
+          errDiv.innerHTML = `<strong class="text-white block mb-1">⚠️ Connection Error</strong>
+            <span>Failed to connect to backend/database: ${err.message}</span>`;
+        }
+      }
+    }
+
+    async function fetchSystemConfig() {
+      const { data, error } = await supabaseDb
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'SystemConfig')
+        .maybeSingle();
+      if (!error && data) {
+        state.systemConfig = data;
+      }
+    }
+
+    async function fetchTickerSettings() {
+      const { data, error } = await supabaseDb
+        .from('ticker_settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (!error && data && data.length > 0) {
+        state.tickerSettings = data[0];
+      }
+    }
+
+    async function fetchAdsterraConfig() {
+      const { data, error } = await supabaseDb
+        .from('ad_networks')
+        .select('*')
+        .eq('network_name', 'Adsterra')
+        .maybeSingle();
+      if (!error && data) {
+        state.adsterra = data;
+      }
+    }
+
+    async function fetchMatches() {
+      // Use exact database constraints matches_home_team_id_fkey and matches_away_team_id_fkey
+      const { data, error } = await supabaseDb
+        .from('matches')
+        .select(`
+          *,
+          home_team:teams!matches_home_team_id_fkey(*),
+          away_team:teams!matches_away_team_id_fkey(*)
+        `)
+        .order('match_timestamp', { ascending: true });
+      if (!error && data) {
+        state.matches = data;
+      }
+    }
+
+    async function fetchAnnouncements() {
+      const { data, error } = await supabaseDb
+        .from('announcements')
+        .select('*')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        state.announcements = data;
+      }
+    }
+
+    async function fetchChannels() {
+      const { data, error } = await supabaseDb
+        .from('channels')
+        .select('*')
+        .eq('is_enabled', true)
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        state.channels = data;
+      }
+    }
+
+    async function fetchEspnScores() {
+      try {
+        const res = await fetch(`${BACKEND_BASE}/api/live-scores`);
+        if (res.ok) {
+          const data = await res.json();
+          state.espnScores = data.scores || [];
+        }
+      } catch (e) {
+        console.warn('Failed to query scoreboard:', e);
+      }
+    }
+
+    async function fetchCounters() {
+      try {
+        const offsetViews = state.tickerSettings?.views_offset !== undefined ? Number(state.tickerSettings.views_offset) : 0;
+        const offsetLive = state.tickerSettings?.viewers_offset !== undefined ? Number(state.tickerSettings.viewers_offset) : 0;
+
+        const [viewsRes, liveRes] = await Promise.all([
+          supabaseDb.rpc('get_total_views_count'),
+          supabaseDb.rpc('get_active_viewers_count')
+        ]);
+        
+        state.totalViews = (viewsRes.data || 0) + offsetViews;
+        state.liveCount = (liveRes.data || 0) + offsetLive;
+      } catch (e) {
+        console.warn('RPC metrics count load failed:', e);
+      }
+    }
+
+    async function logAnalyticsWatch() {
+      if (!state.watchMatchId || !state.streamingMatch) return;
+      try {
+        let sid = sessionStorage.getItem('user_session_id');
+        if (!sid) {
+          sid = 'sess_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+          sessionStorage.setItem('user_session_id', sid);
+        }
+        await supabaseDb.from('analytics').insert([{
+          event_name: 'web_watch_stream',
+          session_id: sid,
+          metadata: { match_id: state.streamingMatch.id, tournament: state.streamingMatch.tournament_name }
+        }]);
+      } catch (e) {
+        console.warn('Analytics logging failed:', e);
+      }
+    }
+
+    function checkKickoffAutoSwitch() {
+      if (!state.systemConfig) return;
+      const autoSwitchEnabled = state.systemConfig.custom_scripts?.enable_live_tab_auto_switch !== false;
+      if (!autoSwitchEnabled) return;
+
+      const liveOffsetMins = 10;
+      const hasMatchClose = state.matches.some(m => {
+        if (m.status !== 'upcoming') return false;
+        const kickoff = new Date(m.match_timestamp).getTime();
+        const diff = kickoff - Date.now();
+        return diff > 0 && diff <= liveOffsetMins * 60 * 1000;
+      });
+
+      if (hasMatchClose && state.activeTab !== 'live' && !state.watchMatchId && !state.watchChannelId) {
+        console.log('[Blogger Auto Switch] Match kickoff close. Switching to Live Now.');
+        state.activeTab = 'live';
+      }
+    }
+
+    // 8. Match categorization filters
+    function getCategorizedMatches() {
+      const autoFinishEnabled = state.systemConfig?.custom_scripts?.auto_finish_enabled !== false;
+      const forceAllLive = state.systemConfig?.custom_scripts?.force_all_live === true;
+      const liveOffsetMins = state.systemConfig?.custom_scripts?.match_live_before_minutes !== undefined 
+        ? Number(state.systemConfig.custom_scripts.match_live_before_minutes) 
+        : 10;
+      const durationHours = state.systemConfig?.custom_scripts?.match_duration_hours !== undefined 
+        ? Number(state.systemConfig.custom_scripts.match_duration_hours) 
+        : 1;
+      const durationMins = state.systemConfig?.custom_scripts?.match_duration_minutes !== undefined 
+        ? Number(state.systemConfig.custom_scripts.match_duration_minutes) 
+        : 45;
+      const matchDuration = (durationHours * 60 + durationMins) * 60 * 1000;
+
+      const live = [];
+      const upcoming = [];
+      const finished = [];
+
+      state.matches.forEach(m => {
+        const kickoff = new Date(m.match_timestamp).getTime();
+        
+        // Force all live check
+        if (forceAllLive && m.status === 'upcoming') {
+          live.push(m);
+          return;
+        }
+
+        // Check Live status
+        const isLive = m.status === 'live' || (
+          m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' &&
+          Date.now() >= (kickoff - liveOffsetMins * 60 * 1000) &&
+          Date.now() < (kickoff + matchDuration)
+        );
+
+        // Check Upcoming status
+        const isUpcoming = m.status === 'upcoming' && Date.now() < (kickoff - liveOffsetMins * 60 * 1000);
+
+        // Check Finished status
+        const isFinished = m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed' || (
+          autoFinishEnabled && m.status !== 'finished' && m.status !== 'cancelled' && m.status !== 'postponed' &&
+          Date.now() >= (kickoff + matchDuration)
+        );
+
+        if (isLive) live.push(m);
+        else if (isUpcoming) upcoming.push(m);
+        else if (isFinished) finished.push(m);
+      });
+
+      // Filter by search terms
+      const filter = (list, query) => {
+        if (!query) return list;
+        const q = query.toLowerCase().trim();
+        return list.filter(m => {
+          const home = (m.home_team?.name || m.home_team_custom_name || '').toLowerCase();
+          const away = (m.away_team?.name || m.away_team_custom_name || '').toLowerCase();
+          const tournament = (m.tournament_name || '').toLowerCase();
+          return home.includes(q) || away.includes(q) || tournament.includes(q);
+        });
+      };
+
+      return {
+        live,
+        upcoming: filter(upcoming, state.upcomingQuery),
+        finished: filter(finished, state.finishedQuery).sort((a,b) => new Date(b.match_timestamp) - new Date(a.match_timestamp))
+      };
+    }
+
+    // 9. Load details for Watch page
+    async function loadWatchMatchDetails() {
+      // Find matching item
+      const match = state.matches.find(m => String(m.id) === state.watchMatchId);
+      if (!match) return;
+      state.streamingMatch = match;
+      
+      // Load streams
+      const { data: streams, error } = await supabaseDb
+        .from('streams')
+        .select('*')
+        .eq('match_id', match.id)
+        .eq('is_enabled', true);
+      
+      let streamItems = [];
+      if (!error && streams && streams.length > 0) {
+        const stream = streams[0];
+        streamItems = Array.isArray(stream.urls) && stream.urls.length > 0
+          ? stream.urls
+          : [
+              { label: 'Primary Server', url: stream.primary_url },
+              { label: 'Backup Feed 1', url: stream.backup_url_1 },
+              { label: 'Backup Feed 2', url: stream.backup_url_2 },
+              { label: 'Backup Feed 3', url: stream.backup_url_3 }
+            ].filter(item => !!item.url);
+      }
+
+      // Add YouTube stream if globally active
+      if (state.systemConfig?.custom_scripts?.youtube_live_enabled && state.systemConfig?.custom_scripts?.youtube_live_url) {
+        streamItems.push({
+          label: state.systemConfig.custom_scripts.youtube_live_label || 'robeeee',
+          url: state.systemConfig.custom_scripts.youtube_live_url
+        });
+      }
+
+      state.streamingUrls = streamItems.map(s => s.url);
+      state.streamingLabels = streamItems.map(s => s.label || 'Server');
+      
+      render();
+      initializeLivePlayer();
+      loadCommentaryFeed();
+      logAnalyticsWatch();
+    }
+
+    async function loadWatchChannelDetails() {
+      const chan = state.channels.find(c => String(c.id) === state.watchChannelId);
+      if (!chan) return;
+      state.selectedChannelName = chan.name;
+      state.selectedChannelUrl = chan.url;
+      render();
+      initializeChannelPlayer();
+    }
+
+    // 10. ESPN Scores Matching
+    function getMatchedEspnScore(match) {
+      if (!match) return null;
+      const homeName = match.home_team_id ? match.home_team?.name : match.home_team_custom_name;
+      const awayName = match.away_team_id ? match.away_team?.name : match.away_team_custom_name;
+      if (!homeName || !awayName) return null;
+      
+      return state.espnScores.find(es => {
+        return (teamsMatch(homeName, es.homeTeam) && teamsMatch(awayName, es.awayTeam)) ||
+               (teamsMatch(homeName, es.awayTeam) && teamsMatch(awayName, es.homeTeam));
+      });
+    }
+
+    async function loadCommentaryFeed() {
+      if (commentaryInterval) clearInterval(commentaryInterval);
+      
+      const score = getMatchedEspnScore(state.streamingMatch);
+      if (!score || !score.espnEventId) {
+        state.commentaryData = null;
+        render();
+        return;
+      }
+
+      state.loadingCommentary = true;
+      render();
+
+      const fetchCommentary = async () => {
+        try {
+          const res = await fetch(`${BACKEND_BASE}/api/live-commentary?event=${score.espnEventId}`);
+          if (res.ok) {
+            state.commentaryData = await res.json();
+          }
+        } catch (e) {
+          console.warn('Commentary fetch error:', e);
+        } finally {
+          state.loadingCommentary = false;
+          render();
+        }
+      };
+
+      await fetchCommentary();
+      commentaryInterval = setInterval(fetchCommentary, 7000);
+    }
+
+    // 11. Custom Player Engine and Black Screen Detector
+    function initializeLivePlayer() {
+      const container = document.getElementById('watch-player-viewport');
+      if (!container) return;
+      
+      const activeUrl = state.streamingUrls[state.activeStreamIndex];
+      if (!activeUrl) {
+        container.innerHTML = `
+          <div class="flex flex-col items-center justify-center p-8 bg-slate-955/60 border border-slate-900 rounded-3xl h-full text-center gap-2">
+            <span class="text-3xl text-amber-500">⚠️</span>
+            <h4 class="text-sm font-bold uppercase tracking-wider text-white">No stream source configured</h4>
+            <p class="text-xs text-slate-500 max-w-xs">No active video link matches this fixture yet. Please return closer to kickoff.</p>
+          </div>
+        `;
+        return;
+      }
+
+      renderVideoEngine(container, activeUrl, handlePlayerError, handlePlayerPlaying);
+    }
+
+    function initializeChannelPlayer() {
+      const container = document.getElementById('channel-player-viewport');
+      if (!container) return;
+      
+      if (!state.selectedChannelUrl) {
+        container.innerHTML = `<div class="flex items-center justify-center h-full text-slate-500 text-xs font-bold uppercase">No channel url</div>`;
+        return;
+      }
+      renderVideoEngine(container, state.selectedChannelUrl, (err) => console.error('Channel player error:', err), null);
+    }
+
+    function renderVideoEngine(containerEl, url, onError, onPlaying) {
+      if (detectorInterval) clearInterval(detectorInterval);
+      blackFrameCount = 0;
+
+      if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        containerEl.innerHTML = `
+          <iframe 
+            src="${getYouTubeEmbedUrl(url)}"
+            title="YouTube Live Feed" 
+            frameborder="0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+            allowfullscreen 
+            class="w-full h-full rounded-2xl border border-card-border"
+          ></iframe>
+        `;
+        if (onPlaying) onPlaying();
+        return;
+      }
+
+      const activePlayer = state.systemConfig?.custom_scripts?.active_player || 'player_1';
+      console.log('[Blogger Player Selector] Active Player Skin:', activePlayer);
+
+      if (activePlayer === 'player_2') {
+        // Player 2 - Premium Speed skin
+        containerEl.innerHTML = `
+          <div class="relative w-full h-full bg-black flex items-center justify-center rounded-2xl overflow-hidden border border-card-border group" id="player-container">
+            <video id="custom-video" class="w-full h-full object-contain cursor-pointer" autoplay="autoplay" playsinline="playsinline" crossorigin="anonymous"></video>
+            
+            <!-- Diagnostics Overlay -->
+            <div id="player-diag-overlay" class="absolute inset-0 bg-black/95 backdrop-blur-md flex flex-col justify-center p-6 text-xs text-left overflow-y-auto space-y-3 z-50 hidden">
+              <div class="flex items-center gap-2 text-red-500 font-extrabold uppercase tracking-widest text-[10px]">
+                <span class="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
+                Playback Diagnostics Engine
+              </div>
+              <div class="space-y-1.5 border-t border-slate-900 pt-3 text-[10.5px]">
+                <div class="flex gap-2"><span class="text-slate-500 font-black uppercase w-24 shrink-0">Status:</span><span class="text-amber-500 font-mono font-black" id="diag-status">ERROR</span></div>
+                <div class="flex gap-2"><span class="text-slate-500 font-black uppercase w-24 shrink-0">Details:</span><span class="text-white font-mono break-all" id="diag-details">Failed to connect</span></div>
+              </div>
+              <div class="border-t border-slate-900 pt-3 text-xs text-slate-300 font-medium leading-relaxed font-bangla">
+                মিডিয়া বা নেটওয়ার্ক ত্রুটি দেখা দিয়েছে। এটি সাধারণত CORS পলিসি বা স্ট্রিমিং সার্ভার ডাউন থাকার কারণে হয়। ব্যাকআপ লিংক ব্যবহার করুন।
+              </div>
+            </div>
+
+            <!-- Controls Bar -->
+            <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex flex-col gap-3 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 select-none">
+              <div class="flex items-center justify-between gap-4 flex-nowrap w-full">
+                <div class="flex items-center gap-3">
+                  <button id="skip-back" class="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer relative" title="-10s">
+                    <i data-lucide="rotate-ccw" class="h-5 w-5"></i>
+                    <span class="absolute text-[8px] font-black top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[4px]">10</span>
+                  </button>
+                  <button id="play-toggle" class="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer">
+                    <i data-lucide="pause" class="h-5 w-5" id="play-icon"></i>
+                  </button>
+                  <button id="skip-forward" class="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer relative" title="+10s">
+                    <i data-lucide="rotate-cw" class="h-5 w-5"></i>
+                    <span class="absolute text-[8px] font-black top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-[4px]">10</span>
+                  </button>
+                  <button id="mute-toggle" class="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer">
+                    <i data-lucide="volume-2" class="h-5 w-5" id="mute-icon"></i>
+                  </button>
+                  <input type="range" min="0" max="1" step="0.05" value="1" id="volume-slider" class="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"/>
+                </div>
+
+                <div class="flex items-center gap-3">
+                  <span class="text-[11px] font-bold text-slate-300 font-mono" id="time-display">00:00 / LIVE</span>
+                  <button id="fullscreen-toggle" class="text-white hover:text-emerald-accent p-1.5 transition-colors cursor-pointer">
+                    <i data-lucide="maximize" class="h-5 w-5" id="fs-icon"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        setupPlayerEvents(containerEl, url, onError, onPlaying, 'emerald-accent', 'maximize', 'minimize');
+      } else if (activePlayer === 'pot_player') {
+        // PotPlayer skin (Orange theme, status messages, seek bar)
+        containerEl.innerHTML = `
+          <div class="relative w-full h-full bg-[#0c0d12] flex items-center justify-center rounded-3xl overflow-hidden border border-slate-800/80 shadow-2xl select-none group focus:outline-none" id="player-container">
+            <video id="custom-video" class="w-full h-full object-contain cursor-pointer" autoplay="autoplay" playsinline="playsinline" crossorigin="anonymous"></video>
+            
+            <!-- PotPlayer transient text -->
+            <div id="pot-status-overlay" class="absolute top-12 left-12 bg-black/85 text-[#ff8c00] font-black text-sm px-4 py-2 border border-[#ff8c00]/30 rounded-lg pointer-events-none hidden font-mono tracking-wider shadow-lg"></div>
+
+            <!-- Controls overlay -->
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/90 to-transparent p-4 pt-10 flex flex-col gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-30">
+              <div class="w-full flex items-center gap-3">
+                <input type="range" min="0" max="100" value="0" id="pot-seek-bar" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#ff8c00] hover:h-2 transition-all duration-150" />
+              </div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                  <button id="play-toggle" class="p-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-xl text-white hover:text-[#ff8c00] transition-colors cursor-pointer">
+                    <i data-lucide="pause" class="h-4.5 w-4.5" id="play-icon"></i>
+                  </button>
+                  <span class="text-[11px] font-bold text-slate-300 font-mono tracking-wider" id="time-display">00:00 / LIVE</span>
+                  <div class="px-2 py-0.5 bg-[#ff8c00]/10 border border-[#ff8c00]/25 rounded-md text-[#ff8c00] font-black text-[9px] uppercase font-mono tracking-wider">⚡ HLS FEED</div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                  <button id="mute-toggle" class="p-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-xl text-white hover:text-[#ff8c00] transition-colors cursor-pointer">
+                    <i data-lucide="volume-2" class="h-4.5 w-4.5" id="mute-icon"></i>
+                  </button>
+                  <input type="range" min="0" max="1" step="0.05" value="1" id="volume-slider" class="w-16 h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-[#ff8c00] transition-all duration-300" />
+                  <button id="fullscreen-toggle" class="p-2 bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-xl text-white hover:text-[#ff8c00] transition-colors cursor-pointer">
+                    <i data-lucide="maximize" class="h-4.5 w-4.5" id="fs-icon"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        setupPlayerEvents(containerEl, url, onError, onPlaying, '#ff8c00', 'maximize', 'minimize', true);
+      } else if (activePlayer === 'player_4') {
+        // Engine-4 Player skin (Green theme, Top status logs link, settings popup)
+        containerEl.innerHTML = `
+          <div class="relative w-full h-full bg-black flex items-center justify-center rounded-2xl overflow-hidden border border-slate-900 shadow-2xl group select-none" id="player-container">
+            <video id="custom-video" class="w-full h-full object-contain" autoplay="autoplay" playsinline="playsinline" crossorigin="anonymous"></video>
+            
+            <!-- Top bar -->
+            <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <span class="px-2.5 py-1 bg-emerald-505 text-black text-[9px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
+                <i data-lucide="activity" class="h-3 w-3 animate-pulse"></i>
+                Engine-4 Active
+              </span>
+              <button id="logs-toggle-btn" class="p-1.5 bg-slate-950/60 hover:bg-slate-900 border border-slate-900 rounded-lg text-slate-300 transition-all flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider">
+                <i data-lucide="info" class="h-3.5 w-3.5"></i>
+                Logs
+              </button>
+            </div>
+
+            <!-- Diagnostics logs panel -->
+            <div id="diagnostics-logs" class="absolute inset-0 bg-slate-955/95 z-40 p-4 font-mono text-[9px] text-slate-300 flex flex-col justify-between hidden">
+              <div class="flex justify-between items-center border-b border-slate-900 pb-2 mb-2">
+                <span class="text-slate-400 font-extrabold uppercase tracking-widest flex items-center gap-1.5">
+                  <i data-lucide="activity" class="h-3.5 w-3.5 text-emerald-400"></i>
+                  Engine-4 Diagnostics Console
+                </span>
+                <button id="clear-logs-btn" class="text-[8px] font-extrabold text-slate-500 hover:text-white uppercase tracking-widest border border-slate-900 px-2 py-0.5 rounded bg-slate-955">Clear Logs</button>
+              </div>
+              <div class="flex-1 overflow-y-auto space-y-1 pr-2" id="logs-content">
+                <div class="text-slate-500">[System] Diagnostics initialized. Waiting for stream payload...</div>
+              </div>
+              <div class="border-t border-slate-900 pt-2 mt-2 flex justify-between text-[8px] text-slate-500 font-bold uppercase tracking-wider">
+                <span>Retries: 0</span>
+                <span>Player Mode: HLS.js Client</span>
+              </div>
+            </div>
+
+            <!-- Bottom controls -->
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div class="flex justify-between items-center bg-slate-955/60 border border-slate-900/60 p-2.5 rounded-xl backdrop-blur-md">
+                <div class="flex items-center gap-3">
+                  <button id="play-toggle" class="p-1.5 hover:bg-slate-900 rounded-lg text-white transition-all">
+                    <i data-lucide="pause" class="h-5 w-5" id="play-icon"></i>
+                  </button>
+                  <button id="mute-toggle" class="p-1.5 hover:bg-slate-900 rounded-lg text-white transition-all">
+                    <i data-lucide="volume-2" class="h-5 w-5" id="mute-icon"></i>
+                  </button>
+                  <input type="range" min="0" max="1" step="0.05" value="1" id="volume-slider" class="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400" />
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-bold text-slate-300 font-mono" id="time-display">00:00 / LIVE</span>
+                  <button id="fullscreen-toggle" class="p-1.5 hover:bg-slate-900 rounded-lg text-white transition-all">
+                    <i data-lucide="maximize" class="h-5 w-5" id="fs-icon"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        setupPlayerEvents(containerEl, url, onError, onPlaying, 'emerald-accent', 'maximize', 'minimize', false, true);
+      } else {
+        // Standard Player (Default HlsPlayer)
+        renderStandardPlayerSkin(containerEl, url, onError, onPlaying);
+      }
+    }
+
+    function setupPlayerEvents(containerEl, url, onError, onPlaying, accentColor, maxIcon, minIcon, isPotPlayer = false, isEngine4 = false) {
+      const video = containerEl.querySelector('#custom-video');
+      const playToggle = containerEl.querySelector('#play-toggle');
+      const playIcon = containerEl.querySelector('#play-icon');
+      const muteToggle = containerEl.querySelector('#mute-toggle');
+      const muteIcon = containerEl.querySelector('#mute-icon');
+      const volumeSlider = containerEl.querySelector('#volume-slider');
+      const skipBack = containerEl.querySelector('#skip-back');
+      const skipForward = containerEl.querySelector('#skip-forward');
+      const timeDisplay = containerEl.querySelector('#time-display');
+      const fsToggle = containerEl.querySelector('#fullscreen-toggle');
+      const fsIcon = containerEl.querySelector('#fs-icon');
+      const playerContainer = containerEl.querySelector('#player-container');
+      
+      // PotPlayer specific elements
+      const potSeekBar = containerEl.querySelector('#pot-seek-bar');
+      const potStatusOverlay = containerEl.querySelector('#pot-status-overlay');
+      
+      // Engine4 specific elements
+      const logsToggleBtn = containerEl.querySelector('#logs-toggle-btn');
+      const diagnosticsLogs = containerEl.querySelector('#diagnostics-logs');
+      const clearLogsBtn = containerEl.querySelector('#clear-logs-btn');
+      const logsContent = containerEl.querySelector('#logs-content');
+
+      const triggerPotOverlay = (text) => {
+        if (!potStatusOverlay) return;
+        potStatusOverlay.textContent = text;
+        potStatusOverlay.classList.remove('hidden');
+        setTimeout(() => {
+          potStatusOverlay.classList.add('hidden');
+        }, 1200);
+      };
+
+      const addEngineLog = (msg) => {
+        if (!logsContent) return;
+        const timeStr = new Date().toLocaleTimeString();
+        const newLog = document.createElement('div');
+        newLog.className = 'border-l border-slate-900 pl-2 leading-relaxed';
+        newLog.textContent = `[${timeStr}] ${msg}`;
+        logsContent.prepend(newLog);
+      };
+
+      // Initialize HLS
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          maxMaxBufferLength: 20,
+          enableWorker: true,
+          lowLatencyMode: true
+        });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hlsRef.current = hls;
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+          if (isEngine4) addEngineLog("Manifest parsed. Starting stream feed.");
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error('[HLS Fatal Error]', data);
+            if (isEngine4) addEngineLog(`[Fatal Error] ${data.type} - ${data.details}`);
+            onError(data.details);
+          } else {
+            if (isEngine4) addEngineLog(`[Warning] ${data.details}`);
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play().catch(() => {});
+      }
+
+      // Autoplay blocker recovery
+      video.muted = true;
+      video.play().then(() => {
+        setTimeout(() => {
+          video.muted = false;
+          muteIcon.setAttribute('data-lucide', 'volume-2');
+          if (window.lucide) window.lucide.createIcons();
+        }, 500);
+      }).catch(() => {});
+
+      // Play/Pause events
+      playToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (video.paused) {
+          video.play();
+          playIcon.setAttribute('data-lucide', 'pause');
+          if (isPotPlayer) triggerPotOverlay('[ PLAY ]');
+        } else {
+          video.pause();
+          playIcon.setAttribute('data-lucide', 'play');
+          if (isPotPlayer) triggerPotOverlay('[ PAUSE ]');
+        }
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      video.addEventListener('play', () => {
+        playIcon.setAttribute('data-lucide', 'pause');
+        if (window.lucide) window.lucide.createIcons();
+        if (onPlaying) onPlaying();
+      });
+
+      video.addEventListener('pause', () => {
+        playIcon.setAttribute('data-lucide', 'play');
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      // Volume events
+      muteToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        video.muted = !video.muted;
+        if (video.muted) {
+          muteIcon.setAttribute('data-lucide', 'volume-x');
+          volumeSlider.value = 0;
+          if (isPotPlayer) triggerPotOverlay('[ Mute ]');
+        } else {
+          muteIcon.setAttribute('data-lucide', 'volume-2');
+          volumeSlider.value = video.volume;
+          if (isPotPlayer) triggerPotOverlay('[ Unmute ]');
+        }
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      volumeSlider.addEventListener('input', (e) => {
+        video.volume = e.target.value;
+        video.muted = e.target.value === '0';
+        if (video.muted) {
+          muteIcon.setAttribute('data-lucide', 'volume-x');
+        } else {
+          muteIcon.setAttribute('data-lucide', 'volume-2');
+        }
+        if (isPotPlayer) triggerPotOverlay(`[ Volume: ${Math.round(video.volume * 100)}% ]`);
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      // skip events (PremiumPlayer only)
+      if (skipBack && skipForward) {
+        skipBack.addEventListener('click', (e) => {
+          e.stopPropagation();
+          video.currentTime = Math.max(0, video.currentTime - 10);
+        });
+        skipForward.addEventListener('click', (e) => {
+          e.stopPropagation();
+          video.currentTime = Math.min(video.duration || 0, video.currentTime + 10);
+        });
+      }
+
+      // PotPlayer seek bar
+      if (potSeekBar) {
+        video.addEventListener('durationchange', () => {
+          potSeekBar.max = video.duration || 100;
+        });
+        video.addEventListener('timeupdate', () => {
+          potSeekBar.value = video.currentTime;
+        });
+        potSeekBar.addEventListener('input', (e) => {
+          video.currentTime = e.target.value;
+          triggerPotOverlay(`[ Seek: ${formatTime(video.currentTime)} ]`);
+        });
+      }
+
+      // Engine4 logs toggle
+      if (logsToggleBtn && diagnosticsLogs) {
+        logsToggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          diagnosticsLogs.classList.toggle('hidden');
+        });
+        clearLogsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          logsContent.innerHTML = '';
+        });
+        diagnosticsLogs.addEventListener('click', (e) => {
+          e.stopPropagation();
+          diagnosticsLogs.classList.add('hidden');
+        });
+      }
+
+      // time display updates
+      video.addEventListener('timeupdate', () => {
+        const cur = formatTime(video.currentTime);
+        const dur = video.duration && video.duration !== Infinity ? formatTime(video.duration) : 'LIVE';
+        timeDisplay.textContent = `${cur} / ${dur}`;
+      });
+
+      function formatTime(secs) {
+        const m = Math.floor(secs / 60).toString().padStart(2, '0');
+        const s = Math.floor(secs % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      // Fullscreen
+      fsToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!document.fullscreenElement) {
+          playerContainer.requestFullscreen().then(() => {
+            fsIcon.setAttribute('data-lucide', minIcon);
+          });
+        } else {
+          document.exitFullscreen().then(() => {
+            fsIcon.setAttribute('data-lucide', maxIcon);
+          });
+        }
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      // Black screen detector
+      startBlackScreenDetector(video, onError, onPlaying);
+    }
+
+    function renderStandardPlayerSkin(containerEl, url, onError, onPlaying) {
+      containerEl.innerHTML = `
+        <video 
+          id="custom-hls-video" 
+          class="w-full h-full bg-black rounded-2xl focus:outline-none border border-card-border"
+          controls="controls"
+          autoplay="autoplay"
+          playsinline="playsinline"
+          crossorigin="anonymous"
+        ></video>
+      `;
+      const video = containerEl.querySelector('#custom-hls-video');
+      if (Hls.isSupported()) {
+        const hls = new Hls({ maxMaxBufferLength: 10, enableWorker: true });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hlsRef.current = hls;
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) onError(data.details);
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play().catch(() => {});
+      }
+      
+      // Watch for black screen pixels
+      startBlackScreenDetector(video, onError, onPlaying);
+    }
+
+    function startBlackScreenDetector(videoEl, onError, onPlaying) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+
+      detectorInterval = setInterval(() => {
+        if (!videoEl || videoEl.paused || videoEl.ended) return;
+        try {
+          ctx.drawImage(videoEl, 0, 0, 16, 16);
+          const imgData = ctx.getImageData(0, 0, 16, 16).data;
+          
+          let isBlack = true;
+          for (let i = 0; i < imgData.length; i += 4) {
+            const r = imgData[i];
+            const g = imgData[i+1];
+            const b = imgData[i+2];
+            if (r > 8 || g > 8 || b > 8) {
+              isBlack = false;
+              break;
+            }
+          }
+          
+          if (isBlack) {
+            blackFrameCount++;
+            if (blackFrameCount >= 4) {
+              clearInterval(detectorInterval);
+              onError('Black Screen Error');
+            }
+          } else {
+            blackFrameCount = 0;
+            if (onPlaying) onPlaying();
+          }
+        } catch (e) {
+          // CORS security block, bypass checking to preserve active playback
+        }
+      }, 1000);
+    }
+
+    function handlePlayerError(msg) {
+      console.warn('[Blogger Player Fallback] Error:', msg);
+      
+      if (!state.streamingUrls || state.streamingUrls.length <= 1) {
+        state.playerError = msg;
+        render();
+        return;
+      }
+
+      const match = state.streamingMatch;
+      const homeN = match.home_team_id ? match.home_team?.name : match.home_team_custom_name;
+      const awayN = match.away_team_id ? match.away_team?.name : match.away_team_custom_name;
+
+      // Identify label matches
+      const matchedIdxs = [];
+      state.streamingLabels.forEach((label, idx) => {
+        if (matchChannelWithTeams(label, homeN, awayN)) {
+          matchedIdxs.push(idx);
+        }
+      });
+
+      let nextIndex = (state.activeStreamIndex + 1) % state.streamingUrls.length;
+      if (matchedIdxs.length > 0) {
+        const nextMatch = matchedIdxs.find(idx => idx > state.activeStreamIndex);
+        if (nextMatch !== undefined) {
+          nextIndex = nextMatch;
+        } else {
+          nextIndex = matchedIdxs[0];
+        }
+      }
+
+      state.bufferState = 'Stalled';
+      render();
+
+      setTimeout(() => {
+        state.activeStreamIndex = nextIndex;
+        state.playerError = null;
+        state.reconnecting = false;
+        state.bufferState = 'Healthy';
+        render();
+        initializeLivePlayer();
+      }, 150);
+    }
+
+    function handlePlayerPlaying() {
+      state.playerError = null;
+      state.reconnecting = false;
+      state.bufferState = 'Healthy';
+    }
+
+    // Adsterra HTML Placement Parser
+    function getAdForPlacementHTML(placementKey) {
+      if (!state.adsterra || !state.adsterra.is_enabled) return '';
+      const config = state.adsterra.custom_scripts?.placements?.[placementKey];
+      if (!config || !config.enabled) return '';
+
+      // Return a placeholder div with a unique ID that we will evaluate after inserting the HTML
+      const elementId = `ad-placement-${placementKey}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Delay script execution until after render
+      setTimeout(() => {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        
+        let htmlCode = '';
+        if (config.type === 'banner') htmlCode = state.adsterra.banner_script;
+        else if (config.type === 'banner_2') htmlCode = state.adsterra.custom_scripts?.banner_2_script;
+        else if (config.type === 'native') htmlCode = state.adsterra.native_script;
+        else if (config.type === 'social_bar') htmlCode = state.adsterra.social_bar_script;
+        else if (config.type === 'popunder') htmlCode = state.adsterra.popunder_script;
+        else if (config.type === 'interstitial') htmlCode = state.adsterra.custom_scripts?.interstitial_script;
+        else if (config.type === 'display_link') {
+          const url = state.adsterra.custom_scripts?.display_link;
+          if (url) {
+            el.innerHTML = `
+              <div class="w-full flex justify-center py-2">
+                <a href="${url}" target="_blank" rel="noopener noreferrer" class="w-full max-w-[468px] py-4 bg-slate-900/40 hover:bg-slate-900/60 border border-emerald-500/25 rounded-2xl flex flex-col items-center justify-center text-center gap-1 hover:border-emerald-500/50 transition-all duration-200">
+                  <span class="text-[10px] text-emerald-accent font-black uppercase tracking-wider">🔥 Sponsored Link</span>
+                  <span class="text-xs text-white font-bold">Click here to support our stream servers</span>
+                </a>
+              </div>
+            `;
+            return;
+          }
+        }
+
+        executeAdPlacement(el, htmlCode);
+      }, 50);
+
+      return `<div id="${elementId}" class="ad-container my-4 w-full flex justify-center"></div>`;
+    }
+
+    function executeAdPlacement(elementEl, htmlCode) {
+      if (!elementEl || !htmlCode) return;
+      elementEl.innerHTML = '';
+      
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlCode;
+      
+      const scripts = tempDiv.getElementsByTagName('script');
+      
+      Array.from(tempDiv.childNodes).forEach((node) => {
+        if (node.nodeName !== 'SCRIPT') {
+          elementEl.appendChild(node.cloneNode(true));
+        }
+      });
+      
+      Array.from(scripts).forEach((script) => {
+        const newScript = document.createElement('script');
+        Array.from(script.attributes).forEach((attr) => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        if (script.innerHTML) {
+          newScript.innerHTML = script.innerHTML;
+        }
+        elementEl.appendChild(newScript);
+      });
+    }
+
+    // 12. Score sync updates countdowns
+    function getRemainingTime(timestamp) {
+      const diff = new Date(timestamp).getTime() - Date.now();
+      if (diff <= 0) return '00:00:00';
+      const hours = String(Math.floor(diff / (1000 * 60 * 65))).padStart(2, '0');
+      const mins = String(Math.floor((diff % (1000 * 60 * 65)) / (1000 * 60))).padStart(2, '0');
+      const secs = String(Math.floor((diff % (1000 * 60)) / 1000)).padStart(2, '0');
+      return `${hours}:${mins}:${secs}`;
+    }
+
+    // 13. DOM Renderer logic
+    function render() {
+      const root = document.getElementById('app-root');
+      if (!root) return;
+
+      if (state.loading) {
+        root.innerHTML = `
+          <div class='flex flex-col items-center justify-center min-h-screen bg-[#090c10]'>
+            <div class='animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-emerald-500'></div>
+            <p class='text-sm text-slate-400 mt-4 font-semibold uppercase tracking-wider'>Portal matches is connecting...</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Render watch matches view vs navigation index
+      if (state.watchMatchId && state.streamingMatch) {
+        renderWatchMatchPage(root);
+      } else if (state.watchChannelId) {
+        renderWatchChannelPage(root);
+      } else {
+        renderPortalIndex(root);
+      }
+
+      // Render overlay modal
+      const modalContainerId = 'modal-mount-root';
+      let modalContainer = document.getElementById(modalContainerId);
+      if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = modalContainerId;
+        document.body.appendChild(modalContainer);
+      }
+      modalContainer.innerHTML = renderNoticeModalHTML();
+
+      // Re-init lucide icons dynamically
+      if (window.lucide) window.lucide.createIcons();
+      else if (window.Lucide) window.Lucide.createIcons();
+    }
+
+    function renderPortalIndex(root) {
+      const ui = state.systemConfig?.custom_scripts?.app_ui_texts || {};
+      const showStreamingTab = state.systemConfig?.custom_scripts?.enable_streaming_now !== false;
+      
+      const tabStreamingLabel = ui.tab_streaming_name || '📺 Streaming Now';
+      const tabLiveLabel = ui.tab_live_name || '🔴 Live Now';
+      const tabUpcomingLabel = ui.tab_upcoming_name || '📅 Upcoming';
+      const tabFinishedLabel = ui.tab_finished_name || '🏁 Finished';
+      const tabChannelsLabel = ui.tab_channels_name || '📺 Channels';
+      
+      const subtitleText = ui.header_subtitle || state.tickerSettings?.header_subtitle || 'Premium Streaming Portal';
+      const emptyTitle = ui.no_matches_title || 'No Matches Broadcasts';
+      const emptyDesc = ui.no_matches_desc || 'There are no active matches in this tab. Tune in during kickoff schedules.';
+
+      // Logo and site name
+      const logoHtml = state.tickerSettings?.use_logo_image && state.tickerSettings?.logo_url
+        ? `<img src="${state.tickerSettings.logo_url}" alt="${state.tickerSettings?.site_name || 'Logo'}" class="h-9 w-auto object-contain rounded-lg" />`
+        : `
+          <div class="h-9 w-9 bg-emerald-500/10 rounded-xl border border-emerald-500/25 flex items-center justify-center">
+            <i data-lucide="tv" class="h-5 w-5 text-emerald-accent"></i>
+          </div>
+        `;
+      const siteName = state.tickerSettings?.site_name || 'KHELE DAO LIVE';
+
+      // Get match categories
+      const { live, upcoming, finished } = getCategorizedMatches();
+      const announcementsCount = state.announcements.filter(ann => !state.dismissedAnnouncements[ann.id]).length;
+      
+      // Determine active stream featured match
+      const streamingFeatured = live.length > 0 ? live[0] : (upcoming.length > 0 ? upcoming[0] : (finished.length > 0 ? finished[0] : null));
+
+      // Filter M3U channels
+      const filteredChannels = state.channels.filter(c => {
+        if (!state.channelsQuery) return true;
+        return c.name.toLowerCase().includes(state.channelsQuery.toLowerCase());
+      });
+
+      let innerContent = '';
+      
+      if (state.activeTab === 'streaming') {
+        if (!streamingFeatured) {
+          innerContent = `
+            <div class="glass-panel p-16 text-center rounded-3xl border border-card-border mt-6">
+              <i data-lucide="tv" class="h-12 w-12 text-slate-700 mx-auto mb-4"></i>
+              <h3 class="text-lg font-black text-white uppercase">No Streaming Now</h3>
+              <p class="text-sm text-slate-400 mt-1">There are no matches scheduled for streaming at this moment.</p>
+            </div>
+          `;
+        } else {
+          // Render layout
+          innerContent = `
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-6">
+              <!-- Player viewport -->
+              <div class="lg:col-span-2 space-y-6">
+                <!-- watchAbovePlayer placement -->
+                ${getAdForPlacementHTML('watchAbovePlayer')}
+
+                <div id="watch-player-viewport" class="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl overflow-hidden shadow-2xl">
+                  <!-- Embeds inside HlsPlayer -->
+                </div>
+                
+                <!-- watchBelowPlayer placement -->
+                ${getAdForPlacementHTML('watchBelowPlayer')}
+
+                <!-- Fallback servers -->
+                <div class="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h3 class="font-black uppercase text-xs text-slate-400 tracking-wider">Fallback Channels</h3>
+                      <p class="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Toggle feeds if experience lag</p>
+                    </div>
+                    <button onclick="initializeLivePlayer()" class="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer">
+                      <i data-lucide="refresh-cw" class="h-4 w-4 text-emerald-accent"></i>
+                    </button>
+                  </div>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    ${(state.streamingUrls || []).map((url, idx) => {
+                      const isSel = state.activeStreamIndex === idx;
+                      return `
+                        <button onclick="state.activeStreamIndex=${idx}; initializeLivePlayer();" class="py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
+                          isSel ? 'bg-emerald-accent border-emerald-accent text-black' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }">
+                          ${state.streamingLabels[idx] || 'Server'}
+                        </button>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Sidebar -->
+              <div class="space-y-6 flex flex-col h-[calc(100vh-280px)] min-h-[500px]">
+                <!-- Mini Scorecard -->
+                ${renderMiniScorecardHTML(streamingFeatured)}
+                
+                <!-- Sidebar tabs content -->
+                ${renderMatchCenterTabsHTML(streamingFeatured)}
+              </div>
+            </div>
+          `;
+          
+          // Delayed init for HLS Player inside main thread
+          setTimeout(() => {
+            if (!state.streamingUrls || state.streamingUrls.length === 0) {
+              loadWatchMatchDetails();
+            } else {
+              initializeLivePlayer();
+            }
+          }, 50);
+        }
+      } else if (state.activeTab === 'channels') {
+        innerContent = `
+          <div class="space-y-6 mt-6">
+            <!-- Search channels -->
+            <div class="relative">
+              <input 
+                type="text" 
+                value="${state.channelsQuery}" 
+                oninput="state.channelsQuery=this.value; render();" 
+                placeholder="Search TV Channels..." 
+                class="w-full px-5 py-3.5 pl-12 glass-input rounded-2xl text-sm"
+              />
+              <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500"></i>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              ${filteredChannels.map(chan => {
+                return `
+                  <div onclick="navigate({ channel: '${chan.id}' })" class="glass-panel p-4 rounded-2xl border border-card-border hover:border-slate-800 transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-2 group">
+                    <div class="h-10 w-10 rounded-full bg-slate-900 flex items-center justify-center border border-card-border group-hover:bg-slate-800 transition-all overflow-hidden">
+                      ${chan.logo_url ? `<img src="${chan.logo_url}" alt="" class="h-full w-full object-cover" />` : `<i data-lucide="tv" class="h-5 w-5 text-emerald-accent"></i>`}
+                    </div>
+                    <span class="text-xs font-bold text-white uppercase tracking-wider truncate w-full">${chan.name}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        // Matches index tabs (live, upcoming, finished)
+        const activeList = state.activeTab === 'live' ? live : (state.activeTab === 'upcoming' ? upcoming : finished);
+        const searchQuery = state.activeTab === 'upcoming' ? state.upcomingQuery : state.finishedQuery;
+        
+        let searchBarHtml = '';
+        if (state.activeTab === 'upcoming' || state.activeTab === 'finished') {
+          searchBarHtml = `
+            <div class="relative mb-6">
+              <input 
+                type="text" 
+                value="${searchQuery}" 
+                oninput="if(state.activeTab==='upcoming'){state.upcomingQuery=this.value}else{state.finishedQuery=this.value}; render();" 
+                placeholder="Search matches..." 
+                class="w-full px-5 py-3.5 pl-12 glass-input rounded-2xl text-sm"
+              />
+              <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500"></i>
+            </div>
+          `;
+        }
+
+        let listHtml = '';
+        if (activeList.length === 0) {
+          listHtml = `
+            <div class="glass-panel p-16 text-center rounded-3xl border border-card-border">
+              <i data-lucide="tv" class="h-12 w-12 text-slate-700 mx-auto mb-4"></i>
+              <h3 class="text-base font-black text-white uppercase">${emptyTitle}</h3>
+              <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">${emptyDesc}</p>
+            </div>
+          `;
+        } else {
+          // Grid matches with ads between every 2 cards
+          const matchCards = [];
+          activeList.forEach((m, idx) => {
+            matchCards.push(renderMatchCardHTML(m));
+            if ((idx + 1) % 2 === 0) {
+              const betweenAd = getAdForPlacementHTML('betweenMatches');
+              if (betweenAd) {
+                matchCards.push(`<div class="col-span-1 md:col-span-2">${betweenAd}</div>`);
+              }
+            }
+          });
+
+          listHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              ${matchCards.join('')}
+            </div>
+          `;
+        }
+
+        innerContent = `
+          <div class="mt-6">
+            ${searchBarHtml}
+            ${listHtml}
+          </div>
+        `;
+      }
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans pb-12">
+          
+          <!-- Navigation header bar -->
+          <header class="border-b border-card-border bg-[#090c10]/80 sticky top-0 z-40 backdrop-blur">
+            <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div class="flex items-center justify-between w-full md:w-auto">
+                <div class="flex items-center gap-3">
+                  ${logoHtml}
+                  <div>
+                    <h1 class="text-sm font-black text-white uppercase tracking-widest">${siteName}</h1>
+                    <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">${subtitleText}</span>
+                  </div>
+                </div>
+                
+                <!-- Bell notifications button (Mobile only) -->
+                <div class="flex items-center gap-2 md:hidden">
+                  <button onclick="state.isNoticeModalOpen=true; render();" class="relative p-2 bg-slate-900 hover:bg-slate-800 text-white border border-card-border rounded-xl transition-all flex items-center justify-center cursor-pointer" title="Announcements">
+                    <i data-lucide="bell" class="h-4.5 w-4.5 text-emerald-accent"></i>
+                    ${announcementsCount > 0 ? `
+                      <span class="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-red-600 border border-[#090c10] text-[8px] font-black text-white flex items-center justify-center">
+                        ${announcementsCount}
+                      </span>
+                    ` : ''}
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Tab List -->
+              <div class="flex items-center gap-3 overflow-x-auto md:overflow-visible w-full md:w-auto pb-1 md:pb-0 scrollbar-none justify-start md:justify-end">
+                <nav class="flex items-center gap-1 bg-slate-950/40 p-1 border border-card-border rounded-2xl shrink-0">
+                  ${showStreamingTab ? `
+                    <button onclick="state.activeTab='streaming'; render();" class="px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      state.activeTab === 'streaming' ? 'bg-emerald-accent text-black font-extrabold shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                    }">${tabStreamingLabel}</button>
+                  ` : ''}
+                  <button onclick="state.activeTab='live'; render();" class="px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    state.activeTab === 'live' ? 'bg-emerald-accent text-black font-extrabold shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }">${tabLiveLabel}</button>
+                  <button onclick="state.activeTab='upcoming'; render();" class="px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    state.activeTab === 'upcoming' ? 'bg-emerald-accent text-black font-extrabold shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }">${tabUpcomingLabel}</button>
+                  <button onclick="state.activeTab='finished'; render();" class="px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    state.activeTab === 'finished' ? 'bg-emerald-accent text-black font-extrabold shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }">${tabFinishedLabel}</button>
+                  <button onclick="state.activeTab='channels'; render();" class="px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    state.activeTab === 'channels' ? 'bg-emerald-accent text-black font-extrabold shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }">${tabChannelsLabel}</button>
+                </nav>
+
+                <!-- Bell notifications button (Desktop) -->
+                <button onclick="state.isNoticeModalOpen=true; render();" class="hidden md:flex relative p-2.5 bg-slate-900 hover:bg-slate-800 text-white border border-card-border rounded-xl transition-all items-center justify-center gap-1.5 cursor-pointer animate-in fade-in" title="View Announcements">
+                  <i data-lucide="bell" class="h-5 w-5 text-emerald-accent"></i>
+                  ${announcementsCount > 0 ? `
+                    <span class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-600 border border-[#090c10] text-[9px] font-black text-white flex items-center justify-center">
+                      ${announcementsCount}
+                    </span>
+                  ` : ''}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <!-- headerTop Ad placement -->
+          <div class="max-w-6xl mx-auto w-full px-4 mt-2">
+            ${getAdForPlacementHTML('headerTop')}
+          </div>
+
+          <!-- Ticker Marquee Headline -->
+          ${renderTickerMarqueeHTML()}
+
+          <!-- afterBanner Ad placement -->
+          <div class="max-w-6xl mx-auto w-full px-4">
+            ${getAdForPlacementHTML('afterBanner')}
+          </div>
+
+          <!-- Active Announcements slider list -->
+          ${renderAnnouncementBannerHTML()}
+
+          <main class="max-w-6xl w-full mx-auto px-4 mt-6">
+            ${innerContent}
+          </main>
+
+          <!-- Footer counters -->
+          ${renderFooterAndCountersHTML()}
+        </div>
+      `;
+    }
+
+    function renderAnnouncementBannerHTML() {
+      if (state.announcements.length === 0) return '';
+      const valid = state.announcements.filter(a => !state.dismissedAnnouncements[a.id]);
+      if (valid.length === 0) return '';
+      
+      const item = valid[0];
+      return `
+        <div class="max-w-6xl mx-auto w-full px-4 pt-6">
+          <div class="bg-gradient-to-r from-emerald-500/10 to-amber-500/5 border border-emerald-500/20 p-4 rounded-2xl flex items-center justify-between gap-3 relative pr-12">
+            <div class="flex items-center gap-3">
+              <div class="h-10 w-10 shrink-0 bg-emerald-505/20 border border-emerald-500/30 rounded-xl flex items-center justify-center text-emerald-accent">
+                <i data-lucide="bell" class="h-5 w-5"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-black uppercase text-white tracking-wide font-bangla">${item.title}</h4>
+                <p class="text-xs text-slate-300 font-medium mt-0.5 font-bangla">${item.message}</p>
+              </div>
+            </div>
+            <button onclick="state.dismissedAnnouncements['${item.id}']=true; render();" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors cursor-pointer">
+              <i data-lucide="x" class="h-4 w-4"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTickerMarqueeHTML() {
+      const ticker = state.tickerSettings;
+      if (!ticker || !ticker.is_enabled) return '';
+      
+      const tickerBadge = state.systemConfig?.custom_scripts?.app_ui_texts?.ticker_badge || ticker.ticker_badge || '⚡ NEWS TICKER';
+      
+      return `
+        <div class="bg-gradient-to-r from-red-955/80 via-[#0f1422] to-red-955/80 border-b border-card-border py-2 relative overflow-hidden flex items-center h-9 z-30">
+          <div class="absolute left-0 top-0 bottom-0 px-3.5 bg-red-600 text-white font-black uppercase tracking-wider text-[9px] flex items-center justify-center z-10 shadow-md">
+            ${tickerBadge}
+          </div>
+          
+          <div class="w-full whitespace-nowrap overflow-hidden">
+            <span class="animate-marquee text-xs font-bold text-white tracking-wide font-bangla">
+              ${ticker.ticker_text}
+            </span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderFooterAndCountersHTML() {
+      const ticker = state.tickerSettings;
+      const showCounters = ticker?.show_counters;
+      
+      let countersHtml = '';
+      if (showCounters) {
+        const totalViewsFormatted = (state.totalViews || 0).toLocaleString();
+        const liveCountFormatted = (state.liveCount || 0).toLocaleString();
+        
+        countersHtml = `
+          <div class="max-w-6xl mx-auto w-full mt-8 mb-6 px-4">
+            <div class="glass-panel p-6 rounded-3xl border border-card-border flex flex-col sm:flex-row justify-around items-center gap-6 text-center bg-gradient-to-r from-emerald-500/5 via-slate-900/40 to-emerald-500/5">
+              <div class="space-y-1">
+                <span class="text-slate-500 text-[10px] font-black uppercase tracking-widest block">Total Platform Views</span>
+                <span class="text-3xl font-black text-white tracking-tight">${totalViewsFormatted}</span>
+              </div>
+              
+              <div class="h-px w-12 sm:h-12 sm:w-px bg-card-border"></div>
+              
+              <div class="space-y-1">
+                <span class="text-slate-500 text-[10px] font-black uppercase tracking-widest block flex items-center justify-center gap-1.5">
+                  <span class="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                  Active Concurrent Viewers
+                </span>
+                <span class="text-3xl font-black text-emerald-accent tracking-tight">${liveCountFormatted}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="max-w-6xl mx-auto w-full px-4">
+          ${getAdForPlacementHTML('beforeFooter')}
+        </div>
+        ${countersHtml}
+        <footer class="border-t border-card-border bg-[#07090d]/60 py-6 text-center text-xs font-bold text-slate-500 uppercase tracking-widest mt-auto">
+          Developed by 
+          <a href="https://tanvirtossar.netlify.app/" target="_blank" rel="noopener noreferrer" class="text-emerald-accent hover:text-emerald-400 underline decoration-dotted transition-colors">
+            Tanvir Hossain
+          </a>
+        </footer>
+      `;
+    }
+
+    function renderNoticeModalHTML() {
+      if (!state.isNoticeModalOpen) return '';
+      
+      const visibleAnnouncements = state.announcements.filter(ann => !state.dismissedAnnouncements[ann.id]);
+      
+      return `
+        <div class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div class="w-full max-w-lg glass-panel p-6 rounded-3xl space-y-6 relative border border-card-border shadow-2xl">
+            <div class="flex justify-between items-center pb-3 border-b border-card-border">
+              <div class="flex items-center gap-2">
+                <i data-lucide="bell" class="h-5 w-5 text-emerald-accent"></i>
+                <h3 class="text-sm font-black text-white uppercase tracking-wider">
+                  Important Broadcasts (${visibleAnnouncements.length})
+                </h3>
+              </div>
+              <button onclick="state.isNoticeModalOpen=false; render();" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800 rounded-xl transition-all cursor-pointer">
+                <i data-lucide="x" class="h-5 w-5"></i>
+              </button>
+            </div>
+
+            <div class="max-h-[300px] overflow-y-auto pr-1 space-y-4">
+              ${visibleAnnouncements.length === 0 ? `
+                <div class="text-center py-8 text-slate-500 text-xs font-semibold uppercase">
+                  No active broadcasts found.
+                </div>
+              ` : visibleAnnouncements.map((ann) => {
+                const isHighPriority = ann.priority === 'high';
+                return `
+                  <div class="p-4 rounded-2xl border transition-all relative pr-10 ${
+                    isHighPriority 
+                      ? 'bg-red-500/5 border-red-500/20' 
+                      : 'bg-slate-950/40 border-slate-900'
+                  }">
+                    <div class="flex justify-between items-start">
+                      <h4 class="text-sm font-black text-white tracking-wide font-bangla">${ann.title}</h4>
+                      ${isHighPriority ? `
+                        <span class="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-[8px] font-black uppercase tracking-wider shrink-0">
+                          Urgent
+                        </span>
+                      ` : ''}
+                    </div>
+                    <p class="text-xs text-slate-300 font-medium mt-1.5 leading-relaxed font-bangla">
+                      ${ann.message}
+                    </p>
+                    <button onclick="state.dismissedAnnouncements['${ann.id}']=true; render();" class="absolute right-3 top-3 p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-900/60 rounded-lg transition-all cursor-pointer" title="Dismiss notice">
+                      <i data-lucide="x" class="h-4.5 w-4.5"></i>
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+
+            <div class="pt-4 border-t border-card-border flex justify-end">
+              <button onclick="state.isNoticeModalOpen=false; render();" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold uppercase text-xs tracking-wider rounded-xl transition-all border border-card-border cursor-pointer">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMatchCardHTML(m) {
+      const score = getMatchedEspnScore(m);
+      const isLive = m.status === 'live' || (score && score.liveMinute);
+      
+      const homeName = m.home_team_id ? m.home_team?.name : m.home_team_custom_name;
+      const awayName = m.away_team_id ? m.away_team?.name : m.away_team_custom_name;
+      const homeFlag = m.home_team_id ? m.home_team?.flag_url : m.home_team_custom_flag;
+      const awayFlag = m.away_team_id ? m.away_team?.flag_url : m.away_team_custom_flag;
+      
+      const homeScore = score ? score.homeScore : (m.home_score ?? 0);
+      const awayScore = score ? score.awayScore : (m.away_score ?? 0);
+      const gameMin = score ? score.liveMinute : (m.live_minute || (m.status === 'live' ? 'LIVE' : ''));
+
+      return `
+        <div onclick="navigate({ watch: '${m.id}' })" class="glass-panel p-5 rounded-2xl border border-card-border hover:border-slate-800 transition-all cursor-pointer flex flex-col justify-between gap-4 group">
+          <div class="flex justify-between items-center text-slate-500 text-[10px] font-black uppercase tracking-wider">
+            <span>${m.tournament_name || 'International'}</span>
+            ${isLive ? `
+              <span class="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md animate-pulse">LIVE</span>
+            ` : `
+              <span>${m.match_date} • ${m.match_time.substring(0, 5)}</span>
+            `}
+          </div>
+
+          <div class="flex justify-between items-center text-center">
+            <!-- Home -->
+            <div class="w-[38%] flex flex-col items-center gap-1.5 min-w-0">
+              <div class="h-10 w-14 bg-slate-900 border border-card-border rounded-lg overflow-hidden flex items-center justify-center p-0.5 shadow relative">
+                ${homeFlag ? `<img src="${homeFlag}" alt="${homeName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] font-bold text-slate-500">HOME</span>`}
+              </div>
+              <span class="font-bold text-white text-xs truncate w-full group-hover:text-emerald-accent transition-colors">${homeName}</span>
+            </div>
+
+            <!-- Score -->
+            <div class="w-[24%] flex flex-col items-center justify-center">
+              ${isLive ? `
+                <div class="flex items-center gap-1">
+                  <span class="text-xl font-black text-white">${homeScore}</span>
+                  <span class="text-slate-600 font-bold text-xs">-</span>
+                  <span class="text-xl font-black text-white">${awayScore}</span>
+                </div>
+                <span class="text-[9px] font-bold text-emerald-accent uppercase mt-1 animate-pulse">${gameMin}</span>
+              ` : m.status === 'upcoming' ? `
+                <div class="match-countdown flex flex-col items-center" data-kickoff="${m.match_timestamp}">
+                  <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">KICKOFF</span>
+                  <span class="countdown-val font-mono text-[10px] text-emerald-accent font-bold mt-0.5">--:--:--</span>
+                </div>
+              ` : `
+                <div class="flex items-center gap-1">
+                  <span class="text-xl font-black text-slate-400">${homeScore}</span>
+                  <span class="text-slate-600 font-bold text-xs">-</span>
+                  <span class="text-xl font-black text-slate-400">${awayScore}</span>
+                </div>
+                <span class="text-[9px] font-bold text-slate-500 uppercase mt-1">FINISHED</span>
+              `}
+            </div>
+
+            <!-- Away -->
+            <div class="w-[38%] flex flex-col items-center gap-1.5 min-w-0">
+              <div class="h-10 w-14 bg-slate-900 border border-card-border rounded-lg overflow-hidden flex items-center justify-center p-0.5 shadow relative">
+                ${awayFlag ? `<img src="${awayFlag}" alt="${awayName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] font-bold text-slate-500">AWAY</span>`}
+              </div>
+              <span class="font-bold text-white text-xs truncate w-full group-hover:text-emerald-accent transition-colors">${awayName}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMiniScorecardHTML(m) {
+      const score = getMatchedEspnScore(m);
+      const homeName = m.home_team_id ? m.home_team?.name : m.home_team_custom_name;
+      const awayName = m.away_team_id ? m.away_team?.name : m.away_team_custom_name;
+      const homeFlag = m.home_team_id ? m.home_team?.flag_url : m.home_team_custom_flag;
+      const awayFlag = m.away_team_id ? m.away_team?.flag_url : m.away_team_custom_flag;
+      
+      const homeScore = score ? score.homeScore : (m.home_score ?? 0);
+      const awayScore = score ? score.awayScore : (m.away_score ?? 0);
+      const gameMin = score ? score.liveMinute : (m.live_minute || (m.status === 'live' ? 'LIVE' : 'UPCOMING'));
+
+      return `
+        <div class="glass-panel p-5 rounded-2xl border border-card-border bg-gradient-to-b from-slate-900/40 to-slate-950/20">
+          <div class="flex justify-between items-center text-center gap-1">
+            <!-- Home -->
+            <div class="w-[35%] flex flex-col items-center gap-1.5 min-w-0">
+              <div class="h-10 w-14 bg-slate-955/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
+                ${homeFlag ? `<img src="${homeFlag}" alt="${homeName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] text-slate-500 font-bold">HOME</span>`}
+              </div>
+              <span class="font-bold text-white text-xs truncate w-full">${homeName}</span>
+            </div>
+
+            <!-- Score -->
+            <div class="w-[30%] flex flex-col items-center justify-center">
+              <div class="flex items-center gap-1.5">
+                <span class="text-2xl font-black text-white tracking-tight">${homeScore}</span>
+                <span class="text-slate-600 font-bold text-xs">-</span>
+                <span class="text-2xl font-black text-white tracking-tight">${awayScore}</span>
+              </div>
+              <span class="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md text-[9px] font-black uppercase tracking-wider mt-1.5 animate-pulse">
+                ${gameMin}
+              </span>
+            </div>
+
+            <!-- Away -->
+            <div class="w-[35%] flex flex-col items-center gap-1.5 min-w-0">
+              <div class="h-10 w-14 bg-slate-955/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
+                ${awayFlag ? `<img src="${awayFlag}" alt="${awayName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] text-slate-500 font-bold">AWAY</span>`}
+              </div>
+              <span class="font-bold text-white text-xs truncate w-full">${awayName}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMatchCenterTabsHTML(m) {
+      return `
+        <div class="glass-panel rounded-2xl border border-card-border flex-1 flex flex-col overflow-hidden">
+          <!-- Side Navigation tab buttons -->
+          <div class="flex border-b border-card-border p-1 bg-slate-955/40">
+            <button onclick="state.activeSideTab='commentary'; render();" class="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 ${
+              state.activeSideTab === 'commentary' ? 'bg-emerald-accent text-black font-extrabold shadow' : 'text-slate-400 hover:text-white'
+            }">
+              <span>Commentary</span>
+            </button>
+            <button onclick="state.activeSideTab='events'; render();" class="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 ${
+              state.activeSideTab === 'events' ? 'bg-emerald-accent text-black font-extrabold shadow' : 'text-slate-400 hover:text-white'
+            }">
+              <span>Events</span>
+            </button>
+            <button onclick="state.activeSideTab='telemetry'; render();" class="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 ${
+              state.activeSideTab === 'telemetry' ? 'bg-emerald-accent text-black font-extrabold shadow' : 'text-slate-400 hover:text-white'
+            }">
+              <span>Health</span>
+            </button>
+            <button onclick="state.activeSideTab='lineup'; render();" class="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 ${
+              state.activeSideTab === 'lineup' ? 'bg-emerald-accent text-black font-extrabold shadow' : 'text-slate-400 hover:text-white'
+            }">
+              <span>Lineup</span>
+            </button>
+          </div>
+
+          <!-- Content Panel -->
+          <div class="flex-1 overflow-y-auto p-4 max-h-[350px]">
+            ${renderMatchCenterPanelContent()}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMatchCenterPanelContent() {
+      if (state.loadingCommentary) {
+        return `
+          <div class="flex flex-col items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-emerald-500"></div>
+            <span class="text-[9px] text-slate-500 uppercase font-black mt-2">Loading data...</span>
+          </div>
+        `;
+      }
+      
+      const score = getMatchedEspnScore(state.streamingMatch);
+      if (!score || !score.espnEventId) {
+        return `
+          <div class="text-center py-10 text-slate-500 font-bold uppercase text-[9px]">
+            Live stats waiting to connect...
+          </div>
+        `;
+      }
+
+      const data = state.commentaryData || {};
+
+      if (state.activeSideTab === 'commentary') {
+        const comm = data.commentary || [];
+        if (comm.length === 0) {
+          return `<div class="text-center py-10 text-slate-500 font-bold uppercase text-[9px]">No commentary logged</div>`;
+        }
+        return `
+          <div class="space-y-3.5">
+            ${comm.map(c => {
+              const isGoal = (c.type || '').toLowerCase().includes('goal');
+              const isCard = (c.type || '').toLowerCase().includes('card');
+              return `
+                <div class="p-3 rounded-xl border flex gap-3 text-xs leading-relaxed ${
+                  isGoal ? 'bg-emerald-505/10 border-emerald-500/20 text-emerald-300' : (isCard ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-slate-950/40 border-slate-900 text-slate-300')
+                }">
+                  <span class="font-black text-emerald-accent shrink-0 min-w-[28px]">${c.clock || '0\''}</span>
+                  <div>
+                    <p class="font-medium">${c.text}</p>
+                    ${c.type ? `<span class="text-[9px] font-black uppercase tracking-wider opacity-60 block mt-1">${c.type}</span>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      if (state.activeSideTab === 'events') {
+        const events = data.keyEvents || [];
+        if (events.length === 0) {
+          return `<div class="text-center py-10 text-slate-500 font-bold uppercase text-[9px]">No events registered</div>`;
+        }
+        return `
+          <div class="space-y-3.5">
+            ${events.map(e => {
+              const isGoal = (e.type || '').toLowerCase().includes('goal');
+              return `
+                <div class="p-3 rounded-xl border flex gap-3 text-xs leading-relaxed ${
+                  isGoal ? 'bg-emerald-505/10 border-emerald-500/20 text-emerald-300 font-bold' : 'bg-slate-950/40 border-slate-900 text-slate-300'
+                }">
+                  <span class="font-black text-emerald-accent shrink-0 min-w-[28px]">${e.clock || '0\''}</span>
+                  <div>
+                    <p class="font-semibold">${e.text}</p>
+                    <span class="text-[9px] font-black uppercase tracking-wider opacity-60 block mt-1">${e.type}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      if (state.activeSideTab === 'telemetry') {
+        return `
+          <div class="space-y-3.5 text-xs font-bold">
+            <div class="flex justify-between items-center py-1 border-b border-slate-900">
+              <span class="text-slate-500">Live Status:</span>
+              <span class="text-emerald-accent uppercase flex items-center gap-1">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-accent animate-ping"></span>
+                ONLINE
+              </span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-900">
+              <span class="text-slate-500">Active Channel:</span>
+              <span class="text-white uppercase">${state.activeStreamIndex === 0 ? 'Primary' : 'Backup ' + state.activeStreamIndex}</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-900">
+              <span class="text-slate-500">Network Latency:</span>
+              <span class="text-white">1.8s (Low Delay)</span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-900">
+              <span class="text-slate-500">Buffer state:</span>
+              <span class="${state.bufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}">${state.bufferState}</span>
+            </div>
+            <div class="flex justify-between items-center py-1">
+              <span class="text-slate-500">ESPN Event ID:</span>
+              <span class="text-white font-mono">${score.espnEventId}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.activeSideTab === 'lineup') {
+        if (!data.rosters) {
+          return `<div class="text-center py-10 text-slate-500 font-bold uppercase text-[9px]">No rosters posted yet</div>`;
+        }
+        
+        const rosters = Object.values(data.rosters);
+        const homeR = rosters.find(r => r.homeAway === 'home');
+        const awayR = rosters.find(r => r.homeAway === 'away');
+
+        const renderRosterHtml = (teamR, title) => {
+          if (!teamR || !teamR.roster || teamR.roster.length === 0) return '';
+          return `
+            <div class="space-y-2 mt-4">
+              <h4 class="text-xs font-black uppercase text-emerald-accent tracking-wider border-b border-slate-900 pb-1">${title} Lineup</h4>
+              <div class="space-y-1.5">
+                ${teamR.roster.map(p => {
+                  return `
+                    <div class="flex justify-between items-center text-xs text-slate-300 py-1 font-medium">
+                      <div class="flex items-center gap-2">
+                        ${p.jersey ? `<span class="font-bold text-[9px] text-slate-500 bg-slate-950 w-5 h-5 rounded-full flex items-center justify-center border border-card-border">${p.jersey}</span>` : ''}
+                        <span>${p.athlete?.displayName || p.athlete?.name || 'Player'}</span>
+                      </div>
+                      <span class="text-[9px] uppercase text-slate-500 font-bold">${p.position?.abbreviation || p.position?.name}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        };
+
+        const homeName = state.streamingMatch.home_team_id ? state.streamingMatch.home_team?.name : state.streamingMatch.home_team_custom_name;
+        const awayName = state.streamingMatch.away_team_id ? state.streamingMatch.away_team?.name : state.streamingMatch.away_team_custom_name;
+
+        return `
+          <div class="space-y-4">
+            ${renderRosterHtml(homeR, homeName)}
+            ${renderRosterHtml(awayR, awayName)}
+          </div>
+        `;
+      }
+    }
+
+    // 14. Watch details separate screen renderers
+    function renderWatchMatchPage(root) {
+      const match = state.streamingMatch;
+      const homeName = match.home_team_id ? match.home_team?.name : match.home_team_custom_name;
+      const awayName = match.away_team_id ? match.away_team?.name : match.away_team_custom_name;
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans pb-12">
+          <header class="border-b border-card-border bg-[#090c10]/80 sticky top-0 z-40 backdrop-blur">
+            <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+              <button onclick="navigate({ watch: null })" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800 transition-colors text-xs font-black uppercase tracking-wider text-slate-300 cursor-pointer">
+                <i data-lucide="arrow-left" class="h-4 w-4 text-emerald-accent"></i>
+                Back Home
+              </button>
+              <div class="text-right">
+                <span class="text-[10px] text-emerald-accent font-black uppercase tracking-widest block">Watch Room</span>
+                <span class="text-xs font-bold text-white uppercase">${homeName} vs ${awayName}</span>
+              </div>
+            </div>
+          </header>
+
+          <!-- headerTop Ad placement -->
+          <div class="max-w-6xl mx-auto w-full px-4 mt-2">
+            ${getAdForPlacementHTML('headerTop')}
+          </div>
+
+          <main class="max-w-6xl w-full mx-auto px-4 mt-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <!-- Player -->
+              <div class="lg:col-span-2 space-y-6">
+                
+                <!-- watchAbovePlayer placement -->
+                ${getAdForPlacementHTML('watchAbovePlayer')}
+
+                ${match.status === 'upcoming' ? `
+                  <div class="aspect-video w-full relative bg-slate-955 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-4">
+                    <i data-lucide="calendar" class="h-16 w-16 text-emerald-accent animate-pulse"></i>
+                    <div>
+                      <span class="text-[10px] text-emerald-accent font-black uppercase tracking-widest block">MATCH NOT STARTED</span>
+                      <h3 class="text-xl font-black text-white mt-1 uppercase">${homeName} vs ${awayName}</h3>
+                      <p class="text-xs text-slate-400 mt-1">Live broadcast will begin at match kickoff: ${match.match_date} • ${match.match_time.substring(0, 5)}</p>
+                    </div>
+                    <div class="match-countdown" data-kickoff="${match.match_timestamp}">
+                      <span class="countdown-val font-mono text-base text-emerald-accent font-black">--:--:--</span>
+                    </div>
+                  </div>
+                ` : `
+                  <div id="watch-player-viewport" class="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl overflow-hidden shadow-2xl">
+                    <!-- Player wrapper Hlsjs -->
+                  </div>
+                  
+                  <!-- Fallback options -->
+                  <div class="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <h3 class="font-black uppercase text-xs text-slate-400 tracking-wider">Fallback Channels</h3>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Toggle feeds if experience lag</p>
+                      </div>
+                      <button onclick="initializeLivePlayer()" class="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer">
+                        <i data-lucide="refresh-cw" class="h-4 w-4 text-emerald-accent"></i>
+                      </button>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      ${(state.streamingUrls || []).map((url, idx) => {
+                        const isSel = state.activeStreamIndex === idx;
+                        return `
+                          <button onclick="state.activeStreamIndex=${idx}; initializeLivePlayer();" class="py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
+                            isSel ? 'bg-emerald-accent border-emerald-accent text-black' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                          }">
+                            ${state.streamingLabels[idx] || 'Server'}
+                          </button>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+                `}
+
+                <!-- watchBelowPlayer placement -->
+                ${getAdForPlacementHTML('watchBelowPlayer')}
+
+              </div>
+
+              <!-- Sidebar -->
+              <div class="space-y-6 flex flex-col h-[calc(100vh-140px)] min-h-[500px]">
+                ${renderMiniScorecardHTML(match)}
+                ${renderMatchCenterTabsHTML(match)}
+              </div>
+            </div>
+          </main>
+
+          <!-- Footer counters -->
+          ${renderFooterAndCountersHTML()}
+        </div>
+      `;
+
+      // Set player timeout execution in loop to map correct DOM ID
+      setTimeout(() => {
+        if (match.status !== 'upcoming') {
+          if (!state.streamingUrls || state.streamingUrls.length === 0) {
+            loadWatchMatchDetails();
+          } else {
+            initializeLivePlayer();
+          }
+        }
+      }, 50);
+    }
+
+    function renderWatchChannelPage(root) {
+      root.innerHTML = `
+        <div class="min-h-screen bg-[#090c10] text-[#f0f3f8] flex flex-col font-sans pb-12">
+          <header class="border-b border-card-border bg-[#090c10]/80 sticky top-0 z-40 backdrop-blur">
+            <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+              <button onclick="navigate({ channel: null })" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800 transition-colors text-xs font-black uppercase tracking-wider text-slate-300 cursor-pointer">
+                <i data-lucide="arrow-left" class="h-4 w-4 text-emerald-accent"></i>
+                Back Home
+              </button>
+              <div class="text-right">
+                <span class="text-[10px] text-emerald-accent font-black uppercase tracking-widest block">Live TV</span>
+                <span class="text-xs font-bold text-white uppercase">${state.selectedChannelName}</span>
+              </div>
+            </div>
+          </header>
+
+          <!-- headerTop Ad placement -->
+          <div class="max-w-6xl mx-auto w-full px-4 mt-2">
+            ${getAdForPlacementHTML('headerTop')}
+          </div>
+
+          <main class="max-w-6xl w-full mx-auto px-4 mt-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <!-- Player -->
+              <div class="lg:col-span-2 space-y-4">
+                <div id="channel-player-viewport" class="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl overflow-hidden shadow-2xl">
+                  <!-- Video tag HLS -->
+                </div>
+              </div>
+              
+              <!-- Channels list -->
+              <div class="glass-panel p-5 rounded-2xl border border-card-border">
+                <h3 class="text-xs font-black text-white uppercase tracking-wider border-b border-slate-900 pb-2 mb-4">TV Channel Selector</h3>
+                <div class="space-y-2 max-h-[350px] overflow-y-auto">
+                  ${state.channels.map(chan => {
+                    const isPlaying = String(chan.id) === state.watchChannelId;
+                    return `
+                      <div onclick="navigate({ channel: '${chan.id}' })" class="p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                        isPlaying ? 'bg-emerald-505/10 border-emerald-accent text-white' : 'bg-slate-955/40 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
+                      }">
+                        <div class="flex items-center gap-2">
+                          <i data-lucide="tv" class="h-4 w-4 text-emerald-accent"></i>
+                          <span class="text-xs font-bold uppercase tracking-wider truncate">${chan.name}</span>
+                        </div>
+                        ${isPlaying ? `<span class="text-[9px] font-black text-emerald-accent uppercase">Playing</span>` : ''}
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <!-- Footer counters -->
+          ${renderFooterAndCountersHTML()}
+        </div>
+      `;
+
+      setTimeout(initializeChannelPlayer, 50);
+    }
+
+    // 15. Match countdown tick
+    function initMatchCountdowns() {
+      // Single global interval to prevent leaks
+      setInterval(() => {
+        const countdowns = document.querySelectorAll('.match-countdown');
+        countdowns.forEach(c => {
+          const raw = c.getAttribute('data-kickoff');
+          if (!raw) return;
+          const valEl = c.querySelector('.countdown-val');
+          if (valEl) {
+            valEl.textContent = getRemainingTime(raw);
+          }
+        });
+      }, 1000);
+    }
+
+    // 16. App Bootstrapper
+    document.addEventListener('DOMContentLoaded', initApp);
+    
+    //]]>
+  </script>
+</body>
+</html>
