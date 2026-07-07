@@ -5,6 +5,20 @@
   <b:include data='blog' name='all-head-content'/>
   <title><data:blog.pageTitle/></title>
   
+  <script type='text/javascript'>
+    //<![CDATA[
+    (function() {
+      var url = window.location.href;
+      if (url.indexOf('?m=1') !== -1) {
+        window.location.replace(url.replace('?m=1', '?m=0'));
+      } else if (url.indexOf('?m=0') === -1 && window.location.search === '' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        var separator = url.indexOf('?') !== -1 ? '&' : '?';
+        window.location.replace(url + separator + 'm=0');
+      }
+    })();
+    //]]>
+  </script>
+  
   <meta content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' name='viewport'/>
   
   <!-- CSS Skin -->
@@ -17,7 +31,7 @@
       height: 100%;
       background-color: #090c10;
       color: #f0f3f8;
-      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: 'Hind Siliguri', 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       scroll-behavior: smooth;
     }
 
@@ -130,13 +144,9 @@
     </div>
   </div>
 
-  <!-- Debug Overlay for Client errors -->
-  <div id="debug-error-overlay" class="fixed bottom-4 left-4 z-50 bg-red-955/95 border border-red-500 text-red-400 p-4 rounded-2xl text-xs font-mono max-w-md hidden shadow-2xl"></div>
-
-  <!-- Hidden Section for Blogger compilation requirements -->
-  <div style='display: none !important;'>
-    <b:section id='blogger-required-section' showaddelement='yes'>
-      <b:widget id='Blog1' locked='false' title='Blog Posts' type='Blog'/>
+  <div>
+    <b:section id='main-content' maxwidgets='1' showaddelement='yes'>
+      <b:widget id='Blog1' locked='true' title='Blog Posts' type='Blog'/>
     </b:section>
   </div>
 
@@ -144,18 +154,7 @@
   <script type='text/javascript'>
     //<![CDATA[
     
-    // Global Error Handling overlay
-    window.onerror = function(message, source, lineno, colno, error) {
-      console.error("Global Error Caught:", message, "at", source, ":", lineno);
-      const errDiv = document.getElementById('debug-error-overlay');
-      if (errDiv) {
-        errDiv.style.display = 'block';
-        errDiv.innerHTML = `<strong class="text-white block mb-1">⚠️ Client-Side Error</strong>
-          <span class="block">Msg: ${message}</span>
-          <span class="block">Line: ${lineno}</span>`;
-      }
-      return false;
-    };
+    // Global Error Handling overlay removed to prevent cross-origin script error boxes
 
     // 1. Supabase Credentials
     const supabaseUrl = 'https://wkikuysbirrcmbextkvp.supabase.co';
@@ -401,12 +400,6 @@
         
       } catch (err) {
         console.error('Fatal initialization error:', err);
-        const errDiv = document.getElementById('debug-error-overlay');
-        if (errDiv) {
-          errDiv.style.display = 'block';
-          errDiv.innerHTML = `<strong class="text-white block mb-1">⚠️ Connection Error</strong>
-            <span>Failed to connect to backend/database: ${err.message}</span>`;
-        }
       }
     }
 
@@ -652,6 +645,33 @@
       state.streamingUrls = streamItems.map(s => s.url);
       state.streamingLabels = streamItems.map(s => s.label || 'Server');
       
+      // Fetch scoreboard for this specific match date to verify tiebreaker/shootout/live score updates
+      if (match.match_timestamp) {
+        try {
+          const d = new Date(match.match_timestamp);
+          const yr = d.getFullYear();
+          const mo = String(d.getMonth() + 1).padStart(2, '0');
+          const dy = String(d.getDate()).padStart(2, '0');
+          const dateStr = `${yr}${mo}${dy}`;
+          
+          const scoreRes = await fetch(`${BACKEND_BASE}/api/live-scores?date=${dateStr}`);
+          if (scoreRes.ok) {
+            const data = await scoreRes.json();
+            const newScores = data.scores || [];
+            newScores.forEach(ns => {
+              const exists = state.espnScores.findIndex(es => es.espnEventId === ns.espnEventId);
+              if (exists !== -1) {
+                state.espnScores[exists] = ns;
+              } else {
+                state.espnScores.push(ns);
+              }
+            });
+          }
+        } catch (e) {
+          console.warn("Failed to fetch match-specific scoreboard:", e);
+        }
+      }
+
       render();
       initializeLivePlayer();
       loadCommentaryFeed();
@@ -1506,19 +1526,8 @@
       const tabFinishedLabel = ui.tab_finished_name || '🏁 Finished';
       const tabChannelsLabel = ui.tab_channels_name || '📺 Channels';
       
-      const subtitleText = ui.header_subtitle || state.tickerSettings?.header_subtitle || 'Premium Streaming Portal';
       const emptyTitle = ui.no_matches_title || 'No Matches Broadcasts';
       const emptyDesc = ui.no_matches_desc || 'There are no active matches in this tab. Tune in during kickoff schedules.';
-
-      // Logo and site name
-      const logoHtml = state.tickerSettings?.use_logo_image && state.tickerSettings?.logo_url
-        ? `<img src="${state.tickerSettings.logo_url}" alt="${state.tickerSettings?.site_name || 'Logo'}" class="h-9 w-auto object-contain rounded-lg" />`
-        : `
-          <div class="h-9 w-9 bg-emerald-500/10 rounded-xl border border-emerald-500/25 flex items-center justify-center">
-            <i data-lucide="tv" class="h-5 w-5 text-emerald-accent"></i>
-          </div>
-        `;
-      const siteName = state.tickerSettings?.site_name || 'KHELE DAO LIVE';
 
       // Get match categories
       const { live, upcoming, finished } = getCategorizedMatches();
@@ -1553,7 +1562,7 @@
                 <!-- watchAbovePlayer placement -->
                 ${getAdForPlacementHTML('watchAbovePlayer')}
 
-                <div id="watch-player-viewport" class="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl overflow-hidden shadow-2xl">
+                <div id="watch-player-viewport" class="aspect-video w-full relative bg-slate-955 border border-card-border rounded-3xl overflow-hidden shadow-2xl">
                   <!-- Embeds inside HlsPlayer -->
                 </div>
                 
@@ -1683,7 +1692,7 @@
           });
 
           listHtml = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               ${matchCards.join('')}
             </div>
           `;
@@ -1706,13 +1715,7 @@
           <header class="border-b border-card-border bg-[#090c10]/80 sticky top-0 z-40 backdrop-blur">
             <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
               <div class="flex items-center justify-between w-full md:w-auto">
-                <div class="flex items-center gap-3">
-                  ${logoHtml}
-                  <div>
-                    <h1 class="text-sm font-black text-white uppercase tracking-widest">${siteName}</h1>
-                    <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">${subtitleText}</span>
-                  </div>
-                </div>
+                ${renderLogoHTML()}
                 
                 <!-- Bell notifications button (Mobile only) -->
                 <div class="flex items-center gap-2 md:hidden">
@@ -1729,7 +1732,7 @@
               
               <!-- Tab List -->
               <div class="flex items-center gap-3 overflow-x-auto md:overflow-visible w-full md:w-auto pb-1 md:pb-0 scrollbar-none justify-start md:justify-end">
-                <nav class="flex items-center gap-1 bg-slate-950/40 p-1 border border-card-border rounded-2xl shrink-0">
+                <nav class="flex items-center gap-1 bg-slate-955/40 p-1 border border-card-border rounded-2xl shrink-0">
                   ${showStreamingTab ? `
                     <button onclick="state.activeTab='streaming'; render();" class="px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
                       state.activeTab === 'streaming' ? 'bg-emerald-accent text-black font-extrabold shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
@@ -1770,6 +1773,11 @@
           <!-- Ticker Marquee Headline -->
           <div id="ticker-marquee-container">
             ${renderTickerMarqueeHTML()}
+          </div>
+
+          <!-- Hero Banner Section -->
+          <div id="hero-banner-container" class="max-w-6xl mx-auto w-full px-4 mt-4 font-bangla">
+            ${renderHeroBannerHTML()}
           </div>
 
           <!-- afterBanner Ad placement -->
@@ -1817,6 +1825,68 @@
             </button>
           </div>
         </div>
+      `;
+    }
+
+    function navigateHome(event) {
+      if (event) event.preventDefault();
+      const showStreaming = state.systemConfig?.custom_scripts?.enable_streaming_now !== false;
+      state.activeTab = showStreaming ? 'streaming' : 'live';
+      state.watchMatchId = null;
+      state.watchChannelId = null;
+      state.selectedChannelUrl = null;
+      state.streamingMatch = null;
+      state.activeStreamIndex = 0;
+      state.commentaryData = null;
+      window.location.hash = '';
+      render();
+    }
+
+    function renderLogoHTML() {
+      const ticker = state.tickerSettings;
+      const useLogoImage = ticker?.use_logo_image;
+      const logoUrl = ticker?.logo_url;
+      const siteName = ticker?.site_name || 'KHELE DAO LIVE';
+      const ui = state.systemConfig?.custom_scripts?.app_ui_texts || {};
+      const subtitleText = ui.header_subtitle || ticker?.header_subtitle || 'Premium Streaming Portal';
+
+      if (useLogoImage && logoUrl) {
+        return `
+          <a href="#" onclick="navigateHome(event)" class="cursor-pointer select-none block">
+            <img src="${logoUrl}" alt="${siteName}" class="h-10 md:h-14 w-auto max-w-[200px] md:max-w-[280px] object-contain hover:scale-[1.02] transition-transform duration-200" />
+          </a>
+        `;
+      } else {
+        const logoIconHtml = logoUrl 
+          ? `<img src="${logoUrl}" alt="" class="h-8 w-8 object-contain rounded-lg border border-card-border" />`
+          : `
+            <div class="h-9 w-9 bg-emerald-500/10 rounded-xl border border-emerald-500/25 flex items-center justify-center">
+              <i data-lucide="tv" class="h-5 w-5 text-emerald-accent"></i>
+            </div>
+          `;
+        return `
+          <a href="#" onclick="navigateHome(event)" class="flex items-center gap-3 cursor-pointer select-none">
+            ${logoIconHtml}
+            <div>
+              <h1 class="text-sm font-black text-white uppercase tracking-widest leading-none">${siteName}</h1>
+              <p class="text-[9px] text-emerald-accent font-bold uppercase tracking-widest mt-1 block">${subtitleText}</p>
+            </div>
+          </a>
+        `;
+      }
+    }
+
+    function renderHeroBannerHTML() {
+      const ticker = state.tickerSettings;
+      if (!ticker || !ticker.banner_url) return '';
+      return `
+        <section class="w-full rounded-2xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+          <img 
+            src="${ticker.banner_url}" 
+            alt="Live Sports Broadcasts" 
+            class="w-full h-auto block" 
+          />
+        </section>
       `;
     }
 
@@ -1951,6 +2021,7 @@
     function renderMatchCardHTML(m) {
       const score = getMatchedEspnScore(m);
       const isLive = m.status === 'live' || (score && score.liveMinute);
+      const isUpcoming = m.status === 'upcoming';
       
       const homeName = m.home_team_id ? m.home_team?.name : m.home_team_custom_name;
       const awayName = m.away_team_id ? m.away_team?.name : m.away_team_custom_name;
@@ -1961,58 +2032,137 @@
       const awayScore = score ? score.awayScore : (m.away_score ?? 0);
       const gameMin = score ? score.liveMinute : (m.live_minute || (m.status === 'live' ? 'LIVE' : ''));
 
+      // Check if shootout tie breaker exists
+      const hasShootout = score && score.homeShootoutScore !== undefined && score.homeShootoutScore !== null;
+      const homeSScore = hasShootout ? score.homeShootoutScore : null;
+      const awaySScore = hasShootout ? score.awayShootoutScore : null;
+
+      // Scorers details
+      const hScorers = score ? score.homeScorers : (m.home_scorers || '');
+      const aScorers = score ? score.awayScorers : (m.away_scorers || '');
+
+      let scoreContentHtml = '';
+      if (isLive || m.status === 'finished') {
+        scoreContentHtml = `
+          <div class="flex flex-col items-center justify-center">
+            <span class="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">${homeScore} - ${awayScore}</span>
+            ${hasShootout ? `
+              <span class="text-[10px] font-black text-emerald-accent uppercase mt-1">
+                Pens: ${homeSScore} - ${awaySScore}
+              </span>
+            ` : ''}
+          </div>
+        `;
+      } else if (isUpcoming) {
+        scoreContentHtml = `
+          <div class="match-countdown flex flex-col items-center" data-kickoff="${m.match_timestamp}">
+            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">KICKOFF</span>
+            <span class="countdown-val font-mono text-[10px] text-emerald-accent font-bold mt-0.5">--:--:--</span>
+          </div>
+        `;
+      } else {
+        scoreContentHtml = `
+          <span class="px-2.5 py-1 bg-slate-955 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>
+        `;
+      }
+
+      // Scorers container
+      const scorersHtml = (hScorers || aScorers) ? `
+        <div class="text-[10px] text-slate-400 bg-slate-950/40 p-2 rounded-xl border border-slate-900/50 flex justify-between gap-2 mt-1 w-full font-bangla">
+          <div class="w-[45%] text-left text-slate-300 font-medium break-words">${hScorers}</div>
+          <div class="w-[10%] text-center text-slate-500 font-bold">⚽</div>
+          <div class="w-[45%] text-right text-slate-300 font-medium break-words">${aScorers}</div>
+        </div>
+      ` : '';
+
+      // Stadium and Kickoff Info
+      const stadiumHtml = `
+        <div class="text-center space-y-1 w-full">
+          <p class="text-slate-400 text-xs font-bold flex items-center justify-center gap-1">
+            <i data-lucide="map-pin" class="h-3.5 w-3.5 text-emerald-accent"></i>
+            ${m.stadium_name || 'International Stadium'}
+          </p>
+          <p class="text-slate-505/50 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
+            <i data-lucide="calendar" class="h-3 w-3"></i>
+            ${m.match_date} • ${m.match_time.substring(0, 5)}
+          </p>
+        </div>
+      `;
+
+      // Bottom Buttons
+      let buttonsHtml = '';
+      if (isLive || isUpcoming) {
+        buttonsHtml = `
+          <div class="flex gap-4 border-t border-card-border pt-4 w-full">
+            <button onclick="navigate({ watch: '${m.id}' })" class="flex-1 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-black uppercase text-xs tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer border-none outline-none">
+              <i data-lucide="tv" class="h-4 w-4"></i>
+              ${isLive ? 'Watch Live' : 'Watch Feed'}
+            </button>
+          </div>
+        `;
+      } else {
+        buttonsHtml = `
+          <div class="flex gap-4 border-t border-card-border pt-4 w-full">
+            <button class="flex-1 py-3 border border-slate-850 bg-slate-900 text-slate-400 font-bold uppercase text-xs tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-not-allowed outline-none">
+              <i data-lucide="info" class="h-4 w-4"></i>
+              Finished
+            </button>
+          </div>
+        `;
+      }
+
       return `
-        <div onclick="navigate({ watch: '${m.id}' })" class="glass-panel p-5 rounded-2xl border border-card-border hover:border-slate-800 transition-all cursor-pointer flex flex-col justify-between gap-4 group">
-          <div class="flex justify-between items-center text-slate-500 text-[10px] font-black uppercase tracking-wider">
-            <span>${m.tournament_name || 'International'}</span>
-            ${isLive ? `
-              <span class="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md animate-pulse">LIVE</span>
-            ` : `
-              <span>${m.match_date} • ${m.match_time.substring(0, 5)}</span>
-            `}
+        <div class="glass-panel p-6 rounded-3xl border border-card-border flex flex-col justify-between gap-6 hover:border-slate-800 transition-all duration-200">
+          
+          <!-- Card Header (League and Status) -->
+          <div class="flex justify-between items-start w-full">
+            <span class="px-2.5 py-0.5 bg-slate-900 border border-slate-800 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-400">
+              ${m.tournament_name || 'International'}
+            </span>
+            <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+              isLive 
+                ? 'bg-red-500/10 text-red-400 border-red-500/25 animate-pulse'
+                : isUpcoming 
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                  : 'bg-slate-800 text-slate-500 border-slate-700'
+            }">
+              ${isLive ? `LIVE ${gameMin ? `• ${gameMin}` : ''}` : m.status.toUpperCase()}
+            </span>
           </div>
 
-          <div class="flex justify-between items-center text-center">
+          <!-- Teams and Scores -->
+          <div class="flex items-center justify-between text-center gap-1.5 w-full">
             <!-- Home -->
-            <div class="w-[38%] flex flex-col items-center gap-1.5 min-w-0">
-              <div class="h-10 w-14 bg-slate-900 border border-card-border rounded-lg overflow-hidden flex items-center justify-center p-0.5 shadow relative">
-                ${homeFlag ? `<img src="${homeFlag}" alt="${homeName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] font-bold text-slate-500">HOME</span>`}
+            <div class="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
+              <div class="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
+                ${homeFlag ? `<img src="${homeFlag}" alt="${homeName}" class="h-full w-full object-cover rounded-lg" />` : `<span class="text-xs text-slate-500 font-black">HOME</span>`}
               </div>
-              <span class="font-bold text-white text-xs truncate w-full group-hover:text-emerald-accent transition-colors">${homeName}</span>
+              <span class="font-extrabold text-white text-sm truncate w-full font-bangla">${homeName}</span>
             </div>
 
             <!-- Score -->
-            <div class="w-[24%] flex flex-col items-center justify-center">
-              ${isLive ? `
-                <div class="flex items-center gap-1">
-                  <span class="text-xl font-black text-white">${homeScore}</span>
-                  <span class="text-slate-600 font-bold text-xs">-</span>
-                  <span class="text-xl font-black text-white">${awayScore}</span>
-                </div>
-                <span class="text-[9px] font-bold text-emerald-accent uppercase mt-1 animate-pulse">${gameMin}</span>
-              ` : m.status === 'upcoming' ? `
-                <div class="match-countdown flex flex-col items-center" data-kickoff="${m.match_timestamp}">
-                  <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">KICKOFF</span>
-                  <span class="countdown-val font-mono text-[10px] text-emerald-accent font-bold mt-0.5">--:--:--</span>
-                </div>
-              ` : `
-                <div class="flex items-center gap-1">
-                  <span class="text-xl font-black text-slate-400">${homeScore}</span>
-                  <span class="text-slate-600 font-bold text-xs">-</span>
-                  <span class="text-xl font-black text-slate-400">${awayScore}</span>
-                </div>
-                <span class="text-[9px] font-bold text-slate-500 uppercase mt-1">FINISHED</span>
-              `}
+            <div class="w-[24%] shrink-0 flex flex-col items-center justify-center">
+              ${scoreContentHtml}
             </div>
 
             <!-- Away -->
-            <div class="w-[38%] flex flex-col items-center gap-1.5 min-w-0">
-              <div class="h-10 w-14 bg-slate-900 border border-card-border rounded-lg overflow-hidden flex items-center justify-center p-0.5 shadow relative">
-                ${awayFlag ? `<img src="${awayFlag}" alt="${awayName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] font-bold text-slate-500">AWAY</span>`}
+            <div class="w-[38%] shrink-0 flex flex-col items-center gap-2 min-w-0">
+              <div class="h-14 w-20 bg-slate-900/60 rounded-2xl overflow-hidden border border-card-border flex items-center justify-center p-1 shadow">
+                ${awayFlag ? `<img src="${awayFlag}" alt="${awayName}" class="h-full w-full object-cover rounded-lg" />` : `<span class="text-xs text-slate-500 font-black">AWAY</span>`}
               </div>
-              <span class="font-bold text-white text-xs truncate w-full group-hover:text-emerald-accent transition-colors">${awayName}</span>
+              <span class="font-extrabold text-white text-sm truncate w-full font-bangla">${awayName}</span>
             </div>
           </div>
+
+          <!-- Goal Scorers -->
+          ${scorersHtml}
+
+          <!-- Stadium -->
+          ${stadiumHtml}
+
+          <!-- Bottom buttons -->
+          ${buttonsHtml}
+
         </div>
       `;
     }
@@ -2028,6 +2178,11 @@
       const awayScore = score ? score.awayScore : (m.away_score ?? 0);
       const gameMin = score ? score.liveMinute : (m.live_minute || (m.status === 'live' ? 'LIVE' : 'UPCOMING'));
 
+      // Check if shootout tie breaker exists
+      const hasShootout = score && score.homeShootoutScore !== undefined && score.homeShootoutScore !== null;
+      const homeSScore = hasShootout ? score.homeShootoutScore : null;
+      const awaySScore = hasShootout ? score.awayShootoutScore : null;
+
       return `
         <div class="glass-panel p-5 rounded-2xl border border-card-border bg-gradient-to-b from-slate-900/40 to-slate-950/20">
           <div class="flex justify-between items-center text-center gap-1">
@@ -2036,7 +2191,7 @@
               <div class="h-10 w-14 bg-slate-955/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
                 ${homeFlag ? `<img src="${homeFlag}" alt="${homeName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] text-slate-500 font-bold">HOME</span>`}
               </div>
-              <span class="font-bold text-white text-xs truncate w-full">${homeName}</span>
+              <span class="font-bold text-white text-xs truncate w-full font-bangla">${homeName}</span>
             </div>
 
             <!-- Score -->
@@ -2046,6 +2201,11 @@
                 <span class="text-slate-600 font-bold text-xs">-</span>
                 <span class="text-2xl font-black text-white tracking-tight">${awayScore}</span>
               </div>
+              ${hasShootout ? `
+                <span class="text-[10px] font-black text-emerald-accent uppercase mt-1">
+                  Pens: ${homeSScore} - ${awaySScore}
+                </span>
+              ` : ''}
               <span class="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md text-[9px] font-black uppercase tracking-wider mt-1.5 animate-pulse">
                 ${gameMin}
               </span>
@@ -2056,7 +2216,7 @@
               <div class="h-10 w-14 bg-slate-955/80 rounded-lg overflow-hidden border border-card-border flex items-center justify-center p-0.5 shadow">
                 ${awayFlag ? `<img src="${awayFlag}" alt="${awayName}" class="h-full w-full object-cover rounded" />` : `<span class="text-[9px] text-slate-500 font-bold">AWAY</span>`}
               </div>
-              <span class="font-bold text-white text-xs truncate w-full">${awayName}</span>
+              <span class="font-bold text-white text-xs truncate w-full font-bangla">${awayName}</span>
             </div>
           </div>
         </div>
