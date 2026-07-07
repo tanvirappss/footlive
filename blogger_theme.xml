@@ -125,6 +125,10 @@
           colors: {
             'card-border': 'rgba(255,255,255,0.06)',
             'emerald-accent': '#10b981'
+          },
+          fontFamily: {
+            sans: ['Hind Siliguri', 'Outfit', 'sans-serif'],
+            bangla: ['Hind Siliguri', 'sans-serif']
           }
         }
       }
@@ -746,6 +750,28 @@
       commentaryInterval = setInterval(fetchCommentary, 7000);
     }
 
+    function renderFallbackButtonsHTML() {
+      return (state.streamingUrls || []).map((url, idx) => {
+        const isSel = state.activeStreamIndex === idx;
+        return `
+          <button onclick="changeFallbackStream(${idx})" class="py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
+            isSel ? 'bg-emerald-accent border-emerald-accent text-black font-extrabold shadow' : 'bg-slate-900 border-slate-850 text-slate-300 hover:bg-slate-800'
+          }">
+            ${state.streamingLabels[idx] || 'Server'}
+          </button>
+        `;
+      }).join('');
+    }
+
+    window.changeFallbackStream = function(idx) {
+      state.activeStreamIndex = idx;
+      const containers = document.querySelectorAll('#fallback-servers-buttons-container');
+      containers.forEach(container => {
+        container.innerHTML = renderFallbackButtonsHTML();
+      });
+      initializeLivePlayer();
+    };
+
     // 11. Custom Player Engine and Black Screen Detector
     function initializeLivePlayer() {
       const container = document.getElementById('watch-player-viewport');
@@ -999,9 +1025,12 @@
       // Initialize HLS
       if (Hls.isSupported()) {
         const hls = new Hls({
-          maxMaxBufferLength: 20,
           enableWorker: true,
-          lowLatencyMode: true
+          lowLatencyMode: true,
+          maxBufferLength: 5,
+          maxMaxBufferLength: 10,
+          capLevelToPlayerSize: true,
+          backBufferLength: 10
         });
         hls.loadSource(url);
         hls.attachMedia(video);
@@ -1417,9 +1446,17 @@
           if (tabsEl) {
             tabsEl.innerHTML = renderMatchCenterTabsHTML(state.streamingMatch);
           }
+          const buttonsEl = document.getElementById('fallback-servers-buttons-container');
+          if (buttonsEl) {
+            buttonsEl.innerHTML = renderFallbackButtonsHTML();
+          }
         } else if (state.watchChannelId) {
           // Watch channel page has no dynamic scorecard, but we could update channel selector list active state
         } else if (state.activeTab === 'streaming') {
+          const buttonsEl = document.getElementById('fallback-servers-buttons-container');
+          if (buttonsEl) {
+            buttonsEl.innerHTML = renderFallbackButtonsHTML();
+          }
           const { live, upcoming, finished } = getCategorizedMatches();
           const streamingFeatured = live.length > 0 ? live[0] : (upcoming.length > 0 ? upcoming[0] : (finished.length > 0 ? finished[0] : null));
           if (streamingFeatured) {
@@ -1595,17 +1632,8 @@
                       <i data-lucide="refresh-cw" class="h-4 w-4 text-emerald-accent"></i>
                     </button>
                   </div>
-                  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                    ${(state.streamingUrls || []).map((url, idx) => {
-                      const isSel = state.activeStreamIndex === idx;
-                      return `
-                        <button onclick="state.activeStreamIndex=${idx}; initializeLivePlayer();" class="py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
-                          isSel ? 'bg-emerald-accent border-emerald-accent text-black' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-                        }">
-                          ${state.streamingLabels[idx] || 'Server'}
-                        </button>
-                      `;
-                    }).join('')}
+                  <div id="fallback-servers-buttons-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    ${renderFallbackButtonsHTML()}
                   </div>
                 </div>
               </div>
@@ -2503,17 +2531,8 @@
                         <i data-lucide="refresh-cw" class="h-4 w-4 text-emerald-accent"></i>
                       </button>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      ${(state.streamingUrls || []).map((url, idx) => {
-                        const isSel = state.activeStreamIndex === idx;
-                        return `
-                          <button onclick="state.activeStreamIndex=${idx}; initializeLivePlayer();" class="py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
-                            isSel ? 'bg-emerald-accent border-emerald-accent text-black' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-                          }">
-                            ${state.streamingLabels[idx] || 'Server'}
-                          </button>
-                        `;
-                      }).join('')}
+                    <div id="fallback-servers-buttons-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      ${renderFallbackButtonsHTML()}
                     </div>
                   </div>
                 `}
