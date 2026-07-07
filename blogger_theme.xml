@@ -359,18 +359,14 @@
         // Initialize supabaseDb instance safely
         supabaseDb = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
 
+        // Prioritize matches, system config, ticker, and channels first for instant load/player start
         await Promise.all([
           fetchSystemConfig(),
           fetchTickerSettings(),
-          fetchAdsterraConfig(),
           fetchMatches(),
-          fetchAnnouncements(),
           fetchChannels(),
           fetchEspnScores()
         ]);
-        
-        // Fetch view counters
-        await fetchCounters();
 
         // Tab landing default
         if (state.systemConfig && !state.hasInitializedTab) {
@@ -381,6 +377,15 @@
         
         state.loading = false;
         routeHash();
+
+        // Load secondary/non-critical configurations in the background without blocking
+        Promise.all([
+          fetchAdsterraConfig(),
+          fetchAnnouncements(),
+          fetchCounters()
+        ]).then(() => {
+          render();
+        }).catch(e => console.warn("Background configurations load failed:", e));
         
         // Polling loop every 6 seconds
         if (globalInterval) clearInterval(globalInterval);
@@ -610,7 +615,17 @@
     // 9. Load details for Watch page
     async function loadWatchMatchDetails() {
       // Find matching item
-      const match = state.matches.find(m => String(m.id) === state.watchMatchId);
+      let matchId = state.watchMatchId;
+      if (!matchId) {
+        const cats = getCategorizedMatches();
+        const streamingFeatured = cats.live.length > 0 ? cats.live[0] : (cats.upcoming.length > 0 ? cats.upcoming[0] : (cats.finished.length > 0 ? cats.finished[0] : null));
+        if (streamingFeatured) {
+          matchId = streamingFeatured.id;
+        }
+      }
+      if (!matchId) return;
+
+      const match = state.matches.find(m => String(m.id) === String(matchId));
       if (!match) return;
       state.streamingMatch = match;
       
@@ -1878,11 +1893,14 @@
 
     function renderHeroBannerHTML() {
       const ticker = state.tickerSettings;
-      if (!ticker || !ticker.banner_url) return '';
+      let bannerSrc = `${BACKEND_BASE}/banner.png`;
+      if (ticker && ticker.banner_url) {
+        bannerSrc = ticker.banner_url.startsWith('http') ? ticker.banner_url : `${BACKEND_BASE}${ticker.banner_url}`;
+      }
       return `
         <section class="w-full rounded-2xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
           <img 
-            src="${ticker.banner_url}" 
+            src="${bannerSrc}" 
             alt="Live Sports Broadcasts" 
             class="w-full h-auto block" 
           />
@@ -1902,10 +1920,10 @@
             ${tickerBadge}
           </div>
           
-          <div class="w-full whitespace-nowrap overflow-hidden">
-            <span class="animate-marquee text-xs font-bold text-white tracking-wide font-bangla">
+          <div class="w-full pl-28 pr-4">
+            <marquee behavior="scroll" direction="left" scrollamount="5" onmouseover="this.stop();" onmouseout="this.start();" class="text-xs font-bold text-white tracking-wide font-bangla block">
               ${ticker.ticker_text}
-            </span>
+            </marquee>
           </div>
         </div>
       `;
@@ -2432,6 +2450,11 @@
           <!-- Ticker Marquee Headline -->
           <div id="ticker-marquee-container">
             ${renderTickerMarqueeHTML()}
+          </div>
+
+          <!-- Hero Banner Section -->
+          <div id="hero-banner-container" class="max-w-6xl mx-auto w-full px-4 mt-4 font-bangla">
+            ${renderHeroBannerHTML()}
           </div>
 
           <!-- afterBanner Ad placement -->
