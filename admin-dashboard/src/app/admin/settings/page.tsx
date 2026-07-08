@@ -14,7 +14,12 @@ import {
   Sliders,
   Sparkles,
   MessageSquareCode,
-  Star
+  Star,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Trash2
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -57,11 +62,19 @@ export default function SettingsPage() {
   const [updatingCounts, setUpdatingCounts] = useState(false);
   const [countsSuccess, setCountsSuccess] = useState(false);
 
+  interface DefaultStreamUrl {
+    label: string;
+    url: string;
+    use_proxy?: boolean;
+    proxy_headers?: Record<string, string>;
+  }
+
   // Default Streams States
-  const [defaultStreams, setDefaultStreams] = useState<{ label: string; url: string }[]>([]);
+  const [defaultStreams, setDefaultStreams] = useState<DefaultStreamUrl[]>([]);
   const [updatingDefaultStreams, setUpdatingDefaultStreams] = useState(false);
   const [defaultStreamsSuccess, setDefaultStreamsSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [expandedProxyIndex, setExpandedProxyIndex] = useState<number | null>(null);
 
   // SystemConfig States for Auto-Populate Toggle
   const [systemConfigId, setSystemConfigId] = useState<string | null>(null);
@@ -333,7 +346,7 @@ export default function SettingsPage() {
   };
 
   // Default stream priorities priority syncing
-  const saveAndSyncDefaultStreams = async (updatedStreams: { label: string; url: string }[]) => {
+  const saveAndSyncDefaultStreams = async (updatedStreams: DefaultStreamUrl[]) => {
     try {
       const filteredStreams = updatedStreams.filter(item => item.label.trim() && item.url.trim());
       const updateData = {
@@ -1223,123 +1236,302 @@ export default function SettingsPage() {
                     </button>
                   </div>
 
-                  <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                     {defaultStreams.length === 0 ? (
                       <div className="text-center py-6 border border-dashed border-card-border rounded-xl">
                         <p className="text-xs text-slate-500 font-medium">No default links configured yet.</p>
                       </div>
                     ) : (
                       defaultStreams.map((item, idx) => (
-                        <div
-                          key={idx}
-                          draggable
-                          onDragStart={() => handleDragStart(idx)}
-                          onDragOver={(e) => handleDragOver(e, idx)}
-                          onDragEnd={handleDragEnd}
-                          className={`flex gap-2 items-center p-2.5 bg-slate-950/40 border border-slate-900/60 rounded-xl cursor-move transition-all ${
-                            draggedIndex === idx ? 'opacity-40 scale-[0.99] border-emerald-500/40' : 'hover:border-slate-800'
-                          }`}
-                        >
-                          <div className="flex flex-col items-center justify-center text-slate-600 px-1 select-none">
-                            <span className="text-[10px] font-black text-slate-500 mb-0.5">#{idx + 1}</span>
-                            <span className="text-[9px]">☰</span>
+                        <div key={idx} className="space-y-2">
+                          <div
+                            draggable
+                            onDragStart={() => handleDragStart(idx)}
+                            onDragOver={(e) => handleDragOver(e, idx)}
+                            onDragEnd={handleDragEnd}
+                            className={`flex gap-2 items-center p-2.5 bg-slate-950/40 border border-slate-900/60 rounded-xl cursor-move transition-all ${
+                              draggedIndex === idx ? 'opacity-40 scale-[0.99] border-emerald-500/40' : 'hover:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex flex-col items-center justify-center text-slate-600 px-1 select-none">
+                              <span className="text-[10px] font-black text-slate-500 mb-0.5">#{idx + 1}</span>
+                              <span className="text-[9px]">▲▼</span>
+                            </div>
+
+                            <input
+                              type="text"
+                              required
+                              value={item.label}
+                              onChange={(e) => {
+                                const list = [...defaultStreams];
+                                list[idx] = { ...list[idx], label: e.target.value };
+                                setDefaultStreams(list);
+                              }}
+                              onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
+                              placeholder="Label (e.g. Server 1)"
+                              className="w-1/4 px-3 py-2 glass-input rounded-xl text-xs"
+                            />
+                            <input
+                              type="url"
+                              required
+                              value={item.url}
+                              onChange={(e) => {
+                                const list = [...defaultStreams];
+                                list[idx] = { ...list[idx], url: e.target.value };
+                                setDefaultStreams(list);
+                              }}
+                              onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
+                              placeholder="M3U8 Streaming URL"
+                              className="flex-1 px-3 py-2 glass-input rounded-xl text-xs"
+                            />
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {/* Proxy Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const list = [...defaultStreams];
+                                  const wasProxy = !!list[idx].use_proxy;
+                                  list[idx] = { ...list[idx], use_proxy: !wasProxy };
+                                  
+                                  if (!wasProxy) {
+                                    // Auto-populate default headers based on the URL domain
+                                    const urlVal = list[idx].url || '';
+                                    let originVal = '';
+                                    let refererVal = '';
+                                    try {
+                                      if (urlVal.startsWith('http://') || urlVal.startsWith('https://')) {
+                                        const parsed = new URL(urlVal);
+                                        originVal = parsed.origin;
+                                        refererVal = parsed.origin + '/';
+                                      }
+                                    } catch (e) {
+                                      // ignore invalid URL
+                                    }
+
+                                    const autoHeaders: Record<string, string> = {
+                                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+                                    };
+
+                                    if (originVal) {
+                                      autoHeaders['Origin'] = originVal;
+                                      autoHeaders['Referer'] = refererVal;
+                                    }
+
+                                    list[idx] = {
+                                      ...list[idx],
+                                      proxy_headers: autoHeaders
+                                    };
+                                    setExpandedProxyIndex(idx);
+                                  }
+                                  
+                                  setDefaultStreams(list);
+                                  saveAndSyncDefaultStreams(list);
+                                }}
+                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                  item.use_proxy
+                                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                                    : 'bg-slate-950 border-slate-900 text-slate-600 hover:text-slate-455 hover:border-slate-750'
+                                }`}
+                                title={item.use_proxy ? 'Proxy ENABLED — Click to disable' : 'Enable Reverse Proxy'}
+                              >
+                                <Shield className="h-3.5 w-3.5" fill={item.use_proxy ? 'currentColor' : 'none'} />
+                              </button>
+
+                              {/* Expand proxy headers config */}
+                              {item.use_proxy && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedProxyIndex(expandedProxyIndex === idx ? null : idx)}
+                                  className="p-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                                  title="Configure Proxy Headers"
+                                >
+                                  {expandedProxyIndex === idx ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                </button>
+                              )}
+
+                              <input
+                                type="number"
+                                min="1"
+                                max={defaultStreams.length}
+                                value={idx + 1}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10);
+                                  if (!isNaN(val) && val >= 1 && val <= defaultStreams.length) {
+                                    const targetIdx = val - 1;
+                                    if (targetIdx !== idx) {
+                                      const list = [...defaultStreams];
+                                      const [selected] = list.splice(idx, 1);
+                                      list.splice(targetIdx, 0, selected);
+                                      setDefaultStreams(list);
+                                      saveAndSyncDefaultStreams(list);
+                                      setExpandedProxyIndex(null);
+                                    }
+                                  }
+                                }}
+                                className="w-12 px-1 py-1.5 text-center bg-slate-950 border border-slate-900 rounded-lg text-xs text-white font-extrabold focus:outline-none focus:border-slate-850"
+                                title="Set Priority Number"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (idx === 0) return;
+                                  const list = [...defaultStreams];
+                                  const [selected] = list.splice(idx, 1);
+                                  list.unshift(selected);
+                                  setDefaultStreams(list);
+                                  saveAndSyncDefaultStreams(list);
+                                  setExpandedProxyIndex(null);
+                                }}
+                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                  idx === 0
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                    : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
+                                }`}
+                                title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
+                              >
+                                <Star className="h-3.5 w-3.5" fill={idx === 0 ? "currentColor" : "none"} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveStreamItem(idx, 'up')}
+                                className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                title="Move Up"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === defaultStreams.length - 1}
+                                onClick={() => moveStreamItem(idx, 'down')}
+                                className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                title="Move Down"
+                              >
+                                ▼
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteStreamItem(idx)}
+                                className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer"
+                                title="Delete Link"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </div>
 
-                          <input
-                            type="text"
-                            required
-                            value={item.label}
-                            onChange={(e) => {
-                              const list = [...defaultStreams];
-                              list[idx].label = e.target.value;
-                              setDefaultStreams(list);
-                            }}
-                            onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
-                            placeholder="Label (e.g. Server 1)"
-                            className="w-1/3 px-3 py-2 glass-input rounded-xl text-xs"
-                          />
-                          <input
-                            type="url"
-                            required
-                            value={item.url}
-                            onChange={(e) => {
-                              const list = [...defaultStreams];
-                              list[idx].url = e.target.value;
-                              setDefaultStreams(list);
-                            }}
-                            onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
-                            placeholder="M3U8 Streaming URL"
-                            className="flex-1 px-3 py-2 glass-input rounded-xl text-xs"
-                          />
+                          {/* Expanded Proxy Headers Panel for Default Stream */}
+                          {item.use_proxy && expandedProxyIndex === idx && (
+                            <div className="ml-8 p-3 bg-slate-950/60 border border-emerald-500/15 rounded-xl space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-3.5 w-3.5 text-emerald-400" />
+                                  <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Default Stream Proxy Headers</span>
+                                </div>
+                                <div className="flex gap-1.5 flex-wrap">
+                                  {['Authorization', 'Referer', 'Cookie', 'Origin', 'User-Agent'].map((preset) => {
+                                    const headers = item.proxy_headers || {};
+                                    const alreadyAdded = Object.keys(headers).some(k => k.toLowerCase() === preset.toLowerCase());
+                                    return (
+                                      <button
+                                        key={preset}
+                                        type="button"
+                                        disabled={alreadyAdded}
+                                        onClick={() => {
+                                          const list = [...defaultStreams];
+                                          const currentHeaders = { ...(list[idx].proxy_headers || {}) };
+                                          currentHeaders[preset] = '';
+                                          list[idx] = { ...list[idx], proxy_headers: currentHeaders };
+                                          setDefaultStreams(list);
+                                          saveAndSyncDefaultStreams(list);
+                                        }}
+                                        className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded-md border transition-all cursor-pointer ${
+                                          alreadyAdded
+                                            ? 'bg-slate-800/30 border-slate-800/50 text-slate-600 cursor-not-allowed'
+                                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/20'
+                                        }`}
+                                      >
+                                        + {preset}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <input
-                              type="number"
-                              min="1"
-                              max={defaultStreams.length}
-                              value={idx + 1}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value, 10);
-                                if (!isNaN(val) && val >= 1 && val <= defaultStreams.length) {
-                                  const targetIdx = val - 1;
-                                  if (targetIdx !== idx) {
+                              <div className="space-y-2">
+                                {Object.entries(item.proxy_headers || {}).map(([headerKey, headerValue], hIdx) => (
+                                  <div key={hIdx} className="flex gap-2 items-center">
+                                    <input
+                                      type="text"
+                                      value={headerKey}
+                                      onChange={(e) => {
+                                        const list = [...defaultStreams];
+                                        const currentHeaders = { ...(list[idx].proxy_headers || {}) };
+                                        const entries = Object.entries(currentHeaders);
+                                        entries[hIdx] = [e.target.value, headerValue];
+                                        const rebuilt: Record<string, string> = {};
+                                        entries.forEach(([k, v]) => { rebuilt[k] = v; });
+                                        list[idx] = { ...list[idx], proxy_headers: rebuilt };
+                                        setDefaultStreams(list);
+                                      }}
+                                      onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
+                                      placeholder="Header Name"
+                                      className="w-1/3 px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-white font-bold placeholder-slate-655 focus:outline-none focus:border-slate-700"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={headerValue}
+                                      onChange={(e) => {
+                                        const list = [...defaultStreams];
+                                        const currentHeaders = { ...(list[idx].proxy_headers || {}) };
+                                        currentHeaders[headerKey] = e.target.value;
+                                        list[idx] = { ...list[idx], proxy_headers: currentHeaders };
+                                        setDefaultStreams(list);
+                                      }}
+                                      onBlur={() => saveAndSyncDefaultStreams(defaultStreams)}
+                                      placeholder="Header Value"
+                                      className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-white placeholder-slate-655 focus:outline-none focus:border-slate-700"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const list = [...defaultStreams];
+                                        const currentHeaders = { ...(list[idx].proxy_headers || {}) };
+                                        delete currentHeaders[headerKey];
+                                        list[idx] = { ...list[idx], proxy_headers: currentHeaders };
+                                        setDefaultStreams(list);
+                                        saveAndSyncDefaultStreams(list);
+                                      }}
+                                      className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                                    >
+                                      <X className="h-3 w-3 text-slate-500" />
+                                    </button>
+                                  </div>
+                                ))}
+
+                                {Object.keys(item.proxy_headers || {}).length === 0 && (
+                                  <p className="text-[10px] text-slate-500 italic py-1">No custom headers configured.</p>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     const list = [...defaultStreams];
-                                    const [selected] = list.splice(idx, 1);
-                                    list.splice(targetIdx, 0, selected);
+                                    const currentHeaders = { ...(list[idx].proxy_headers || {}) };
+                                    const key = `X-Custom-Header-${Object.keys(currentHeaders).length + 1}`;
+                                    currentHeaders[key] = '';
+                                    list[idx] = { ...list[idx], proxy_headers: currentHeaders };
                                     setDefaultStreams(list);
                                     saveAndSyncDefaultStreams(list);
-                                  }
-                                }
-                              }}
-                              className="w-12 px-1 py-1.5 text-center bg-slate-950 border border-slate-900 rounded-lg text-xs text-white font-extrabold focus:outline-none focus:border-slate-850"
-                              title="Set Priority Number"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (idx === 0) return;
-                                const list = [...defaultStreams];
-                                const [selected] = list.splice(idx, 1);
-                                list.unshift(selected);
-                                setDefaultStreams(list);
-                                saveAndSyncDefaultStreams(list);
-                              }}
-                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                idx === 0
-                                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                  : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
-                              }`}
-                              title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
-                            >
-                              <Star className="h-3.5 w-3.5" fill={idx === 0 ? "currentColor" : "none"} />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={() => moveStreamItem(idx, 'up')}
-                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                              title="Move Up"
-                            >
-                              ▲
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === defaultStreams.length - 1}
-                              onClick={() => moveStreamItem(idx, 'down')}
-                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                              title="Move Down"
-                            >
-                              ▼
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteStreamItem(idx)}
-                              className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer"
-                              title="Delete Link"
-                            >
-                              ✕
-                            </button>
-                          </div>
+                                  }}
+                                  className="w-full py-1.5 text-[10px] font-bold uppercase text-slate-500 hover:text-emerald-400 bg-slate-900/50 border border-dashed border-slate-800 hover:border-emerald-500/20 rounded-lg transition-all cursor-pointer"
+                                >
+                                  + Add Custom Header
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}

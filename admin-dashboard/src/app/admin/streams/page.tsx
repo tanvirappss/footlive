@@ -656,13 +656,38 @@ export default function StreamsPage() {
                                 const newUrls = [...streamUrls];
                                 const wasProxy = !!newUrls[idx].use_proxy;
                                 newUrls[idx] = { ...newUrls[idx], use_proxy: !wasProxy };
-                                if (!wasProxy && !newUrls[idx].proxy_headers) {
-                                  newUrls[idx] = { ...newUrls[idx], proxy_headers: {} };
-                                }
-                                setStreamUrls(newUrls);
+                                
                                 if (!wasProxy) {
+                                  // Auto-populate default headers based on the URL domain
+                                  const urlVal = newUrls[idx].url || '';
+                                  let originVal = '';
+                                  let refererVal = '';
+                                  try {
+                                    if (urlVal.startsWith('http://') || urlVal.startsWith('https://')) {
+                                      const parsed = new URL(urlVal);
+                                      originVal = parsed.origin;
+                                      refererVal = parsed.origin + '/';
+                                    }
+                                  } catch (e) {
+                                    // ignore invalid URL parsing
+                                  }
+
+                                  const autoHeaders: Record<string, string> = {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+                                  };
+
+                                  if (originVal) {
+                                    autoHeaders['Origin'] = originVal;
+                                    autoHeaders['Referer'] = refererVal;
+                                  }
+
+                                  newUrls[idx] = {
+                                    ...newUrls[idx],
+                                    proxy_headers: autoHeaders
+                                  };
                                   setExpandedProxyIndex(idx);
                                 }
+                                setStreamUrls(newUrls);
                               }}
                               className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                                 item.use_proxy

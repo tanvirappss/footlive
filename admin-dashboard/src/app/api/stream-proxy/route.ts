@@ -12,24 +12,37 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-/**
- * Resolves a potentially relative URL against a base URL.
- * If targetUrl is already absolute, returns it as-is.
- */
 function resolveUrl(targetUrl: string, baseUrl: string): string {
   try {
-    // If it's already absolute
-    if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
-      return targetUrl;
-    }
     const base = new URL(baseUrl);
-    if (targetUrl.startsWith('/')) {
-      // Absolute path
-      return `${base.protocol}//${base.host}${targetUrl}`;
+    let resolved: URL;
+
+    if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+      resolved = new URL(targetUrl);
+    } else if (targetUrl.startsWith('/')) {
+      resolved = new URL(`${base.protocol}//${base.host}${targetUrl}`);
+    } else {
+      const basePath = base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1);
+      resolved = new URL(`${base.protocol}//${base.host}${basePath}${targetUrl}`);
     }
-    // Relative path: resolve against the directory of the base URL
-    const basePath = base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1);
-    return `${base.protocol}//${base.host}${basePath}${targetUrl}`;
+
+    // Automatically inherit query parameters (e.g. ?token=..., ?auth=...) from base URL if not already present
+    if (base.search) {
+      const baseParams = new URLSearchParams(base.search);
+      const resolvedParams = new URLSearchParams(resolved.search);
+      let mergedAny = false;
+      for (const [key, value] of baseParams.entries()) {
+        if (!resolvedParams.has(key)) {
+          resolvedParams.set(key, value);
+          mergedAny = true;
+        }
+      }
+      if (mergedAny) {
+        resolved.search = resolvedParams.toString();
+      }
+    }
+
+    return resolved.toString();
   } catch {
     return targetUrl;
   }
