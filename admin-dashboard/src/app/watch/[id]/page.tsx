@@ -912,18 +912,27 @@ export default function UserWatchPage() {
   const noStreamsTitle = uiTexts.no_streams_title || (ticker as any)?.no_streams_title || 'No Streams Configured';
   const noStreamsDesc = uiTexts.no_streams_desc || (ticker as any)?.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.';
 
-  // 1. Gather database streams
+  // 1. Gather database streams (with proxy URL rewriting)
   let dbStreamItems: { label: string; url: string }[] = [];
   if (streams.length > 0) {
     const stream = streams[0];
-    dbStreamItems = Array.isArray(stream.urls) && stream.urls.length > 0
-      ? stream.urls
-      : [
+    if (Array.isArray(stream.urls) && stream.urls.length > 0) {
+      dbStreamItems = stream.urls.map((item: any, idx: number) => {
+        // If proxy is enabled, rewrite URL to go through the reverse proxy API
+        if (item.use_proxy) {
+          const proxyUrl = `/api/stream-proxy?streamId=${stream.id}&urlIndex=${idx}`;
+          return { label: item.label, url: proxyUrl };
+        }
+        return { label: item.label, url: item.url };
+      });
+    } else {
+      dbStreamItems = [
           { label: 'Primary', url: stream.primary_url },
           { label: 'Backup 1', url: stream.backup_url_1 },
           { label: 'Backup 2', url: stream.backup_url_2 },
           { label: 'Backup 3', url: stream.backup_url_3 }
         ].filter((item): item is { label: string; url: string } => !!item.url);
+    }
   }
 
   // 2. Add YouTube stream if enabled

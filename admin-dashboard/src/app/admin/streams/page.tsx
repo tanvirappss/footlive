@@ -16,7 +16,10 @@ import {
   Power,
   AlertTriangle,
   Star,
-  Search
+  Search,
+  Shield,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface Match {
@@ -31,6 +34,13 @@ interface Match {
   away_team?: any;
 }
 
+interface StreamUrl {
+  label: string;
+  url: string;
+  use_proxy?: boolean;
+  proxy_headers?: Record<string, string>;
+}
+
 interface Stream {
   id: string;
   match_id: string;
@@ -40,7 +50,7 @@ interface Stream {
   backup_url_2: string | null;
   backup_url_3: string | null;
   is_enabled: boolean;
-  urls?: { label: string; url: string }[];
+  urls?: StreamUrl[];
   match?: Match;
 }
 
@@ -54,10 +64,11 @@ export default function StreamsPage() {
   // Form states
   const [matchId, setMatchId] = useState('');
   const [streamName, setStreamName] = useState('');
-  const [streamUrls, setStreamUrls] = useState<{ label: string; url: string }[]>([{ label: 'Primary Server', url: '' }]);
+  const [streamUrls, setStreamUrls] = useState<StreamUrl[]>([{ label: 'Primary Server', url: '' }]);
   const [importPreviousLinks, setImportPreviousLinks] = useState('no');
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedProxyIndex, setExpandedProxyIndex] = useState<number | null>(null);
 
   // Queries
   const { data: matches = [] } = useQuery<Match[]>({
@@ -609,82 +620,232 @@ export default function StreamsPage() {
                     </button>
                   </div>
 
-                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                     {streamUrls.map((item, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
-                        <input
-                          type="text"
-                          required
-                          value={item.label}
-                          onChange={(e) => {
-                            const newUrls = [...streamUrls];
-                            newUrls[idx].label = e.target.value;
-                            setStreamUrls(newUrls);
-                          }}
-                          placeholder="Label (e.g. Server 1)"
-                          className="w-1/3 px-3 py-2.5 glass-input rounded-xl text-xs"
-                        />
-                        <input
-                          type="url"
-                          required
-                          value={item.url}
-                          onChange={(e) => {
-                            const newUrls = [...streamUrls];
-                            newUrls[idx].url = e.target.value;
-                            setStreamUrls(newUrls);
-                          }}
-                          placeholder="M3U8 Streaming URL"
-                          className="flex-1 px-3 py-2.5 glass-input rounded-xl text-xs"
-                        />
-                        <div className="flex items-center gap-1.5 shrink-0">
+                      <div key={idx} className="space-y-2">
+                        <div className="flex gap-2 items-center">
                           <input
-                            type="number"
-                            min="1"
-                            max={streamUrls.length}
-                            value={idx + 1}
+                            type="text"
+                            required
+                            value={item.label}
                             onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              if (!isNaN(val) && val >= 1 && val <= streamUrls.length) {
-                                const targetIdx = val - 1;
-                                if (targetIdx !== idx) {
-                                  const newUrls = [...streamUrls];
-                                  const [selected] = newUrls.splice(idx, 1);
-                                  newUrls.splice(targetIdx, 0, selected);
-                                  setStreamUrls(newUrls);
-                                }
-                              }
-                            }}
-                            className="w-12 px-1 py-2.5 text-center bg-slate-950 border border-slate-900 rounded-xl text-xs text-white font-extrabold focus:outline-none focus:border-slate-800"
-                            title="Set Priority Number"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (idx === 0) return;
                               const newUrls = [...streamUrls];
-                              const [selected] = newUrls.splice(idx, 1);
-                              newUrls.unshift(selected);
+                              newUrls[idx] = { ...newUrls[idx], label: e.target.value };
                               setStreamUrls(newUrls);
                             }}
-                            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-                              idx === 0
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
-                            }`}
-                            title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
-                          >
-                            <Star className="h-4 w-4" fill={idx === 0 ? "currentColor" : "none"} />
-                          </button>
-                          {streamUrls.length > 1 && (
+                            placeholder="Label (e.g. Server 1)"
+                            className="w-1/4 px-3 py-2.5 glass-input rounded-xl text-xs"
+                          />
+                          <input
+                            type="url"
+                            required
+                            value={item.url}
+                            onChange={(e) => {
+                              const newUrls = [...streamUrls];
+                              newUrls[idx] = { ...newUrls[idx], url: e.target.value };
+                              setStreamUrls(newUrls);
+                            }}
+                            placeholder="M3U8 Streaming URL"
+                            className="flex-1 px-3 py-2.5 glass-input rounded-xl text-xs"
+                          />
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Proxy Toggle */}
                             <button
                               type="button"
-                              onClick={() => setStreamUrls(streamUrls.filter((_, i) => i !== idx))}
-                              className="p-2.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                              onClick={() => {
+                                const newUrls = [...streamUrls];
+                                const wasProxy = !!newUrls[idx].use_proxy;
+                                newUrls[idx] = { ...newUrls[idx], use_proxy: !wasProxy };
+                                if (!wasProxy && !newUrls[idx].proxy_headers) {
+                                  newUrls[idx] = { ...newUrls[idx], proxy_headers: {} };
+                                }
+                                setStreamUrls(newUrls);
+                                if (!wasProxy) {
+                                  setExpandedProxyIndex(idx);
+                                }
+                              }}
+                              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                item.use_proxy
+                                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                                  : 'bg-slate-950 border-slate-900 text-slate-600 hover:text-slate-400 hover:border-slate-700'
+                              }`}
+                              title={item.use_proxy ? 'Proxy ENABLED — Click to disable' : 'Enable Reverse Proxy for this URL'}
                             >
-                              <Trash2 className="h-4 w-4 text-slate-400" />
+                              <Shield className="h-4 w-4" fill={item.use_proxy ? 'currentColor' : 'none'} />
                             </button>
-                          )}
+                            {/* Expand proxy headers config */}
+                            {item.use_proxy && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedProxyIndex(expandedProxyIndex === idx ? null : idx)}
+                                className="p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                                title="Configure Proxy Headers"
+                              >
+                                {expandedProxyIndex === idx ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </button>
+                            )}
+                            <input
+                              type="number"
+                              min="1"
+                              max={streamUrls.length}
+                              value={idx + 1}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!isNaN(val) && val >= 1 && val <= streamUrls.length) {
+                                  const targetIdx = val - 1;
+                                  if (targetIdx !== idx) {
+                                    const newUrls = [...streamUrls];
+                                    const [selected] = newUrls.splice(idx, 1);
+                                    newUrls.splice(targetIdx, 0, selected);
+                                    setStreamUrls(newUrls);
+                                    setExpandedProxyIndex(null);
+                                  }
+                                }
+                              }}
+                              className="w-12 px-1 py-2.5 text-center bg-slate-950 border border-slate-900 rounded-xl text-xs text-white font-extrabold focus:outline-none focus:border-slate-800"
+                              title="Set Priority Number"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (idx === 0) return;
+                                const newUrls = [...streamUrls];
+                                const [selected] = newUrls.splice(idx, 1);
+                                newUrls.unshift(selected);
+                                setStreamUrls(newUrls);
+                                setExpandedProxyIndex(null);
+                              }}
+                              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                idx === 0
+                                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                  : 'bg-slate-950 border-slate-900 text-slate-500 hover:text-amber-400 hover:border-amber-500/20'
+                              }`}
+                              title={idx === 0 ? "Active Top Server" : "Set as Top Server (Move to top)"}
+                            >
+                              <Star className="h-4 w-4" fill={idx === 0 ? "currentColor" : "none"} />
+                            </button>
+                            {streamUrls.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStreamUrls(streamUrls.filter((_, i) => i !== idx));
+                                  if (expandedProxyIndex === idx) setExpandedProxyIndex(null);
+                                }}
+                                className="p-2.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all cursor-pointer"
+                              >
+                                <Trash2 className="h-4 w-4 text-slate-400" />
+                              </button>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Expanded Proxy Headers Config Panel */}
+                        {item.use_proxy && expandedProxyIndex === idx && (
+                          <div className="ml-2 p-3 bg-slate-950/60 border border-emerald-500/15 rounded-xl space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Shield className="h-3.5 w-3.5 text-emerald-400" />
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Reverse Proxy Headers</span>
+                              </div>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {['Authorization', 'Referer', 'Cookie', 'Origin', 'User-Agent'].map((preset) => {
+                                  const headers = item.proxy_headers || {};
+                                  const alreadyAdded = Object.keys(headers).some(k => k.toLowerCase() === preset.toLowerCase());
+                                  return (
+                                    <button
+                                      key={preset}
+                                      type="button"
+                                      disabled={alreadyAdded}
+                                      onClick={() => {
+                                        const newUrls = [...streamUrls];
+                                        const currentHeaders = { ...(newUrls[idx].proxy_headers || {}) };
+                                        currentHeaders[preset] = '';
+                                        newUrls[idx] = { ...newUrls[idx], proxy_headers: currentHeaders };
+                                        setStreamUrls(newUrls);
+                                      }}
+                                      className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded-md border transition-all cursor-pointer ${
+                                        alreadyAdded
+                                          ? 'bg-slate-800/30 border-slate-800/50 text-slate-600 cursor-not-allowed'
+                                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/20'
+                                      }`}
+                                    >
+                                      + {preset}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Header key-value pairs */}
+                            <div className="space-y-2">
+                              {Object.entries(item.proxy_headers || {}).map(([headerKey, headerValue], hIdx) => (
+                                <div key={hIdx} className="flex gap-2 items-center">
+                                  <input
+                                    type="text"
+                                    value={headerKey}
+                                    onChange={(e) => {
+                                      const newUrls = [...streamUrls];
+                                      const currentHeaders = { ...(newUrls[idx].proxy_headers || {}) };
+                                      const entries = Object.entries(currentHeaders);
+                                      entries[hIdx] = [e.target.value, headerValue];
+                                      const rebuilt: Record<string, string> = {};
+                                      entries.forEach(([k, v]) => { rebuilt[k] = v; });
+                                      newUrls[idx] = { ...newUrls[idx], proxy_headers: rebuilt };
+                                      setStreamUrls(newUrls);
+                                    }}
+                                    placeholder="Header Name"
+                                    className="w-1/3 px-2.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-white font-bold placeholder-slate-600 focus:outline-none focus:border-slate-700"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={headerValue}
+                                    onChange={(e) => {
+                                      const newUrls = [...streamUrls];
+                                      const currentHeaders = { ...(newUrls[idx].proxy_headers || {}) };
+                                      currentHeaders[headerKey] = e.target.value;
+                                      newUrls[idx] = { ...newUrls[idx], proxy_headers: currentHeaders };
+                                      setStreamUrls(newUrls);
+                                    }}
+                                    placeholder="Header Value (e.g. Bearer token123...)"
+                                    className="flex-1 px-2.5 py-2 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-white placeholder-slate-600 focus:outline-none focus:border-slate-700"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newUrls = [...streamUrls];
+                                      const currentHeaders = { ...(newUrls[idx].proxy_headers || {}) };
+                                      delete currentHeaders[headerKey];
+                                      newUrls[idx] = { ...newUrls[idx], proxy_headers: currentHeaders };
+                                      setStreamUrls(newUrls);
+                                    }}
+                                    className="p-2 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                                  >
+                                    <X className="h-3 w-3 text-slate-500" />
+                                  </button>
+                                </div>
+                              ))}
+
+                              {Object.keys(item.proxy_headers || {}).length === 0 && (
+                                <p className="text-[10px] text-slate-500 italic py-1">No custom headers configured. Click the preset buttons above or add a custom header below.</p>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newUrls = [...streamUrls];
+                                  const currentHeaders = { ...(newUrls[idx].proxy_headers || {}) };
+                                  const key = `X-Custom-Header-${Object.keys(currentHeaders).length + 1}`;
+                                  currentHeaders[key] = '';
+                                  newUrls[idx] = { ...newUrls[idx], proxy_headers: currentHeaders };
+                                  setStreamUrls(newUrls);
+                                }}
+                                className="w-full py-1.5 text-[10px] font-bold uppercase text-slate-500 hover:text-emerald-400 bg-slate-900/50 border border-dashed border-slate-800 hover:border-emerald-500/20 rounded-lg transition-all cursor-pointer"
+                              >
+                                + Add Custom Header
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
