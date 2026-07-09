@@ -219,7 +219,7 @@ export default function PotPlayer({ url, onError, onPlaying }: PotPlayerProps) {
     }
 
     const isDASH = url.toLowerCase().includes('.mpd');
-    const isHLS = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('manifest');
+    const isHLS = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('manifest') || url.includes('/api/stream-proxy');
 
     if (isDASH) {
       setStreamFormat('DASH');

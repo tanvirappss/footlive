@@ -920,7 +920,7 @@ export default function UserWatchPage() {
       dbStreamItems = stream.urls.map((item: any, idx: number) => {
         // If proxy is enabled, rewrite URL to go through the reverse proxy API
         if (item.use_proxy) {
-          const proxyUrl = `/api/stream-proxy?streamId=${stream.id}&urlIndex=${idx}`;
+          const proxyUrl = `/api/stream-proxy?streamId=${stream.id}&urlIndex=${idx}&_ext=.m3u8`;
           return { label: item.label, url: proxyUrl };
         }
         return { label: item.label, url: item.url };
