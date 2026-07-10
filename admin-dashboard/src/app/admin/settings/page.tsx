@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'branding' | 'seo' | 'ticker' | 'offsets' | 'streams' | 'apptexts'>('branding');
+  const [activeTab, setActiveTab] = useState<'branding' | 'seo' | 'ticker' | 'offsets' | 'streams' | 'apptexts' | 'api'>('branding');
 
   // Fetch ticker settings
   const { data: tickerData, refetch: refetchTicker } = useQuery({
