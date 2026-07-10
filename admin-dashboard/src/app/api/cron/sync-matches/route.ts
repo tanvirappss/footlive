@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-export const runtime = 'edge';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +31,7 @@ export async function GET(request: Request) {
     }
 
     const fetchFootball = tickerSettings?.auto_fetch_football || false;
+    const fetchFootballAll = tickerSettings?.auto_fetch_football_all || false;
     const fetchCricket = tickerSettings?.auto_fetch_cricket || false;
 
     if (!fetchFootball && !fetchCricket) {
@@ -55,6 +55,14 @@ export async function GET(request: Request) {
         syncLog.push(`Found ${matches.length} matches for ${category}.`);
 
         for (const match of matches) {
+          // Apply World Cup filter if fetchFootballAll is false
+          if (category === 'football' && !fetchFootballAll) {
+            const tournamentTitle = (match.tournament || match.title || '').toLowerCase();
+            if (!tournamentTitle.includes('world cup')) {
+              continue;
+            }
+          }
+          
           // Parse timestamp (it's in ms)
           const matchTimestamp = new Date(match.date);
           const matchDate = matchTimestamp.toISOString().split('T')[0];
@@ -180,4 +188,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 

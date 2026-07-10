@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export const runtime = 'edge';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30; // Allow up to 30s for segment fetching
@@ -314,4 +313,5 @@ export async function OPTIONS() {
     },
   });
 }
+
 

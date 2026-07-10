@@ -47,6 +47,7 @@ export default function SettingsPage() {
 
   // Auto-Sync API States
   const [autoFetchFootball, setAutoFetchFootball] = useState(false);
+  const [autoFetchFootballAll, setAutoFetchFootballAll] = useState(false);
   const [autoFetchCricket, setAutoFetchCricket] = useState(false);
   const [updatingAutoFetch, setUpdatingAutoFetch] = useState(false);
   const [autoFetchSuccess, setAutoFetchSuccess] = useState(false);
@@ -137,6 +138,7 @@ export default function SettingsPage() {
         setDefaultStreams([]);
       }
       setAutoFetchFootball(tickerData.auto_fetch_football || false);
+      setAutoFetchFootballAll(tickerData.auto_fetch_football_all || false);
       setAutoFetchCricket(tickerData.auto_fetch_cricket || false);
       setMetaTitle((tickerData as any).meta_title || '');
       setMetaDescription((tickerData as any).meta_description || '');
@@ -327,6 +329,7 @@ export default function SettingsPage() {
     try {
       const updateData = { 
         auto_fetch_football: autoFetchFootball,
+        auto_fetch_football_all: autoFetchFootballAll,
         auto_fetch_cricket: autoFetchCricket,
         updated_at: new Date().toISOString() 
       };
@@ -1136,9 +1139,14 @@ export default function SettingsPage() {
               <form onSubmit={handleAutoFetchSubmit} className="space-y-6 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Football Auto-Fetch */}
-                  <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-bold text-white uppercase tracking-wider">⚽ Football Sync</span>
+                  <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-3 md:col-span-2">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-4">
+                      <div className="space-y-1">
+                        <span className="text-sm font-bold text-white uppercase tracking-wider">⚽ Football Sync</span>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          If enabled, the system will automatically pull football matches from the API.
+                        </p>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setAutoFetchFootball(!autoFetchFootball)}
@@ -1153,9 +1161,30 @@ export default function SettingsPage() {
                         />
                       </button>
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      If enabled, the system will automatically pull top football matches from the API and insert embedded iframe streams.
-                    </p>
+                    
+                    {autoFetchFootball && (
+                      <div className="flex justify-between items-center pt-2 pl-2 border-l-2 border-slate-800">
+                        <div className="space-y-1">
+                          <span className="text-sm font-medium text-slate-300">Fetch ALL Football Matches</span>
+                          <p className="text-xs text-slate-500 leading-relaxed">
+                            Turn ON to fetch everything. Turn OFF to ONLY fetch "World Cup 2026" matches.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAutoFetchFootballAll(!autoFetchFootballAll)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            autoFetchFootballAll ? 'bg-emerald-500' : 'bg-slate-800'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              autoFetchFootballAll ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Cricket Auto-Fetch */}

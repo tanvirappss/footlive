@@ -1,0 +1,1 @@
+import { NextResponse } from 'next/server'; import { supabase } from '@/lib/supabase'; export async function GET() { const { error } = await supabase.rpc('exec_sql', { query: 'ALTER TABLE ticker_settings ADD COLUMN IF NOT EXISTS football_fetch_filter text default ''World Cup'';' }); return NextResponse.json({ error }); }

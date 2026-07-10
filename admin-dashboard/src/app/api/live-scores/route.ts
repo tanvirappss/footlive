@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-export const runtime = 'edge';
 
 export const dynamic = 'force-dynamic';
 
@@ -288,4 +287,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, error: err.message || 'Failed to fetch live scores' }, { status: 500 });
   }
 }
+
 
