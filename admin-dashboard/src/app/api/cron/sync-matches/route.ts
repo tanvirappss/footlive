@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
+export const runtime = 'edge';
+
 export const dynamic = 'force-dynamic';
 
 // Helper to slugify a string
@@ -178,3 +180,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
