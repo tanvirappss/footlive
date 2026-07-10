@@ -45,6 +45,12 @@ export default function SettingsPage() {
   const [updatingTicker, setUpdatingTicker] = useState(false);
   const [tickerSuccess, setTickerSuccess] = useState(false);
 
+  // Auto-Sync API States
+  const [autoFetchFootball, setAutoFetchFootball] = useState(false);
+  const [autoFetchCricket, setAutoFetchCricket] = useState(false);
+  const [updatingAutoFetch, setUpdatingAutoFetch] = useState(false);
+  const [autoFetchSuccess, setAutoFetchSuccess] = useState(false);
+
   // Site Identity States
   const [siteName, setSiteName] = useState('WORLD CUP 2026');
   const [siteLogoUrl, setSiteLogoUrl] = useState('');
@@ -130,6 +136,8 @@ export default function SettingsPage() {
       } else {
         setDefaultStreams([]);
       }
+      setAutoFetchFootball(tickerData.auto_fetch_football || false);
+      setAutoFetchCricket(tickerData.auto_fetch_cricket || false);
       setMetaTitle((tickerData as any).meta_title || '');
       setMetaDescription((tickerData as any).meta_description || '');
       setMetaImageUrl((tickerData as any).meta_image || '');
@@ -308,6 +316,40 @@ export default function SettingsPage() {
       alert('Failed to update ticker settings');
     } finally {
       setUpdatingTicker(false);
+    }
+  };
+
+  // Submit Auto-Fetch API Settings
+  const handleAutoFetchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingAutoFetch(true);
+    setAutoFetchSuccess(false);
+    try {
+      const updateData = { 
+        auto_fetch_football: autoFetchFootball,
+        auto_fetch_cricket: autoFetchCricket,
+        updated_at: new Date().toISOString() 
+      };
+      if (tickerData?.id) {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .update(updateData)
+          .eq('id', tickerData.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('ticker_settings')
+          .insert([updateData]);
+        if (error) throw error;
+      }
+      setAutoFetchSuccess(true);
+      refetchTicker();
+      setTimeout(() => setAutoFetchSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update Auto-Fetch settings');
+    } finally {
+      setUpdatingAutoFetch(false);
     }
   };
 
@@ -671,6 +713,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'branding', label: 'Branding & Info', icon: Sparkles },
     { id: 'seo', label: 'SEO & Metadata', icon: Globe },
+    { id: 'api', label: 'API Auto-Fetch', icon: Sparkles },
     { id: 'ticker', label: 'News Ticker', icon: BellRing },
     { id: 'offsets', label: 'Telemetry Offsets', icon: Users },
     { id: 'streams', label: 'Stream Priorities', icon: Tv },
@@ -1073,6 +1116,85 @@ export default function SettingsPage() {
                     className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {updatingMeta ? 'Saving Settings...' : 'Save Meta Settings'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* API AUTO-FETCH TAB */}
+          {activeTab === 'api' && (
+            <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-emerald-accent" />
+                  Streamed.pk API Integration
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">Automatically fetch and publish live matches and streams from the Streamed.pk API every 5 minutes.</p>
+              </div>
+
+              <form onSubmit={handleAutoFetchSubmit} className="space-y-6 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Football Auto-Fetch */}
+                  <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-white uppercase tracking-wider">⚽ Football Sync</span>
+                      <button
+                        type="button"
+                        onClick={() => setAutoFetchFootball(!autoFetchFootball)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          autoFetchFootball ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            autoFetchFootball ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      If enabled, the system will automatically pull top football matches from the API and insert embedded iframe streams.
+                    </p>
+                  </div>
+
+                  {/* Cricket Auto-Fetch */}
+                  <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-white uppercase tracking-wider">🏏 Cricket Sync</span>
+                      <button
+                        type="button"
+                        onClick={() => setAutoFetchCricket(!autoFetchCricket)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          autoFetchCricket ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            autoFetchCricket ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      If enabled, the system will automatically pull top cricket matches from the API and insert embedded iframe streams.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Form Footer */}
+                <div className="flex items-center justify-between border-t border-card-border pt-4">
+                  {autoFetchSuccess ? (
+                    <p className="text-xs text-emerald-accent font-bold flex items-center gap-1 animate-pulse">
+                      <Check className="h-4 w-4" /> API Sync settings saved!
+                    </p>
+                  ) : <div />}
+                  <button
+                    type="submit"
+                    disabled={updatingAutoFetch}
+                    className="px-6 py-3 bg-emerald-accent hover:bg-emerald-500 text-black font-extrabold uppercase text-xs tracking-wider rounded-xl transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {updatingAutoFetch ? 'Saving...' : 'Save API Settings'}
                   </button>
                 </div>
               </form>

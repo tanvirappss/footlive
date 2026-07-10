@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.worldcup2026.streaming.app-merged_res-68:/xml_backup_rules.xml.flat",
+        "source": "com.worldcup2026.streaming.app-main-70:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.worldcup2026.streaming.app-merged_res-68:/xml_data_extraction_rules.xml.flat",
+        "source": "com.worldcup2026.streaming.app-main-70:/xml/data_extraction_rules.xml"
+    }
+]

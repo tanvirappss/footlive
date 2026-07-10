@@ -134,6 +134,8 @@ create table if not exists ticker_settings (
     tab_channels_name text default '📺 Live Channels',
     no_streams_title text default 'No Streams Configured',
     no_streams_desc text default 'There are no active video links bound to this match yet. Check back closer to game kickoff.',
+    auto_fetch_football boolean default false,
+    auto_fetch_cricket boolean default false,
     updated_at timestamptz default now(),
     created_at timestamptz default now()
 );

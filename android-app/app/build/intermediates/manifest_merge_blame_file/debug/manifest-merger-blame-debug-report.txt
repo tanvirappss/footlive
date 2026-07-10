@@ -1,0 +1,172 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.worldcup2026.streaming"
+4    android:versionCode="1"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="34" />
+10
+11    <!-- Permissions required for streaming and notifications -->
+12    <uses-permission android:name="android.permission.INTERNET" />
+12-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:5:5-67
+12-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:5:22-64
+13    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+13-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:6:5-79
+13-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:6:22-76
+14    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+14-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:7:5-77
+14-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:7:22-74
+15
+16    <permission
+16-->[androidx.core:core:1.12.0] C:\Users\Admin\.gradle\caches\transforms-3\e1b2ee99c9859ef10a1634cbf44c3814\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+17        android:name="com.worldcup2026.streaming.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+17-->[androidx.core:core:1.12.0] C:\Users\Admin\.gradle\caches\transforms-3\e1b2ee99c9859ef10a1634cbf44c3814\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+18        android:protectionLevel="signature" />
+18-->[androidx.core:core:1.12.0] C:\Users\Admin\.gradle\caches\transforms-3\e1b2ee99c9859ef10a1634cbf44c3814\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+19
+20    <uses-permission android:name="com.worldcup2026.streaming.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+20-->[androidx.core:core:1.12.0] C:\Users\Admin\.gradle\caches\transforms-3\e1b2ee99c9859ef10a1634cbf44c3814\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+20-->[androidx.core:core:1.12.0] C:\Users\Admin\.gradle\caches\transforms-3\e1b2ee99c9859ef10a1634cbf44c3814\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+21
+22    <application
+22-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:9:5-32:19
+23        android:name="com.worldcup2026.streaming.App"
+23-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:10:9-28
+24        android:allowBackup="true"
+24-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:11:9-35
+25        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+25-->[androidx.core:core:1.12.0] C:\Users\Admin\.gradle\caches\transforms-3\e1b2ee99c9859ef10a1634cbf44c3814\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
+26        android:dataExtractionRules="@xml/data_extraction_rules"
+26-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:12:9-65
+27        android:debuggable="true"
+28        android:extractNativeLibs="false"
+29        android:fullBackupContent="@xml/backup_rules"
+29-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:13:9-54
+30        android:icon="@android:drawable/sym_def_app_icon"
+30-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:14:9-58
+31        android:label="@string/app_name"
+31-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:15:9-41
+32        android:roundIcon="@android:drawable/sym_def_app_icon"
+32-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:16:9-63
+33        android:supportsRtl="true"
+33-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:17:9-35
+34        android:theme="@android:style/Theme.NoTitleBar"
+34-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:18:9-56
+35        android:usesCleartextTraffic="true" > <!-- Needed if some stream URLs are HTTP -->
+35-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:19:9-44
+36
+37        <activity
+37-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:21:9-31:20
+38            android:name="com.worldcup2026.streaming.ui.MainActivity"
+38-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:22:13-44
+39            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize"
+39-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:25:13-106
+40            android:exported="true"
+40-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:23:13-36
+41            android:supportsPictureInPicture="true"
+41-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:24:13-52
+42            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" >
+42-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:26:13-77
+43            <intent-filter>
+43-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:27:13-30:29
+44                <action android:name="android.intent.action.MAIN" />
+44-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:28:17-69
+44-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:28:25-66
+45
+46                <category android:name="android.intent.category.LAUNCHER" />
+46-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:29:17-77
+46-->C:\Users\Admin\Downloads\simple football\android-app\app\src\main\AndroidManifest.xml:29:27-74
+47            </intent-filter>
+48        </activity>
+49        <activity
+49-->[androidx.compose.ui:ui-tooling-android:1.6.1] C:\Users\Admin\.gradle\caches\transforms-3\142efd3bedcaeb6484e2b1e39b9a2603\transformed\jetified-ui-tooling-release\AndroidManifest.xml:23:9-25:39
+50            android:name="androidx.compose.ui.tooling.PreviewActivity"
+50-->[androidx.compose.ui:ui-tooling-android:1.6.1] C:\Users\Admin\.gradle\caches\transforms-3\142efd3bedcaeb6484e2b1e39b9a2603\transformed\jetified-ui-tooling-release\AndroidManifest.xml:24:13-71
+51            android:exported="true" />
+51-->[androidx.compose.ui:ui-tooling-android:1.6.1] C:\Users\Admin\.gradle\caches\transforms-3\142efd3bedcaeb6484e2b1e39b9a2603\transformed\jetified-ui-tooling-release\AndroidManifest.xml:25:13-36
+52        <activity
+52-->[androidx.compose.ui:ui-test-manifest:1.6.1] C:\Users\Admin\.gradle\caches\transforms-3\02a3fe2f8d0984a488545dad4c225d13\transformed\jetified-ui-test-manifest-1.6.1\AndroidManifest.xml:23:9-25:39
+53            android:name="androidx.activity.ComponentActivity"
+53-->[androidx.compose.ui:ui-test-manifest:1.6.1] C:\Users\Admin\.gradle\caches\transforms-3\02a3fe2f8d0984a488545dad4c225d13\transformed\jetified-ui-test-manifest-1.6.1\AndroidManifest.xml:24:13-63
+54            android:exported="true" />
+54-->[androidx.compose.ui:ui-test-manifest:1.6.1] C:\Users\Admin\.gradle\caches\transforms-3\02a3fe2f8d0984a488545dad4c225d13\transformed\jetified-ui-test-manifest-1.6.1\AndroidManifest.xml:25:13-36
+55
+56        <provider
+56-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+57            android:name="androidx.startup.InitializationProvider"
+57-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:25:13-67
+58            android:authorities="com.worldcup2026.streaming.androidx-startup"
+58-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:26:13-68
+59            android:exported="false" >
+59-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:27:13-37
+60            <meta-data
+60-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+61                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+61-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:30:17-75
+62                android:value="androidx.startup" />
+62-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Admin\.gradle\caches\transforms-3\0e691d5a6e64cff75b6026e6ce4112e9\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:31:17-49
+63            <meta-data
+63-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\Admin\.gradle\caches\transforms-3\6bd5934f8a932b0a9bbce413f42b87f2\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
+64                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+64-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\Admin\.gradle\caches\transforms-3\6bd5934f8a932b0a9bbce413f42b87f2\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
+65                android:value="androidx.startup" />
+65-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\Admin\.gradle\caches\transforms-3\6bd5934f8a932b0a9bbce413f42b87f2\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
+66            <meta-data
+66-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+67                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+67-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+68                android:value="androidx.startup" />
+68-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+69        </provider>
+70
+71        <service
+71-->[androidx.room:room-runtime:2.6.1] C:\Users\Admin\.gradle\caches\transforms-3\9afd3b13fd8ecf8bc8c85330be511881\transformed\room-runtime-2.6.1\AndroidManifest.xml:24:9-28:63
+72            android:name="androidx.room.MultiInstanceInvalidationService"
+72-->[androidx.room:room-runtime:2.6.1] C:\Users\Admin\.gradle\caches\transforms-3\9afd3b13fd8ecf8bc8c85330be511881\transformed\room-runtime-2.6.1\AndroidManifest.xml:25:13-74
+73            android:directBootAware="true"
+73-->[androidx.room:room-runtime:2.6.1] C:\Users\Admin\.gradle\caches\transforms-3\9afd3b13fd8ecf8bc8c85330be511881\transformed\room-runtime-2.6.1\AndroidManifest.xml:26:13-43
+74            android:exported="false" />
+74-->[androidx.room:room-runtime:2.6.1] C:\Users\Admin\.gradle\caches\transforms-3\9afd3b13fd8ecf8bc8c85330be511881\transformed\room-runtime-2.6.1\AndroidManifest.xml:27:13-37
+75
+76        <receiver
+76-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+77            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+77-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+78            android:directBootAware="false"
+78-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+79            android:enabled="true"
+79-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+80            android:exported="true"
+80-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+81            android:permission="android.permission.DUMP" >
+81-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+82            <intent-filter>
+82-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+83                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+83-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+84            </intent-filter>
+85            <intent-filter>
+85-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+86                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+86-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+86-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+87            </intent-filter>
+88            <intent-filter>
+88-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+89                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+89-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+89-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+90            </intent-filter>
+91            <intent-filter>
+91-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+92                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+92-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+92-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Admin\.gradle\caches\transforms-3\7734739f424e4d9e074183fb3f0c92af\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+93            </intent-filter>
+94        </receiver>
+95    </application>
+96
+97</manifest>
