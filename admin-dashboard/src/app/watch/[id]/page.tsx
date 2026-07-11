@@ -1103,14 +1103,15 @@ export default function UserWatchPage() {
                 className="w-full h-full rounded-2xl overflow-hidden border border-card-border"
                 onLoad={handlePlaying}
               />
-            ) : activeUrl && (activeUrl.includes('embed') || activeUrl.includes('iframe') || activeUrl.includes('streamed.pk/api/stream') || !activeUrl.includes('.m3u8')) ? (
+            ) : activeUrl && (activeUrl.includes('embed.') || activeUrl.includes('iframe') || activeUrl.includes('streamed.pk/api/stream')) ? (
               <iframe
                 key={playerKey}
                 src={activeUrl}
                 title="Stream Embed Player"
                 frameBorder="0"
-                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
+                sandbox="allow-scripts allow-same-origin"
                 className="w-full h-full rounded-2xl overflow-hidden border border-card-border bg-black"
                 onLoad={handlePlaying}
               />

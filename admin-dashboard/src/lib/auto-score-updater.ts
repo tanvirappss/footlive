@@ -413,11 +413,15 @@ export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<voi
       if (!homeId || !awayId) continue;
 
       // Check if match already exists by team IDs
-      const { data: existingMatch } = await supabase
+      const { data: possibleMatches } = await supabase
         .from('matches')
         .select('*')
-        .or(`and(home_team_id.eq.${homeId},away_team_id.eq.${awayId}),and(home_team_id.eq.${awayId},away_team_id.eq.${homeId})`)
-        .maybeSingle();
+        .or(`home_team_id.eq.${homeId},away_team_id.eq.${homeId}`);
+
+      const existingMatch = possibleMatches?.find(m => 
+        (m.home_team_id === homeId && m.away_team_id === awayId) ||
+        (m.home_team_id === awayId && m.away_team_id === homeId)
+      );
 
       const bdt = convertToBangladeshTime(event.matchDate);
 
