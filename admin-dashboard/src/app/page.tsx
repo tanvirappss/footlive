@@ -32,7 +32,7 @@ import PotPlayer from '@/components/PotPlayer';
 import Engine4Player from '@/components/Engine4Player';
 import AdsterraAd from '@/components/AdsterraAd';
 import { useBlackScreenDetector } from '@/components/useBlackScreenDetector';
-import { syncLiveMatchScores } from '@/lib/auto-score-updater';
+import { syncLiveMatchScores, fetchESPNScoresDirect } from '@/lib/auto-score-updater';
 
 interface Team {
   id: string;
@@ -725,21 +725,14 @@ export default function UserHomePage() {
     queryKey: ['homepage-espn-scores', streamingMatchDateStr, adjacentStreamingDateStr],
     queryFn: async () => {
       try {
-        const url = streamingMatchDateStr
-          ? `/api/live-scores?date=${streamingMatchDateStr}`
-          : `/api/live-scores`;
-        
-        const [mainRes, adjRes] = await Promise.all([
-          fetch(url),
-          adjacentStreamingDateStr ? fetch(`/api/live-scores?date=${adjacentStreamingDateStr}`).catch(() => null) : Promise.resolve(null)
+        const [mainScores, adjScores] = await Promise.all([
+          fetchESPNScoresDirect(streamingMatchDateStr || undefined),
+          adjacentStreamingDateStr ? fetchESPNScoresDirect(adjacentStreamingDateStr).catch(() => []) : Promise.resolve([])
         ]);
-
-        const mainData = mainRes.ok ? await mainRes.json() : { scores: [] };
-        const adjData = adjRes && adjRes.ok ? await adjRes.json() : { scores: [] };
 
         const seen = new Set<string>();
         const combined: any[] = [];
-        for (const s of [...(mainData.scores || []), ...(adjData.scores || [])]) {
+        for (const s of [...mainScores, ...adjScores]) {
           if (!seen.has(s.espnEventId)) {
             seen.add(s.espnEventId);
             combined.push(s);

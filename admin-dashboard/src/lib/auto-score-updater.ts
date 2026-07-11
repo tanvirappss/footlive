@@ -49,6 +49,122 @@ interface ESPNScore {
   liveMinute: string;
 }
 
+// Helper to fetch ESPN scoreboard directly from client (CORS-friendly, avoids cloud platform server IP bans)
+export async function fetchESPNScoresDirect(dateStr?: string): Promise<any[]> {
+  try {
+    const url = dateStr
+      ? `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`
+      : `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=100`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Direct fetch failed');
+    
+    const data = await res.json();
+    const results: any[] = [];
+
+    const events = data.events || [];
+    for (const event of events) {
+      const comp = event.competitions?.[0];
+      if (!comp) continue;
+
+      const homeComp = comp.competitors?.find((c: any) => c.homeAway === 'home');
+      const awayComp = comp.competitors?.find((c: any) => c.homeAway === 'away');
+      if (!homeComp || !awayComp) continue;
+
+      const homeTeam = homeComp.team?.displayName || homeComp.team?.name || '';
+      const awayTeam = awayComp.team?.displayName || awayComp.team?.name || '';
+      const homeScore = parseInt(homeComp.score || '0', 10);
+      const awayScore = parseInt(awayComp.score || '0', 10);
+      const status = comp.status?.type?.state as 'pre' | 'in' | 'post';
+      let liveMinute = comp.status?.displayClock || comp.status?.type?.shortDetail || '';
+      const espnEventId = event.id || '';
+
+      // Check for shootout scores
+      const homeShootoutScore = homeComp.shootoutScore !== undefined ? String(homeComp.shootoutScore) : null;
+      const awayShootoutScore = awayComp.shootoutScore !== undefined ? String(awayComp.shootoutScore) : null;
+      const statusId = String(comp.status?.type?.id || '');
+
+      if (homeShootoutScore !== null && awayShootoutScore !== null) {
+        liveMinute = `PEN (${homeShootoutScore}-${awayShootoutScore})`;
+      } else if (statusId === '44' || statusId === '47' || liveMinute.toLowerCase().includes('penalties') || liveMinute.toLowerCase().includes('shootout') || liveMinute.toLowerCase().includes('pen')) {
+        const hs = homeComp.shootoutScore || '0';
+        const as = awayComp.shootoutScore || '0';
+        liveMinute = `PEN (${hs}-${as})`;
+      }
+
+      let homeScorers = '';
+      let awayScorers = '';
+
+      if (espnEventId && (status === 'in' || status === 'post')) {
+        try {
+          const summaryRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${espnEventId}`);
+          if (summaryRes.ok) {
+            const summaryData = await summaryRes.json();
+            const goals = (summaryData.keyEvents || []).filter((e: any) => e.scoringPlay || e.type?.text?.toLowerCase().includes('goal'));
+            
+            const hGoals: { player: string; minute: string }[] = [];
+            const aGoals: { player: string; minute: string }[] = [];
+
+            for (const goal of goals) {
+              let scorer = goal.participants?.[0]?.athlete?.displayName;
+              if (!scorer && goal.text) {
+                const match = goal.text.match(/Goal!\s+[^.]+\.\s+([^(\n]+)/);
+                if (match) scorer = match[1].trim();
+              }
+              const clock = goal.clock || '0\'';
+              const teamId = goal.team?.id;
+
+              if (scorer) {
+                if (teamId === homeComp.team?.id) {
+                  hGoals.push({ player: scorer, minute: clock });
+                } else if (teamId === awayComp.team?.id) {
+                  aGoals.push({ player: scorer, minute: clock });
+                }
+              }
+            }
+
+            const formatScorers = (gList: { player: string; minute: string }[]) => {
+              return gList.map(g => `${g.player} (${g.minute})`).join(', ');
+            };
+
+            homeScorers = formatScorers(hGoals);
+            awayScorers = formatScorers(aGoals);
+          }
+        } catch (summaryErr) {
+          console.warn('Direct summary fetch failed:', summaryErr);
+        }
+      }
+
+      results.push({
+        homeTeam,
+        awayTeam,
+        homeScore,
+        awayScore,
+        homeScorers,
+        awayScorers,
+        status,
+        matchDate: event.date || comp.date || '',
+        liveMinute,
+        espnEventId
+      });
+    }
+
+    return results;
+  } catch (err) {
+    console.warn('Direct ESPN fetch failed, falling back to proxy route:', err);
+    // Fallback to Next.js API proxy
+    try {
+      const proxyUrl = dateStr ? `/api/live-scores?date=${dateStr}` : `/api/live-scores`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.scores || [];
+    } catch {
+      return [];
+    }
+  }
+}
+
 // Client-triggered sync checker to verify and update the Supabase match score/scorers using real ESPN data
 export async function syncLiveMatchScores(
   supabase: SupabaseClient, 
@@ -100,10 +216,7 @@ export async function syncLiveMatchScores(
     // Fetch each date's scores
     const fetches = Array.from(dateSet).map(async (dateStr) => {
       try {
-        const res = await fetch(`/api/live-scores?date=${dateStr}`);
-        if (!res.ok) return [];
-        const data = await res.json();
-        return (data.scores || []) as ESPNScore[];
+        return (await fetchESPNScoresDirect(dateStr)) as ESPNScore[];
       } catch {
         return [];
       }
@@ -371,10 +484,7 @@ export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<voi
     // Fetch dates in parallel
     const fetches = knockoutDates.map(async (dateStr) => {
       try {
-        const res = await fetch(`/api/live-scores?date=${dateStr}`);
-        if (!res.ok) return [];
-        const data = await res.json();
-        return data.scores || [];
+        return await fetchESPNScoresDirect(dateStr);
       } catch {
         return [];
       }

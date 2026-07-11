@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { fetchESPNScoresDirect } from '@/lib/auto-score-updater';
 import Link from 'next/link';
 import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2, Trophy, MessageSquare, MapPin, Users } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
@@ -495,18 +496,14 @@ export default function UserWatchPage() {
     queryFn: async () => {
       if (!matchDateStr) return [];
       try {
-        const [mainRes, adjRes] = await Promise.all([
-          fetch(`/api/live-scores?date=${matchDateStr}`),
-          adjacentDateStr ? fetch(`/api/live-scores?date=${adjacentDateStr}`).catch(() => null) : Promise.resolve(null)
+        const [mainScores, adjScores] = await Promise.all([
+          fetchESPNScoresDirect(matchDateStr),
+          adjacentDateStr ? fetchESPNScoresDirect(adjacentDateStr).catch(() => []) : Promise.resolve([])
         ]);
-        
-        const mainData = mainRes.ok ? await mainRes.json() : { scores: [] };
-        const adjData = adjRes && adjRes.ok ? await adjRes.json() : { scores: [] };
-        
-        // Deduplicate by espnEventId
+
         const seen = new Set<string>();
         const combined: any[] = [];
-        for (const s of [...(mainData.scores || []), ...(adjData.scores || [])]) {
+        for (const s of [...mainScores, ...adjScores]) {
           if (!seen.has(s.espnEventId)) {
             seen.add(s.espnEventId);
             combined.push(s);
