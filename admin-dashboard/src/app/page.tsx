@@ -664,14 +664,88 @@ export default function UserHomePage() {
     refetchInterval: 5000, // Query matches list every 5 seconds for fast live updates!
   });
 
+  // Helper to get dates of the streaming match to fetch scoreboard
+  const scoreDates = (() => {
+    if (!matches || matches.length === 0) return null;
+    // Replicate selection logic
+    const live = matches.filter(m => {
+      const start = new Date(m.match_timestamp).getTime();
+      const liveOffsetMins = systemConfig?.custom_scripts?.match_live_offset_mins || 15;
+      const kickoff = start - liveOffsetMins * 60 * 1000;
+      const durationMins = systemConfig?.custom_scripts?.match_duration_mins || 135;
+      const autoFinishEnabled = systemConfig?.custom_scripts?.enable_auto_finish !== false;
+      const isPast = Date.now() >= (start + durationMins * 60 * 1000);
+      if (m.status === 'live' || m.status === 'half_time') return true;
+      if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
+      if (autoFinishEnabled && isPast) return false;
+      return Date.now() >= kickoff;
+    });
+    
+    let targetMatch: Match | null = null;
+    if (live.length > 0) {
+      targetMatch = live[0];
+    } else {
+      const upcoming = matches.filter(m => {
+        const kickoff = new Date(m.match_timestamp).getTime();
+        const liveOffsetMins = systemConfig?.custom_scripts?.match_live_offset_mins || 15;
+        if (m.status === 'finished' || m.status === 'cancelled' || m.status === 'postponed') return false;
+        const durationMins = systemConfig?.custom_scripts?.match_duration_mins || 135;
+        const autoFinishEnabled = systemConfig?.custom_scripts?.enable_auto_finish !== false;
+        const isPast = Date.now() >= (kickoff + durationMins * 60 * 1000);
+        if (autoFinishEnabled && isPast) return false;
+        return Date.now() < (kickoff - liveOffsetMins * 60 * 1000);
+      });
+      if (upcoming.length > 0) {
+        targetMatch = upcoming[0];
+      } else if (matches.length > 0) {
+        targetMatch = matches[0];
+      }
+    }
+
+    if (!targetMatch) return null;
+    
+    const d = new Date(targetMatch.match_timestamp);
+    const mStr = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+    
+    const adj = new Date(d);
+    if (d.getUTCHours() < 12) {
+      adj.setUTCDate(adj.getUTCDate() - 1);
+    } else {
+      adj.setUTCDate(adj.getUTCDate() + 1);
+    }
+    const aStr = `${adj.getUTCFullYear()}${String(adj.getUTCMonth() + 1).padStart(2, '0')}${String(adj.getUTCDate()).padStart(2, '0')}`;
+    
+    return { main: mStr, adj: aStr };
+  })();
+
+  const streamingMatchDateStr = scoreDates?.main || null;
+  const adjacentStreamingDateStr = scoreDates?.adj || null;
+
   const { data: espnScores = [] } = useQuery<any[]>({
-    queryKey: ['homepage-espn-scores'],
+    queryKey: ['homepage-espn-scores', streamingMatchDateStr, adjacentStreamingDateStr],
     queryFn: async () => {
       try {
-        const res = await fetch(`/api/live-scores`);
-        if (!res.ok) return [];
-        const data = await res.json();
-        return data.scores || [];
+        const url = streamingMatchDateStr
+          ? `/api/live-scores?date=${streamingMatchDateStr}`
+          : `/api/live-scores`;
+        
+        const [mainRes, adjRes] = await Promise.all([
+          fetch(url),
+          adjacentStreamingDateStr ? fetch(`/api/live-scores?date=${adjacentStreamingDateStr}`).catch(() => null) : Promise.resolve(null)
+        ]);
+
+        const mainData = mainRes.ok ? await mainRes.json() : { scores: [] };
+        const adjData = adjRes && adjRes.ok ? await adjRes.json() : { scores: [] };
+
+        const seen = new Set<string>();
+        const combined: any[] = [];
+        for (const s of [...(mainData.scores || []), ...(adjData.scores || [])]) {
+          if (!seen.has(s.espnEventId)) {
+            seen.add(s.espnEventId);
+            combined.push(s);
+          }
+        }
+        return combined;
       } catch (e) {
         return [];
       }
@@ -1757,7 +1831,14 @@ export default function UserHomePage() {
 
                           <div className="w-[24%] shrink-0 flex flex-col items-center justify-center">
                             {(isLive || match.status === 'finished' || (autoFinishEnabled && Date.now() >= (new Date(match.match_timestamp).getTime() + matchDurationMins * 60 * 1000))) ? (
-                              <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
+                              <>
+                                <span className="text-2xl md:text-3xl font-black text-white tracking-tight whitespace-nowrap">{match.home_score} - {match.away_score}</span>
+                                {match.live_minute && match.live_minute.includes('PEN') && (
+                                  <span className="text-[10px] font-black text-emerald-accent uppercase mt-1 tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 whitespace-nowrap animate-pulse">
+                                    {match.live_minute}
+                                  </span>
+                                )}
+                              </>
                             ) : (
                               <span className="px-2.5 py-1 bg-slate-950 border border-slate-800 text-xs font-black rounded-lg text-slate-500 whitespace-nowrap">VS</span>
                             )}

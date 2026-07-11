@@ -253,9 +253,9 @@ function getRoundName(event: any): string {
   const month = d.getUTCMonth() + 1;
   
   if (month === 7) {
-    if (day >= 4 && day <= 7) return 'FIFA WORLD CUP 2026, ROUND OF 16';
-    if (day >= 9 && day <= 11) return 'FIFA WORLD CUP 2026, QUARTER-FINALS';
-    if (day >= 14 && day <= 15) return 'FIFA WORLD CUP 2026, SEMI-FINALS';
+    if (day >= 4 && day <= 8) return 'FIFA WORLD CUP 2026, ROUND OF 16';
+    if (day >= 9 && day <= 12) return 'FIFA WORLD CUP 2026, QUARTER-FINALS';
+    if (day >= 14 && day <= 16) return 'FIFA WORLD CUP 2026, SEMI-FINALS';
     if (day === 18) return 'FIFA WORLD CUP 2026, THIRD PLACE PLAY-OFF';
     if (day === 19) return 'FIFA WORLD CUP 2026, FINAL';
   }
@@ -424,19 +424,22 @@ export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<voi
       );
 
       const bdt = convertToBangladeshTime(event.matchDate);
+      const roundName = getRoundName(event);
 
       if (existingMatch) {
-        // Match exists, update date/time if changed
+        // Match exists, update date/time or tournament round name if changed
         const dateDiffers = existingMatch.match_date !== bdt.matchDate;
         const timeDiffers = existingMatch.match_time.substring(0, 5) !== bdt.matchTime.substring(0, 5);
+        const nameDiffers = existingMatch.tournament_name !== roundName;
         
-        if (dateDiffers || timeDiffers) {
+        if (dateDiffers || timeDiffers || nameDiffers) {
           await supabase
             .from('matches')
             .update({
               match_date: bdt.matchDate,
               match_time: bdt.matchTime,
-              match_timestamp: bdt.timestampString
+              match_timestamp: bdt.timestampString,
+              tournament_name: roundName
             })
             .eq('id', existingMatch.id);
         }

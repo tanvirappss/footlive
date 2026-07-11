@@ -55,6 +55,7 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
+      cache: 'no-store',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
@@ -81,8 +82,22 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
       const homeScore = parseInt(homeComp.score || '0', 10);
       const awayScore = parseInt(awayComp.score || '0', 10);
       const status = comp.status?.type?.state as 'pre' | 'in' | 'post';
-      const liveMinute = comp.status?.displayClock || comp.status?.type?.shortDetail || '';
+      
+      let liveMinute = comp.status?.displayClock || comp.status?.type?.shortDetail || '';
       const espnEventId = event.id || '';
+
+      // Check for shootout scores
+      const homeShootoutScore = homeComp.shootoutScore !== undefined ? String(homeComp.shootoutScore) : null;
+      const awayShootoutScore = awayComp.shootoutScore !== undefined ? String(awayComp.shootoutScore) : null;
+      const statusId = String(comp.status?.type?.id || '');
+
+      if (homeShootoutScore !== null && awayShootoutScore !== null) {
+        liveMinute = `PEN (${homeShootoutScore}-${awayShootoutScore})`;
+      } else if (statusId === '44' || statusId === '47' || liveMinute.toLowerCase().includes('penalties') || liveMinute.toLowerCase().includes('shootout') || liveMinute.toLowerCase().includes('pen')) {
+        const hs = homeComp.shootoutScore || '0';
+        const as = awayComp.shootoutScore || '0';
+        liveMinute = `PEN (${hs}-${as})`;
+      }
 
       let homeScorers = '';
       let awayScorers = '';
@@ -90,6 +105,7 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
       if (espnEventId && (status === 'in' || status === 'post')) {
         try {
           const summaryRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${espnEventId}`, {
+            cache: 'no-store',
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             }

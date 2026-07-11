@@ -1241,7 +1241,11 @@ export default function UserWatchPage() {
                     {matchedEspnScore ? matchedEspnScore.awayScore : (match?.away_score ?? 0)}
                   </span>
                 </div>
-                <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/25 rounded-md text-[9px] font-black uppercase tracking-wider mt-1.5 animate-pulse">
+                <span className={`px-2 py-0.5 border rounded-md text-[9px] font-black uppercase tracking-wider mt-1.5 animate-pulse transition-colors ${
+                  (matchedEspnScore?.liveMinute || match?.live_minute || '').includes('PEN')
+                    ? 'bg-emerald-500/10 text-emerald-accent border-emerald-500/25'
+                    : 'bg-red-500/10 text-red-400 border-red-500/25'
+                }`}>
                   {matchedEspnScore?.liveMinute || match?.live_minute || 'LIVE'}
                 </span>
               </div>
