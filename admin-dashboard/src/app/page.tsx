@@ -94,6 +94,7 @@ export default function UserHomePage() {
   const [activeSideTab, setActiveSideTab] = useState<'commentary' | 'events' | 'telemetry' | 'lineup'>('commentary');
   const [hasInitializedTab, setHasInitializedTab] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [timeUntilKickoff, setTimeUntilKickoff] = useState<number>(Infinity);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -856,6 +857,22 @@ export default function UserHomePage() {
         ? upcomingList[0] 
         : (finishedList.length > 0 ? finishedList[0] : null));
 
+  // Update timeUntilKickoff dynamically for upcoming streaming match
+  useEffect(() => {
+    if (!streamingMatch || streamingMatch.status !== 'upcoming') {
+      setTimeUntilKickoff(Infinity);
+      return;
+    }
+    const updateTime = () => {
+      const start = new Date(streamingMatch.match_timestamp).getTime();
+      const diff = start - Date.now();
+      setTimeUntilKickoff(diff);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, [streamingMatch]);
+
   // Fetch streams for streamingMatch
   const { data: streamingMatchStreams = [] } = useQuery<any[]>({
     queryKey: ['streaming-match-streams', streamingMatch?.id],
@@ -1217,24 +1234,14 @@ export default function UserHomePage() {
         {/* Header Top Ad */}
         {getAdForPlacement('headerTop')}
         
-        {/* Hero Banner / Carousel Section */}
-        {systemConfig?.custom_scripts?.hero_carousel?.enabled && 
-         Array.isArray(systemConfig?.custom_scripts?.hero_carousel?.slides) && 
-         systemConfig.custom_scripts.hero_carousel.slides.length > 0 ? (
-          <HomepageHeroCarousel 
-            slides={systemConfig.custom_scripts.hero_carousel.slides} 
-            matches={matches} 
-            fallbackBannerUrl={ticker?.banner_url || "/banner.png"} 
+        {/* Banner Section */}
+        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+          <img 
+            src={ticker?.banner_url || "/banner.png"} 
+            alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
+            className="w-full h-auto block" 
           />
-        ) : (
-          <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
-            <img 
-              src={ticker?.banner_url || "/banner.png"} 
-              alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
-              className="w-full h-auto block" 
-            />
-          </section>
-        )}
+        </section>
 
         {/* Ad after Hero Banner */}
         {getAdForPlacement('afterBanner')}
@@ -1288,132 +1295,162 @@ export default function UserHomePage() {
               <div className="lg:col-span-2 space-y-6">
                 {getAdForPlacement('watchAbovePlayer')}
                 
-                {streamingMatch.status === 'upcoming' ? (
-                  <div className="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-4">
-                    <CalendarIcon className="h-16 w-16 text-emerald-accent animate-pulse" />
-                    <div>
-                      <span className="text-[10px] text-emerald-accent font-black uppercase tracking-widest block font-sans">MATCH NOT STARTED YET</span>
-                      <h3 className="text-xl font-black text-white mt-1 uppercase">
-                        {getTeamName(streamingMatch, 'home')} vs {getTeamName(streamingMatch, 'away')}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1 font-sans">
-                        Live broadcast will begin automatically at match kickoff: {streamingMatch.match_date} • {streamingMatch.match_time.substring(0, 5)}
-                      </p>
-                    </div>
-                    <WebCountdown targetTime={streamingMatch.match_timestamp} />
-                  </div>
-                ) : homepageStreamItems.length === 0 ? (
-                  <div className="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-2">
-                    <ShieldAlert className="h-10 w-10 text-amber-500 mb-2 animate-bounce" />
-                    <h3 className="text-base font-black text-white uppercase">{noStreamsTitle}</h3>
-                    <p className="text-xs text-slate-400 max-w-sm">{noStreamsDesc}</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="aspect-video w-full relative">
-                      {activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be')) ? (
-                        <iframe
-                          key={streamingPlayerKey}
-                          src={getYouTubeEmbedUrl(activeStreamingUrl)}
-                          title="YouTube Video Player"
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                          className="w-full h-full rounded-2xl overflow-hidden border border-card-border"
-                          onLoad={handleStreamingPlaying}
-                        />
-                      ) : systemConfig?.custom_scripts?.active_player === 'player_2' ? (
-                        <PremiumPlayer 
-                          key={streamingPlayerKey}
-                          url={activeStreamingUrl} 
-                          onError={handleStreamingError} 
-                          onPlaying={handleStreamingPlaying}
-                        />
-                      ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
-                        <PotPlayer 
-                          key={streamingPlayerKey}
-                          url={activeStreamingUrl} 
-                          onError={handleStreamingError} 
-                          onPlaying={handleStreamingPlaying}
-                        />
-                      ) : systemConfig?.custom_scripts?.active_player === 'player_4' ? (
-                        <Engine4Player 
-                          key={streamingPlayerKey}
-                          url={activeStreamingUrl} 
-                          onError={handleStreamingError} 
-                          onPlaying={handleStreamingPlaying}
-                        />
-                      ) : (
-                        <HlsPlayer 
-                          key={streamingPlayerKey}
-                          url={activeStreamingUrl} 
-                          onError={handleStreamingError} 
-                          onPlaying={handleStreamingPlaying}
-                        />
-                      )}
-                      {!(activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be'))) && isStreamingReconnecting && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">
-                          <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
-                          <span className="text-[10px] text-slate-500 uppercase font-black">Reconnecting stream feed...</span>
-                        </div>
-                      )}
-                    </div>
+                {(() => {
+                  const showCarouselInPlayer = !!systemConfig?.custom_scripts?.hero_carousel?.enabled && 
+                    Array.isArray(systemConfig?.custom_scripts?.hero_carousel?.slides) && 
+                    systemConfig.custom_scripts.hero_carousel.slides.length > 0 && 
+                    streamingMatch.status === 'upcoming' && 
+                    timeUntilKickoff > 5 * 60 * 1000;
 
-                    {/* Feedback alerts */}
-                    {!(activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be'))) && streamingPlayError && (
-                      <div className="p-4 bg-red-950/20 border border-red-500/25 rounded-2xl text-red-400 text-xs font-bold flex flex-col gap-1">
-                        <span className="uppercase text-red-500">Stream Connection Error</span>
-                        <p className="font-medium text-slate-300">{streamingPlayError}. Attempting automated backup switch...</p>
+                  const isUpcomingCountdown = streamingMatch.status === 'upcoming' && homepageStreamItems.length === 0;
+
+                  if (showCarouselInPlayer) {
+                    return (
+                      <div className="aspect-video w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+                        <HomepageHeroCarousel 
+                          slides={systemConfig.custom_scripts.hero_carousel.slides} 
+                          matches={matches} 
+                          fallbackBannerUrl={ticker?.banner_url || "/banner.png"} 
+                          isInsidePlayer={true}
+                        />
                       </div>
-                    )}
+                    );
+                  }
 
-                    {/* Stream selector */}
-                    <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
-                      <div className="flex items-center justify-between">
+                  if (isUpcomingCountdown) {
+                    return (
+                      <div className="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-4">
+                        <CalendarIcon className="h-16 w-16 text-emerald-accent animate-pulse" />
                         <div>
-                          <h3 className="font-black uppercase text-xs text-slate-400 tracking-wider">Fallback Channels</h3>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Toggle feeds if experience lag</p>
+                          <span className="text-[10px] text-emerald-accent font-black uppercase tracking-widest block font-sans">MATCH NOT STARTED YET</span>
+                          <h3 className="text-xl font-black text-white mt-1 uppercase">
+                            {getTeamName(streamingMatch, 'home')} vs {getTeamName(streamingMatch, 'away')}
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-1 font-sans">
+                            Live broadcast will begin automatically at match kickoff: {streamingMatch.match_date} • {streamingMatch.match_time.substring(0, 5)}
+                          </p>
                         </div>
-                        <button 
-                          onClick={() => {
-                            setStreamingPlayerKey(prev => prev + 1);
-                            setStreamingPlayError(null);
-                            setIsStreamingReconnecting(false);
-                            setStreamingBufferState('Healthy');
-                          }}
-                          className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-                        >
-                          <RefreshCw className="h-4 w-4 text-emerald-accent" />
-                        </button>
+                        <WebCountdown targetTime={streamingMatch.match_timestamp} />
+                      </div>
+                    );
+                  }
+
+                  if (homepageStreamItems.length === 0) {
+                    return (
+                      <div className="aspect-video w-full relative bg-slate-950 border border-card-border rounded-3xl flex flex-col items-center justify-center p-6 text-center gap-2">
+                        <ShieldAlert className="h-10 w-10 text-amber-500 mb-2 animate-bounce" />
+                        <h3 className="text-base font-black text-white uppercase">{noStreamsTitle}</h3>
+                        <p className="text-xs text-slate-400 max-w-sm">{noStreamsDesc}</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <div className="aspect-video w-full relative">
+                        {activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be')) ? (
+                          <iframe
+                            key={streamingPlayerKey}
+                            src={getYouTubeEmbedUrl(activeStreamingUrl)}
+                            title="YouTube Video Player"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                            className="w-full h-full rounded-2xl overflow-hidden border border-card-border"
+                            onLoad={handleStreamingPlaying}
+                          />
+                        ) : systemConfig?.custom_scripts?.active_player === 'player_2' ? (
+                          <PremiumPlayer 
+                            key={streamingPlayerKey}
+                            url={activeStreamingUrl} 
+                            onError={handleStreamingError} 
+                            onPlaying={handleStreamingPlaying}
+                          />
+                        ) : systemConfig?.custom_scripts?.active_player === 'pot_player' ? (
+                          <PotPlayer 
+                            key={streamingPlayerKey}
+                            url={activeStreamingUrl} 
+                            onError={handleStreamingError} 
+                            onPlaying={handleStreamingPlaying}
+                          />
+                        ) : systemConfig?.custom_scripts?.active_player === 'player_4' ? (
+                          <Engine4Player 
+                            key={streamingPlayerKey}
+                            url={activeStreamingUrl} 
+                            onError={handleStreamingError} 
+                            onPlaying={handleStreamingPlaying}
+                          />
+                        ) : (
+                          <HlsPlayer 
+                            key={streamingPlayerKey}
+                            url={activeStreamingUrl} 
+                            onError={handleStreamingError} 
+                            onPlaying={handleStreamingPlaying}
+                          />
+                        )}
+                        {!(activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be'))) && isStreamingReconnecting && (
+                          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 rounded-2xl">
+                            <Loader2 className="h-6 w-6 text-emerald-accent animate-spin" />
+                            <span className="text-[10px] text-slate-500 uppercase font-black">Reconnecting stream feed...</span>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                        {streamingUrls.map((url, idx) => {
-                          const isSelected = streamingUrlIndex === idx;
-                          return (
-                            <button
-                              key={url}
-                              onClick={() => {
-                                setStreamingUrlIndex(idx);
-                                setStreamingPlayError(null);
-                                setIsStreamingReconnecting(false);
-                                setStreamingBufferState('Healthy');
-                              }}
-                              className={`py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
-                                isSelected
-                                  ? 'bg-emerald-accent border-emerald-accent text-black'
-                                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
-                              }`}
-                              title={streamingLabels[idx]}
-                            >
-                              {streamingLabels[idx]}
-                            </button>
-                          );
-                        })}
+                      {!(activeStreamingUrl && (activeStreamingUrl.includes('youtube.com') || activeStreamingUrl.includes('youtu.be'))) && streamingPlayError && (
+                        <div className="p-4 bg-red-950/20 border border-red-500/25 rounded-2xl text-red-400 text-xs font-bold flex flex-col gap-1">
+                          <span className="uppercase text-red-500">Stream Connection Error</span>
+                          <p className="font-medium text-slate-300">{streamingPlayError}. Attempting automated backup switch...</p>
+                        </div>
+                      )}
+
+                      {/* Fallback Channels selector */}
+                      <div className="glass-panel p-6 rounded-2xl border border-card-border space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-black uppercase text-xs text-slate-400 tracking-wider">Fallback Channels</h3>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase mt-0.5">Toggle feeds if experience lag</p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              setStreamingPlayerKey(prev => prev + 1);
+                              setStreamingPlayError(null);
+                              setIsStreamingReconnecting(false);
+                              setStreamingBufferState('Healthy');
+                            }}
+                            className="p-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <RefreshCw className="h-4 w-4 text-emerald-accent" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                          {streamingUrls.map((url, idx) => {
+                            const isSelected = streamingUrlIndex === idx;
+                            return (
+                              <button
+                                key={url}
+                                onClick={() => {
+                                  setStreamingUrlIndex(idx);
+                                  setStreamingPlayError(null);
+                                  setIsStreamingReconnecting(false);
+                                  setStreamingBufferState('Healthy');
+                                }}
+                                className={`py-3 px-2 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer truncate ${
+                                  isSelected
+                                    ? 'bg-emerald-accent border-emerald-accent text-black'
+                                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                                }`}
+                                title={streamingLabels[idx]}
+                              >
+                                {streamingLabels[idx]}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
+                    </>
+                  );
+                })()}
 
                 {getAdForPlacement('watchBelowPlayer')}
               </div>
@@ -2697,11 +2734,13 @@ function LiveMatchEventTracker({
 const HomepageHeroCarousel = ({ 
   slides, 
   matches, 
-  fallbackBannerUrl 
+  fallbackBannerUrl,
+  isInsidePlayer = false
 }: { 
   slides: any[], 
   matches: any[], 
-  fallbackBannerUrl: string 
+  fallbackBannerUrl: string,
+  isInsidePlayer?: boolean
 }) => {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [colors, setColors] = useState<Record<string, string>>({});
@@ -2774,7 +2813,11 @@ const HomepageHeroCarousel = ({
   };
 
   return (
-    <section className="relative w-full h-[220px] sm:h-[300px] md:h-[360px] rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+    <section className={`relative w-full overflow-hidden border border-card-border shadow-2xl bg-[#090c10] ${
+      isInsidePlayer 
+        ? 'w-full h-full aspect-video rounded-3xl' 
+        : 'h-[220px] sm:h-[300px] md:h-[360px] rounded-3xl'
+    }`}>
       {slides.map((slide, idx) => {
         const isCurrent = idx === currentIdx;
         const color = colors[slide.id] || '#10b981';
