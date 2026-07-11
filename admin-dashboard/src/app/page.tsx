@@ -1231,6 +1231,17 @@ export default function UserHomePage() {
                           className="w-full h-full rounded-2xl overflow-hidden border border-card-border"
                           onLoad={handleStreamingPlaying}
                         />
+                      ) : activeStreamingUrl && (activeStreamingUrl.includes('embed') || activeStreamingUrl.includes('iframe') || activeStreamingUrl.includes('streamed.pk/api/stream') || !activeStreamingUrl.includes('.m3u8')) ? (
+                        <iframe
+                          key={streamingPlayerKey}
+                          src={activeStreamingUrl}
+                          title="Stream Embed Player"
+                          frameBorder="0"
+                          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                          allowFullScreen
+                          className="w-full h-full rounded-2xl overflow-hidden border border-card-border bg-black"
+                          onLoad={handleStreamingPlaying}
+                        />
                       ) : systemConfig?.custom_scripts?.active_player === 'player_2' ? (
                         <PremiumPlayer 
                           key={streamingPlayerKey}

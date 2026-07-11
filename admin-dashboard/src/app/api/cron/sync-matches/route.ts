@@ -4,16 +4,37 @@ import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-// Helper to slugify a string
-const slugify = (text: string) =>
-  text
-    .toString()
-    .toLowerCase()
-    .replace(/\s+/g, '-') // Replace spaces with -
-    .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-    .replace(/\-\-+/g, '-') // Replace multiple - with single -
-    .replace(/^-+/, '') // Trim - from start of text
-    .replace(/-+$/, ''); // Trim - from end of text
+const teamNameAliases: Record<string, string[]> = {
+  'united states': ['usa', 'us', 'united states of america', 'u.s.a.'],
+  'south korea': ['korea republic', 'korea', 'korea rep.', 'republic of korea'],
+  'ivory coast': ["cote d'ivoire", 'côte d\'ivoire', 'cote divoire'],
+  'dr congo': ['democratic republic of congo', 'congo dr', 'dem. rep. congo', 'congo'],
+  'cabo verde': ['cape verde'],
+  'czech republic': ['czechia'],
+  'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
+  'curacao': ['curaçao'],
+  'turkey': ['türkiye', 'turkiye'],
+};
+
+function normalizeTeamName(name: string): string {
+  if (!name) return '';
+  const lower = name.trim().toLowerCase();
+  for (const [canonical, aliases] of Object.entries(teamNameAliases)) {
+    if (lower === canonical || aliases.includes(lower)) {
+      return canonical;
+    }
+  }
+  return lower;
+}
+
+function teamsMatch(dbName: string | null | undefined, apiName: string | null | undefined): boolean {
+  if (!dbName || !apiName) return false;
+  const norm1 = normalizeTeamName(dbName);
+  const norm2 = normalizeTeamName(apiName);
+  if (norm1 === norm2) return true;
+  if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
+  return false;
+}
 
 export async function GET(request: Request) {
   try {
@@ -38,6 +59,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: 'Auto-sync is disabled for both football and cricket in settings.' });
     }
 
+    // 2. Fetch all matches from the database to map them
+    const { data: dbMatches, error: dbMatchesError } = await supabase
+      .from('matches')
+      .select(`
+        id,
+        match_date,
+        home_team_custom_name,
+        away_team_custom_name,
+        home_team_id,
+        away_team_id,
+        home_team:home_team_id (name),
+        away_team:away_team_id (name)
+      `);
+
+    if (dbMatchesError) {
+      console.error('Error fetching db matches:', dbMatchesError);
+      return NextResponse.json({ error: 'Failed to fetch database matches' }, { status: 500 });
+    }
+
     const syncLog: string[] = [];
     const categories = [];
     if (fetchFootball) categories.push('football');
@@ -55,77 +95,39 @@ export async function GET(request: Request) {
         syncLog.push(`Found ${matches.length} matches for ${category}.`);
 
         for (const match of matches) {
-          // Apply World Cup filter if fetchFootballAll is false
-          if (category === 'football' && !fetchFootballAll) {
-            const tournamentTitle = (match.tournament || match.title || '').toLowerCase();
-            if (!tournamentTitle.includes('world cup')) {
-              continue;
-            }
-          }
-          
           // Parse timestamp (it's in ms)
           const matchTimestamp = new Date(match.date);
           const matchDate = matchTimestamp.toISOString().split('T')[0];
-          const matchTime = matchTimestamp.toISOString().split('T')[1].split('.')[0]; // HH:MM:SS
           
           const homeName = match.teams?.home?.name;
           const awayName = match.teams?.away?.name;
           
           if (!homeName || !awayName) continue;
 
-          // Check if match already exists by team names and date
-          // To be safe, we check for a match with same custom home team name and date
-          const { data: existingMatches, error: existingError } = await supabase
-            .from('matches')
-            .select('id, status')
-            .eq('home_team_custom_name', homeName)
-            .eq('away_team_custom_name', awayName)
-            .eq('match_date', matchDate)
-            .limit(1);
+          // Find matching match in our database
+          const dbMatch = dbMatches?.find(dbM => {
+            const dbHome = (dbM.home_team as any)?.name || dbM.home_team_custom_name;
+            const dbAway = (dbM.away_team as any)?.name || dbM.away_team_custom_name;
+            
+            const homeMatches = teamsMatch(dbHome, homeName);
+            const awayMatches = teamsMatch(dbAway, awayName);
+            
+            if (!homeMatches || !awayMatches) return false;
+            
+            // Check date proximity (within 2 days)
+            const d1 = new Date(dbM.match_date);
+            const d2 = new Date(matchDate);
+            const diffDays = Math.abs(d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24);
+            return diffDays <= 2;
+          });
 
-          let matchId = '';
-
-          if (existingMatches && existingMatches.length > 0) {
-            matchId = existingMatches[0].id;
-            syncLog.push(`Match ${homeName} vs ${awayName} already exists (${matchId}).`);
-          } else {
-            // Determine status based on time
-            const now = new Date();
-            const timeDiff = matchTimestamp.getTime() - now.getTime();
-            let status = 'upcoming';
-            if (timeDiff <= 0 && timeDiff > -7200000) {
-              // Started within last 2 hours
-              status = 'live';
-            } else if (timeDiff <= -7200000) {
-              status = 'finished';
-            }
-
-            // Insert new match
-            const { data: newMatch, error: insertError } = await supabase
-              .from('matches')
-              .insert([{
-                home_team_custom_name: homeName,
-                away_team_custom_name: awayName,
-                home_team_custom_logo: match.teams?.home?.badge ? `https://streamed.pk${match.teams.home.badge}` : null,
-                away_team_custom_logo: match.teams?.away?.badge ? `https://streamed.pk${match.teams.away.badge}` : null,
-                tournament_name: category === 'cricket' ? 'Cricket Match' : 'Football Match',
-                match_date: matchDate,
-                match_time: matchTime,
-                match_timestamp: matchTimestamp.toISOString(),
-                stadium_name: 'TBD',
-                status: status,
-              }])
-              .select()
-              .single();
-
-            if (insertError) {
-              syncLog.push(`Error inserting match ${homeName} vs ${awayName}: ${insertError.message}`);
-              continue;
-            }
-
-            matchId = newMatch.id;
-            syncLog.push(`Created match ${homeName} vs ${awayName} (${matchId}).`);
+          if (!dbMatch) {
+            syncLog.push(`Skipped ${homeName} vs ${awayName} (No matching World Cup match in DB).`);
+            continue;
           }
+
+          const matchId = dbMatch.id;
+          syncLog.push(`Mapped ${homeName} vs ${awayName} to DB Match ID: ${matchId}`);
 
           // Process streams
           if (match.sources && match.sources.length > 0) {
