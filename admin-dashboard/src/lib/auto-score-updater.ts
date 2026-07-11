@@ -16,7 +16,7 @@ const teamNameAliases: Record<string, string[]> = {
   'turkey': ['türkiye', 'turkiye'],
 };
 
-function normalizeTeamName(name: string): string {
+export function normalizeTeamName(name: string): string {
   if (!name) return '';
   const lower = name.trim().toLowerCase();
   // Check aliases - find canonical name
@@ -28,7 +28,7 @@ function normalizeTeamName(name: string): string {
   return lower;
 }
 
-function teamsMatch(dbName: string, espnName: string): boolean {
+export function teamsMatch(dbName: string, espnName: string): boolean {
   const norm1 = normalizeTeamName(dbName);
   const norm2 = normalizeTeamName(espnName);
   if (norm1 === norm2) return true;
@@ -49,27 +49,37 @@ interface ESPNScore {
   liveMinute: string;
 }
 
+// Team name aliases exported for shared use
+export { teamNameAliases };
+
 // Helper to fetch ESPN scoreboard directly from client (CORS-friendly, avoids cloud platform server IP bans)
+// Uses AbortController timeouts and parallel summary fetches for reliability
 export async function fetchESPNScoresDirect(dateStr?: string): Promise<any[]> {
   try {
     const url = dateStr
       ? `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateStr}`
       : `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?limit=100`;
 
-    const res = await fetch(url);
+    // 10-second timeout for the main scoreboard fetch
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) throw new Error('Direct fetch failed');
     
     const data = await res.json();
-    const results: any[] = [];
 
     const events = data.events || [];
-    for (const event of events) {
+    
+    // First pass: parse all events from scoreboard (fast, no extra fetches)
+    const parsedEvents = events.map((event: any) => {
       const comp = event.competitions?.[0];
-      if (!comp) continue;
+      if (!comp) return null;
 
       const homeComp = comp.competitors?.find((c: any) => c.homeAway === 'home');
       const awayComp = comp.competitors?.find((c: any) => c.homeAway === 'away');
-      if (!homeComp || !awayComp) continue;
+      if (!homeComp || !awayComp) return null;
 
       const homeTeam = homeComp.team?.displayName || homeComp.team?.name || '';
       const awayTeam = awayComp.team?.displayName || awayComp.team?.name || '';
@@ -92,13 +102,33 @@ export async function fetchESPNScoresDirect(dateStr?: string): Promise<any[]> {
         liveMinute = `PEN (${hs}-${as})`;
       }
 
-      let homeScorers = '';
-      let awayScorers = '';
+      return {
+        homeTeam, awayTeam, homeScore, awayScore,
+        homeScorers: '', awayScorers: '',
+        status,
+        matchDate: event.date || comp.date || '',
+        liveMinute, espnEventId,
+        _homeCompTeamId: homeComp.team?.id,
+        _awayCompTeamId: awayComp.team?.id,
+      };
+    }).filter(Boolean) as any[];
 
-      if (espnEventId && (status === 'in' || status === 'post')) {
-        try {
-          const summaryRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${espnEventId}`);
-          if (summaryRes.ok) {
+    // Second pass: fetch goal scorers in PARALLEL for in-progress/finished matches (5s timeout each)
+    const needsSummary = parsedEvents.filter(e => e.espnEventId && (e.status === 'in' || e.status === 'post'));
+    
+    if (needsSummary.length > 0) {
+      const summaryResults = await Promise.allSettled(
+        needsSummary.map(async (ev) => {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 5000);
+          try {
+            const summaryRes = await fetch(
+              `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${ev.espnEventId}`,
+              { signal: ctrl.signal }
+            );
+            clearTimeout(t);
+            if (!summaryRes.ok) return { eventId: ev.espnEventId, homeScorers: '', awayScorers: '' };
+            
             const summaryData = await summaryRes.json();
             const goals = (summaryData.keyEvents || []).filter((e: any) => e.scoringPlay || e.type?.text?.toLowerCase().includes('goal'));
             
@@ -115,41 +145,47 @@ export async function fetchESPNScoresDirect(dateStr?: string): Promise<any[]> {
               const teamId = goal.team?.id;
 
               if (scorer) {
-                if (teamId === homeComp.team?.id) {
+                if (teamId === ev._homeCompTeamId) {
                   hGoals.push({ player: scorer, minute: clock });
-                } else if (teamId === awayComp.team?.id) {
+                } else if (teamId === ev._awayCompTeamId) {
                   aGoals.push({ player: scorer, minute: clock });
                 }
               }
             }
 
-            const formatScorers = (gList: { player: string; minute: string }[]) => {
-              return gList.map(g => `${g.player} (${g.minute})`).join(', ');
-            };
+            const formatScorers = (gList: { player: string; minute: string }[]) =>
+              gList.map(g => `${g.player} (${g.minute})`).join(', ');
 
-            homeScorers = formatScorers(hGoals);
-            awayScorers = formatScorers(aGoals);
+            return {
+              eventId: ev.espnEventId,
+              homeScorers: formatScorers(hGoals),
+              awayScorers: formatScorers(aGoals),
+            };
+          } catch {
+            clearTimeout(t);
+            return { eventId: ev.espnEventId, homeScorers: '', awayScorers: '' };
           }
-        } catch (summaryErr) {
-          console.warn('Direct summary fetch failed:', summaryErr);
+        })
+      );
+
+      // Merge scorers back into parsed events
+      const scorerMap = new Map<string, { homeScorers: string; awayScorers: string }>();
+      for (const result of summaryResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          scorerMap.set(result.value.eventId, result.value);
         }
       }
-
-      results.push({
-        homeTeam,
-        awayTeam,
-        homeScore,
-        awayScore,
-        homeScorers,
-        awayScorers,
-        status,
-        matchDate: event.date || comp.date || '',
-        liveMinute,
-        espnEventId
-      });
+      for (const ev of parsedEvents) {
+        const scorers = scorerMap.get(ev.espnEventId);
+        if (scorers) {
+          ev.homeScorers = scorers.homeScorers;
+          ev.awayScorers = scorers.awayScorers;
+        }
+      }
     }
 
-    return results;
+    // Clean up internal fields before returning
+    return parsedEvents.map(({ _homeCompTeamId, _awayCompTeamId, ...rest }) => rest);
   } catch (err) {
     console.warn('Direct ESPN fetch failed, falling back to proxy route:', err);
     // Fallback to Next.js API proxy
@@ -506,7 +542,14 @@ export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<voi
       .limit(1)
       .maybeSingle();
     
-    const defaultStreamsList = Array.isArray(tickerData?.default_streams) ? tickerData.default_streams : [];
+    let defaultStreamsList: any[] = [];
+    const rawStreams = tickerData?.default_streams as any;
+    if (rawStreams && typeof rawStreams === 'object' && Array.isArray(rawStreams.presets)) {
+      const active = rawStreams.presets.find((p: any) => p.is_active);
+      defaultStreamsList = active?.streams || rawStreams.presets[0]?.streams || [];
+    } else if (Array.isArray(rawStreams)) {
+      defaultStreamsList = rawStreams;
+    }
 
     for (const event of espnEvents) {
       const homeTeamName = event.homeTeam || '';
@@ -522,6 +565,9 @@ export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<voi
 
       if (!homeId || !awayId) continue;
 
+      const bdt = convertToBangladeshTime(event.matchDate);
+      const roundName = getRoundName(event);
+
       // Check if match already exists by team IDs
       const { data: possibleMatches } = await supabase
         .from('matches')
@@ -529,12 +575,15 @@ export async function syncKnockoutMatches(supabase: SupabaseClient): Promise<voi
         .or(`home_team_id.eq.${homeId},away_team_id.eq.${homeId}`);
 
       const existingMatch = possibleMatches?.find(m => 
-        (m.home_team_id === homeId && m.away_team_id === awayId) ||
-        (m.home_team_id === awayId && m.away_team_id === homeId)
+        ((m.home_team_id === homeId && m.away_team_id === awayId) ||
+         (m.home_team_id === awayId && m.away_team_id === homeId)) &&
+        (m.match_date === bdt.matchDate || 
+         m.tournament_name.toLowerCase().includes('quarter') ||
+         m.tournament_name.toLowerCase().includes('semi') ||
+         m.tournament_name.toLowerCase().includes('final') ||
+         m.tournament_name.toLowerCase().includes('round of') ||
+         m.tournament_name.toLowerCase().includes('knockout'))
       );
-
-      const bdt = convertToBangladeshTime(event.matchDate);
-      const roundName = getRoundName(event);
 
       if (existingMatch) {
         // Match exists, update date/time or tournament round name if changed

@@ -32,7 +32,7 @@ import PotPlayer from '@/components/PotPlayer';
 import Engine4Player from '@/components/Engine4Player';
 import AdsterraAd from '@/components/AdsterraAd';
 import { useBlackScreenDetector } from '@/components/useBlackScreenDetector';
-import { syncLiveMatchScores, fetchESPNScoresDirect } from '@/lib/auto-score-updater';
+import { syncLiveMatchScores, fetchESPNScoresDirect, teamsMatch, normalizeTeamName } from '@/lib/auto-score-updater';
 
 interface Team {
   id: string;
@@ -659,7 +659,21 @@ export default function UserHomePage() {
         `)
         .order('match_timestamp', { ascending: true });
       if (error) throw error;
-      return (data || []) as Match[];
+      const rawMatches = (data || []) as Match[];
+      const seen = new Set<string>();
+      const deduped: Match[] = [];
+      for (const m of rawMatches) {
+        const homeName = m.home_team?.name || m.home_team_custom_name || '';
+        const awayName = m.away_team?.name || m.away_team_custom_name || '';
+        const date = m.match_date || '';
+        const teams = [homeName, awayName].sort().join(' vs ');
+        const key = `${teams}_${date}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(m);
+        }
+      }
+      return deduped;
     },
     refetchInterval: 5000, // Query matches list every 5 seconds for fast live updates!
   });
@@ -1203,14 +1217,24 @@ export default function UserHomePage() {
         {/* Header Top Ad */}
         {getAdForPlacement('headerTop')}
         
-        {/* Banner Section */}
-        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
-          <img 
-            src={ticker?.banner_url || "/banner.png"} 
-            alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
-            className="w-full h-auto block" 
+        {/* Hero Banner / Carousel Section */}
+        {systemConfig?.custom_scripts?.hero_carousel?.enabled && 
+         Array.isArray(systemConfig?.custom_scripts?.hero_carousel?.slides) && 
+         systemConfig.custom_scripts.hero_carousel.slides.length > 0 ? (
+          <HomepageHeroCarousel 
+            slides={systemConfig.custom_scripts.hero_carousel.slides} 
+            matches={matches} 
+            fallbackBannerUrl={ticker?.banner_url || "/banner.png"} 
           />
-        </section>
+        ) : (
+          <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+            <img 
+              src={ticker?.banner_url || "/banner.png"} 
+              alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
+              className="w-full h-auto block" 
+            />
+          </section>
+        )}
 
         {/* Ad after Hero Banner */}
         {getAdForPlacement('afterBanner')}
@@ -2668,36 +2692,238 @@ function LiveMatchEventTracker({
   return null;
 }
 
-const teamNameAliases: Record<string, string[]> = {
-  'united states': ['usa', 'us', 'united states of america', 'u.s.a.'],
-  'south korea': ['korea republic', 'korea', 'korea rep.', 'republic of korea'],
-  'ivory coast': ["cote d'ivoire", 'côte d\'ivoire', 'cote divoire'],
-  'dr congo': ['democratic republic of congo', 'congo dr', 'dem. rep. congo', 'congo'],
-  'cabo verde': ['cape verde'],
-  'czech republic': ['czechia'],
-  'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
-  'curacao': ['curaçao'],
-  'turkey': ['türkiye', 'turkiye'],
+// teamsMatch and normalizeTeamName imported from '@/lib/auto-score-updater'
+
+const HomepageHeroCarousel = ({ 
+  slides, 
+  matches, 
+  fallbackBannerUrl 
+}: { 
+  slides: any[], 
+  matches: any[], 
+  fallbackBannerUrl: string 
+}) => {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [colors, setColors] = useState<Record<string, string>>({});
+
+  // Auto-slide effect
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % slides.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [slides]);
+
+  // Color extraction effect
+  useEffect(() => {
+    slides.forEach((slide) => {
+      if (colors[slide.id]) return;
+      
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = slide.image_url;
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1;
+          canvas.height = 1;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, 1, 1);
+            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+            
+            const rgbToHsl = (r: number, g: number, b: number) => {
+              r /= 255; g /= 255; b /= 255;
+              const max = Math.max(r, g, b), min = Math.min(r, g, b);
+              let h = 0, s = 0, l = (max + min) / 2;
+              if (max !== min) {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                  case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                  case g: h = (b - r) / d + 2; break;
+                  case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+              }
+              return [Math.floor(h * 360), Math.floor(s * 100), Math.floor(l * 100)];
+            };
+            
+            const [h, s] = rgbToHsl(r, g, b);
+            const vibrantColor = `hsl(${h}, 90%, 65%)`;
+            setColors((prev) => ({ ...prev, [slide.id]: vibrantColor }));
+          }
+        } catch (e) {
+          setColors((prev) => ({ ...prev, [slide.id]: getVibrantColorFromHash(slide.name) }));
+        }
+      };
+      img.onerror = () => {
+        setColors((prev) => ({ ...prev, [slide.id]: getVibrantColorFromHash(slide.name) }));
+      };
+    });
+  }, [slides]);
+
+  const getVibrantColorFromHash = (str: string): string => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const h = Math.abs(hash) % 360;
+    return `hsl(${h}, 90%, 65%)`;
+  };
+
+  return (
+    <section className="relative w-full h-[220px] sm:h-[300px] md:h-[360px] rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+      {slides.map((slide, idx) => {
+        const isCurrent = idx === currentIdx;
+        const color = colors[slide.id] || '#10b981';
+        const match = matches.find(m => m.id === slide.match_id);
+
+        return (
+          <div
+            key={slide.id}
+            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+              isCurrent ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+            }`}
+          >
+            <img
+              src={slide.image_url}
+              alt={slide.name}
+              className="w-full h-full object-cover block"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
+            <div className="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-full text-slate-400">
+                  FEATURED MATCH
+                </span>
+                <h3 className="text-lg sm:text-2xl md:text-3xl font-extrabold text-white uppercase tracking-wider mt-2.5 drop-shadow-md">
+                  {slide.name}
+                </h3>
+              </div>
+              {match && (
+                <div className="shrink-0 bg-slate-950/80 border border-slate-900 rounded-2xl p-3 backdrop-blur-md shadow-lg max-w-[280px]">
+                  <MatchCountdown match={match} color={color} />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {slides.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+          {slides.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setCurrentIdx(idx)}
+              className={`h-2 rounded-full transition-all duration-300 ${
+                idx === currentIdx ? 'w-6 bg-emerald-accent' : 'w-2 bg-slate-700 hover:bg-slate-600'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
 };
 
-function normalizeTeamName(name: string): string {
-  if (!name) return '';
-  const lower = name.trim().toLowerCase();
-  for (const [canonical, aliases] of Object.entries(teamNameAliases)) {
-    if (lower === canonical || aliases.includes(lower)) {
-      return canonical;
-    }
-  }
-  return lower;
-}
+const MatchCountdown = ({ match, color }: { match: any, color: string }) => {
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    isLive: boolean;
+    isFinished: boolean;
+  }>({ days: 0, hours: 0, minutes: 0, seconds: 0, isLive: false, isFinished: false });
 
-function teamsMatch(dbName: string, espnName: string): boolean {
-  const norm1 = normalizeTeamName(dbName);
-  const norm2 = normalizeTeamName(espnName);
-  if (norm1 === norm2) return true;
-  if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
-  return false;
-}
+  useEffect(() => {
+    const calculateTime = () => {
+      const start = new Date(match.match_timestamp).getTime();
+      const now = Date.now();
+      const diff = start - now;
+
+      const isFinished = match.status === 'finished' || match.status === 'cancelled' || match.status === 'postponed';
+      const isLive = match.status === 'live' || match.status === 'half_time' || (diff <= 0 && !isFinished);
+
+      if (isFinished) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isLive: false, isFinished: true });
+        return;
+      }
+
+      if (isLive) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isLive: true, isFinished: false });
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / 1000 / 60) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      setTimeLeft({ days, hours, minutes, seconds, isLive: false, isFinished: false });
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, [match]);
+
+  if (timeLeft.isFinished) {
+    return (
+      <span className="text-xs uppercase font-extrabold text-slate-500">
+        🏁 MATCH COMPLETED
+      </span>
+    );
+  }
+
+  if (timeLeft.isLive) {
+    return (
+      <span className="text-xs uppercase font-extrabold text-red-500 flex items-center gap-1.5 animate-pulse">
+        <span className="h-2 w-2 rounded-full bg-red-500" />
+        🔴 TRANSMITTING LIVE NOW
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">
+        KICKOFF COUNTDOWN
+      </span>
+      <div className="flex gap-2 items-center text-center">
+        <div>
+          <span className="text-base sm:text-lg font-black block leading-none" style={{ color }}>
+            {String(timeLeft.days).padStart(2, '0')}
+          </span>
+          <span className="text-[7px] text-slate-500 font-bold uppercase tracking-wider">days</span>
+        </div>
+        <span className="text-xs text-slate-600 font-bold">:</span>
+        <div>
+          <span className="text-base sm:text-lg font-black block leading-none" style={{ color }}>
+            {String(timeLeft.hours).padStart(2, '0')}
+          </span>
+          <span className="text-[7px] text-slate-500 font-bold uppercase tracking-wider">hours</span>
+        </div>
+        <span className="text-xs text-slate-600 font-bold">:</span>
+        <div>
+          <span className="text-base sm:text-lg font-black block leading-none" style={{ color }}>
+            {String(timeLeft.minutes).padStart(2, '0')}
+          </span>
+          <span className="text-[7px] text-slate-500 font-bold uppercase tracking-wider">mins</span>
+        </div>
+        <span className="text-xs text-slate-600 font-bold">:</span>
+        <div>
+          <span className="text-base sm:text-lg font-black block leading-none" style={{ color }}>
+            {String(timeLeft.seconds).padStart(2, '0')}
+          </span>
+          <span className="text-[7px] text-slate-500 font-bold uppercase tracking-wider">secs</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 function matchChannelWithTeams(channelName: string, homeTeam: string, awayTeam: string): boolean {
   const nameLower = channelName.toLowerCase();

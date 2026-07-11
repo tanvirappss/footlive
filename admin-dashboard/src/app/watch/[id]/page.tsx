@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { fetchESPNScoresDirect } from '@/lib/auto-score-updater';
+import { fetchESPNScoresDirect, teamsMatch, normalizeTeamName } from '@/lib/auto-score-updater';
 import Link from 'next/link';
 import { ArrowLeft, RefreshCw, AlertTriangle, Activity, Check, Loader2, Trophy, MessageSquare, MapPin, Users } from 'lucide-react';
 import HlsPlayer from '@/components/HlsPlayer';
@@ -55,37 +55,6 @@ interface Stream {
   backup_url_2: string | null;
   backup_url_3: string | null;
   urls?: { label: string; url: string }[];
-}
-
-const teamNameAliases: Record<string, string[]> = {
-  'united states': ['usa', 'us', 'united states of america', 'u.s.a.'],
-  'south korea': ['korea republic', 'korea', 'korea rep.', 'republic of korea'],
-  'ivory coast': ["cote d'ivoire", 'côte d\'ivoire', 'cote divoire'],
-  'dr congo': ['democratic republic of congo', 'congo dr', 'dem. rep. congo', 'congo'],
-  'cabo verde': ['cape verde'],
-  'czech republic': ['czechia'],
-  'bosnia': ['bosnia and herzegovina', 'bosnia & herzegovina', 'bosnia-herzegovina'],
-  'curacao': ['curaçao'],
-  'turkey': ['türkiye', 'turkiye'],
-};
-
-function normalizeTeamName(name: string): string {
-  if (!name) return '';
-  const lower = name.trim().toLowerCase();
-  for (const [canonical, aliases] of Object.entries(teamNameAliases)) {
-    if (lower === canonical || aliases.includes(lower)) {
-      return canonical;
-    }
-  }
-  return lower;
-}
-
-function teamsMatch(dbName: string, espnName: string): boolean {
-  const norm1 = normalizeTeamName(dbName);
-  const norm2 = normalizeTeamName(espnName);
-  if (norm1 === norm2) return true;
-  if (norm1.includes(norm2) || norm2.includes(norm1)) return true;
-  return false;
 }
 
 function matchChannelWithTeams(channelName: string, homeTeam: string, awayTeam: string): boolean {

@@ -76,12 +76,25 @@ export default function SettingsPage() {
     proxy_headers?: Record<string, string>;
   }
 
+  interface StreamPreset {
+    id: string;
+    name: string;
+    is_active: boolean;
+    streams: DefaultStreamUrl[];
+  }
+
   // Default Streams States
   const [defaultStreams, setDefaultStreams] = useState<DefaultStreamUrl[]>([]);
   const [updatingDefaultStreams, setUpdatingDefaultStreams] = useState(false);
   const [defaultStreamsSuccess, setDefaultStreamsSuccess] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedProxyIndex, setExpandedProxyIndex] = useState<number | null>(null);
+
+  // Stream Presets States
+  const [streamPresets, setStreamPresets] = useState<StreamPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  const [editingPresetName, setEditingPresetName] = useState<string>('');
 
   // SystemConfig States for Auto-Populate Toggle
   const [systemConfigId, setSystemConfigId] = useState<string | null>(null);
@@ -90,6 +103,38 @@ export default function SettingsPage() {
   const [forceAllLive, setForceAllLive] = useState(false);
   const [autoScheduleEnabled, setAutoScheduleEnabled] = useState(false);
 
+  // Hero Carousel States
+  interface HeroSlide {
+    id: string;
+    name: string;
+    image_url: string;
+    match_id: string | null;
+  }
+  const [heroCarouselEnabled, setHeroCarouselEnabled] = useState(false);
+  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
+  const [savingHeroCarousel, setSavingHeroCarousel] = useState(false);
+  const [heroCarouselSuccess, setHeroCarouselSuccess] = useState(false);
+  // Fetch matches list for slide countdown linking
+  const { data: matchesList = [] } = useQuery<any[]>({
+    queryKey: ['settings-matches-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          match_date,
+          match_time,
+          tournament_name,
+          home_team:teams!matches_home_team_id_fkey(name),
+          away_team:teams!matches_away_team_id_fkey(name),
+          home_team_custom_name,
+          away_team_custom_name
+        `)
+        .order('match_timestamp', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+  });
   // YouTube Live Stream States
   const [youtubeLiveEnabled, setYoutubeLiveEnabled] = useState(false);
   const [youtubeLiveUrl, setYoutubeLiveUrl] = useState('');
@@ -132,9 +177,36 @@ export default function SettingsPage() {
       setShowCounters(tickerData.show_counters !== false);
       setViewsOffset(tickerData.views_offset || 0);
       setViewersOffset(tickerData.viewers_offset || 0);
-      if (Array.isArray((tickerData as any).default_streams)) {
-        setDefaultStreams((tickerData as any).default_streams);
+      const rawStreams = (tickerData as any).default_streams;
+      if (rawStreams && typeof rawStreams === 'object' && Array.isArray(rawStreams.presets)) {
+        setStreamPresets(rawStreams.presets);
+        const active = rawStreams.presets.find((p: any) => p.is_active);
+        const activeId = active?.id || rawStreams.presets[0]?.id || null;
+        setSelectedPresetId(activeId);
+        if (activeId) {
+          setDefaultStreams(rawStreams.presets.find((p: any) => p.id === activeId)?.streams || []);
+        } else {
+          setDefaultStreams([]);
+        }
+      } else if (Array.isArray(rawStreams)) {
+        const defaultPreset = {
+          id: 'preset-1',
+          name: 'Default 1',
+          is_active: true,
+          streams: rawStreams
+        };
+        setStreamPresets([defaultPreset]);
+        setSelectedPresetId('preset-1');
+        setDefaultStreams(rawStreams);
       } else {
+        const defaultPreset = {
+          id: 'preset-1',
+          name: 'Default 1',
+          is_active: true,
+          streams: []
+        };
+        setStreamPresets([defaultPreset]);
+        setSelectedPresetId('preset-1');
         setDefaultStreams([]);
       }
       setAutoFetchFootball(tickerData.auto_fetch_football || false);
@@ -196,6 +268,8 @@ export default function SettingsPage() {
           setNoStreamsTitle(uiTexts.no_streams_title || 'No Streams Configured');
           setNoStreamsDesc(uiTexts.no_streams_desc || 'There are no active video links bound to this match yet. Check back closer to game kickoff.');
         }
+        setHeroCarouselEnabled(!!data.custom_scripts?.hero_carousel?.enabled);
+        setHeroSlides(data.custom_scripts?.hero_carousel?.slides || []);
       }
     } catch (err) {
       console.error('Failed to load SystemConfig:', err);
@@ -390,14 +464,19 @@ export default function SettingsPage() {
     }
   };
 
-  // Default stream priorities priority syncing
-  const saveAndSyncDefaultStreams = async (updatedStreams: DefaultStreamUrl[]) => {
+  // Default stream priorities presets syncing
+  const saveAndSyncDefaultStreams = async (updatedStreams: DefaultStreamUrl[], presetsToSave?: StreamPreset[]) => {
     try {
       const filteredStreams = updatedStreams.filter(item => item.label.trim() && item.url.trim());
+      const presetsList = presetsToSave || streamPresets.map(p => 
+        p.id === selectedPresetId ? { ...p, streams: filteredStreams } : p
+      );
+
       const updateData = {
-        default_streams: filteredStreams,
+        default_streams: { presets: presetsList },
         updated_at: new Date().toISOString()
       };
+
       if (tickerData?.id) {
         const { error } = await supabase
           .from('ticker_settings')
@@ -411,6 +490,10 @@ export default function SettingsPage() {
         if (error) throw error;
       }
 
+      // Sync active preset's streams to all matches
+      const activePreset = presetsList.find(p => p.is_active) || presetsList[0];
+      const activeStreams = activePreset?.streams?.filter(item => item.label.trim() && item.url.trim()) || [];
+
       const { data: allStreams, error: fetchErr } = await supabase
         .from('streams')
         .select('id');
@@ -420,11 +503,11 @@ export default function SettingsPage() {
           return supabase
             .from('streams')
             .update({
-              primary_url: filteredStreams[0]?.url || '',
-              backup_url_1: filteredStreams[1]?.url || null,
-              backup_url_2: filteredStreams[2]?.url || null,
-              backup_url_3: filteredStreams[3]?.url || null,
-              urls: filteredStreams
+              primary_url: activeStreams[0]?.url || '',
+              backup_url_1: activeStreams[1]?.url || null,
+              backup_url_2: activeStreams[2]?.url || null,
+              backup_url_3: activeStreams[3]?.url || null,
+              urls: activeStreams
             })
             .eq('id', s.id);
         });
@@ -434,6 +517,78 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Failed to auto-sync default stream links:', err);
     }
+  };
+
+  // Helper to update streams for the currently selected preset in state
+  const handleUpdateStreams = (newStreams: DefaultStreamUrl[]) => {
+    setDefaultStreams(newStreams);
+    setStreamPresets(prev => prev.map(p => p.id === selectedPresetId ? { ...p, streams: newStreams } : p));
+  };
+
+  const handleAddPreset = () => {
+    const newId = `preset-${Date.now()}`;
+    const newPreset: StreamPreset = {
+      id: newId,
+      name: `Preset ${streamPresets.length + 1}`,
+      is_active: streamPresets.length === 0,
+      streams: []
+    };
+    const updated = [...streamPresets, newPreset];
+    setStreamPresets(updated);
+    setSelectedPresetId(newId);
+    setDefaultStreams([]);
+    saveAndSyncDefaultStreams([], updated);
+  };
+
+  const handleRenamePreset = (id: string, newName: string) => {
+    if (!newName.trim()) return;
+    const updated = streamPresets.map(p => p.id === id ? { ...p, name: newName } : p);
+    setStreamPresets(updated);
+    saveAndSyncDefaultStreams(id === selectedPresetId ? defaultStreams : (streamPresets.find(p => p.id === id)?.streams || []), updated);
+  };
+
+  const handleDeletePreset = (id: string) => {
+    if (streamPresets.length <= 1) {
+      alert("You must keep at least one preset.");
+      return;
+    }
+    const targetPreset = streamPresets.find(p => p.id === id);
+    const updated = streamPresets.filter(p => p.id !== id);
+    
+    // If the deleted preset was active, make the first remaining one active
+    if (targetPreset?.is_active) {
+      updated[0].is_active = true;
+    }
+    
+    setStreamPresets(updated);
+    
+    let activeStreams = defaultStreams;
+    // If selected was deleted, change selection
+    if (selectedPresetId === id) {
+      const nextId = updated[0].id;
+      setSelectedPresetId(nextId);
+      activeStreams = updated[0].streams || [];
+      setDefaultStreams(activeStreams);
+    }
+    saveAndSyncDefaultStreams(activeStreams, updated);
+  };
+
+  const handleTogglePresetActive = (id: string) => {
+    const updated = streamPresets.map(p => ({
+      ...p,
+      is_active: p.id === id
+    }));
+    setStreamPresets(updated);
+    
+    const activePreset = updated.find(p => p.id === id);
+    let activeStreams = defaultStreams;
+    if (selectedPresetId === id) {
+      activeStreams = activePreset?.streams || [];
+      setDefaultStreams(activeStreams);
+    } else {
+      activeStreams = streamPresets.find(p => p.id === selectedPresetId)?.streams || [];
+    }
+    saveAndSyncDefaultStreams(activeStreams, updated);
   };
 
   const handleDragStart = (index: number) => {
@@ -613,6 +768,112 @@ export default function SettingsPage() {
     } finally {
       setUpdatingBranding(false);
     }
+  };
+  const saveHeroCarousel = async (newSlides?: HeroSlide[], newEnabled?: boolean) => {
+    setSavingHeroCarousel(true);
+    setHeroCarouselSuccess(false);
+    try {
+      const activeSlides = newSlides !== undefined ? newSlides : heroSlides;
+      const isEnabled = newEnabled !== undefined ? newEnabled : heroCarouselEnabled;
+      
+      const existingScripts = systemConfigData?.custom_scripts || {};
+      const updatedScripts = {
+        ...existingScripts,
+        hero_carousel: {
+          enabled: isEnabled,
+          slides: activeSlides
+        }
+      };
+
+      if (systemConfigId) {
+        await supabase
+          .from('ad_networks')
+          .update({
+            custom_scripts: updatedScripts
+          })
+          .eq('id', systemConfigId);
+      } else {
+        const { data: created } = await supabase
+          .from('ad_networks')
+          .insert([{
+            network_name: 'SystemConfig',
+            is_enabled: true,
+            custom_scripts: updatedScripts
+          }])
+          .select()
+          .single();
+        if (created) setSystemConfigId(created.id);
+      }
+      setHeroCarouselSuccess(true);
+      setTimeout(() => setHeroCarouselSuccess(false), 3000);
+      await fetchSystemConfig();
+    } catch (err) {
+      console.error('Failed to save Hero Carousel settings:', err);
+    } finally {
+      setSavingHeroCarousel(false);
+    }
+  };
+
+  const handleHeroSlideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_hero_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `hero/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('teams')
+        .upload(filePath, file);
+        
+      if (uploadError) throw uploadError;
+      
+      const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
+      
+      const newSlide: HeroSlide = {
+        id: `slide-${Date.now()}`,
+        name: `Slide ${heroSlides.length + 1}`,
+        image_url: publicUrl,
+        match_id: null
+      };
+      
+      const updated = [...heroSlides, newSlide];
+      setHeroSlides(updated);
+      await saveHeroCarousel(updated);
+    } catch (err) {
+      console.error('Failed to upload slide image:', err);
+      alert('Failed to upload slide image');
+    }
+  };
+
+  const handleDeleteHeroSlide = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this slide?')) return;
+    const updated = heroSlides.filter(s => s.id !== id);
+    setHeroSlides(updated);
+    await saveHeroCarousel(updated);
+  };
+
+  const handleUpdateHeroSlide = async (id: string, updates: Partial<HeroSlide>) => {
+    const updated = heroSlides.map(s => s.id === id ? { ...s, ...updates } : s);
+    setHeroSlides(updated);
+  };
+
+  const handleToggleHeroCarousel = async () => {
+    const nextVal = !heroCarouselEnabled;
+    setHeroCarouselEnabled(nextVal);
+    await saveHeroCarousel(undefined, nextVal);
+  };
+
+  const moveHeroSlide = async (index: number, direction: 'up' | 'down') => {
+    const list = [...heroSlides];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= list.length) return;
+    const temp = list[index];
+    list[index] = list[newIndex];
+    list[newIndex] = temp;
+    setHeroSlides(list);
+    await saveHeroCarousel(list);
   };
 
   // Submit App UI Texts (Dynamic UI options)
@@ -981,9 +1242,148 @@ export default function SettingsPage() {
                         >
                           Delete Banner (Reset to Default)
                         </button>
-                      </div>
-                    </div>
                   </div>
+                </div>
+                </div>
+                </div>
+                {/* Hero Carousel Settings */}
+                <div className="border-t border-card-border pt-6 mt-6 space-y-4">
+                  <div className="flex justify-between items-center p-4 bg-slate-950/60 border border-slate-900 rounded-2xl">
+                    <div>
+                      <span className="text-sm font-bold text-white uppercase tracking-wider block">🎠 Homepage Hero Carousel</span>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Toggle carousel slideshow on the homepage with custom images and countdown timers.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleHeroCarousel}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        heroCarouselEnabled ? 'bg-emerald-500' : 'bg-slate-800'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          heroCarouselEnabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {heroCarouselEnabled && (
+                    <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-2xl space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Slide Images List ({heroSlides.length})</span>
+                        <label className="px-3 py-1.5 bg-emerald-accent hover:bg-emerald-500 text-black text-[10px] font-black uppercase rounded-lg transition-colors cursor-pointer flex items-center gap-1">
+                          <Upload className="h-3 w-3" /> Upload New Slide
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleHeroSlideUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="space-y-3">
+                        {heroSlides.length === 0 ? (
+                          <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl">
+                            <p className="text-xs text-slate-500 font-medium">No slides uploaded yet. Upload an image to start.</p>
+                          </div>
+                        ) : (
+                          heroSlides.map((slide, idx) => (
+                            <div
+                              key={slide.id}
+                              className="flex flex-col sm:flex-row gap-3 p-3 bg-slate-950/60 border border-slate-900 rounded-xl items-start sm:items-center"
+                            >
+                              {/* Slide Thumbnail */}
+                              <div className="h-16 w-28 bg-slate-900 rounded-lg overflow-hidden shrink-0 border border-slate-800">
+                                <img
+                                  src={slide.image_url}
+                                  alt="Slide Thumbnail"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+
+                              {/* Slide Info inputs */}
+                              <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Slide Title</label>
+                                  <input
+                                    type="text"
+                                    value={slide.name}
+                                    onChange={(e) => handleUpdateHeroSlide(slide.id, { name: e.target.value })}
+                                    onBlur={() => saveHeroCarousel()}
+                                    placeholder="Enter slide title"
+                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-900 rounded-lg text-xs text-white focus:outline-none focus:border-slate-700"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider block">Link Match (For Countdown)</label>
+                                  <select
+                                    value={slide.match_id || ''}
+                                    onChange={(e) => {
+                                      const matchId = e.target.value || null;
+                                      handleUpdateHeroSlide(slide.id, { match_id: matchId });
+                                      const updated = heroSlides.map(s => s.id === slide.id ? { ...s, match_id: matchId } : s);
+                                      saveHeroCarousel(updated);
+                                    }}
+                                    className="w-full px-3 py-2 bg-slate-950 border border-slate-900 rounded-lg text-xs text-slate-300 focus:outline-none focus:border-slate-700"
+                                  >
+                                    <option value="">No Match Linked (Static Slide)</option>
+                                    {matchesList.map((m) => {
+                                      const home = m.home_team?.name || m.home_team_custom_name || 'TBD';
+                                      const away = m.away_team?.name || m.away_team_custom_name || 'TBD';
+                                      return (
+                                        <option key={m.id} value={m.id}>
+                                          {home} vs {away} ({m.match_date} {m.match_time.substring(0, 5)})
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Slide Reorder / Delete Actions */}
+                              <div className="flex items-center gap-1.5 self-end sm:self-center">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => moveHeroSlide(idx, 'up')}
+                                  className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                  title="Move Up"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === heroSlides.length - 1}
+                                  onClick={() => moveHeroSlide(idx, 'down')}
+                                  className="p-1.5 bg-slate-950 border border-slate-900 hover:border-slate-800 text-slate-400 rounded-lg disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                                  title="Move Down"
+                                >
+                                  ▼
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteHeroSlide(slide.id)}
+                                  className="p-1.5 bg-slate-950 border border-slate-900 hover:border-red-500/25 hover:text-red-400 hover:bg-red-500/10 rounded-lg cursor-pointer ml-1"
+                                  title="Delete Slide"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {heroCarouselSuccess && (
+                        <p className="text-[10px] text-emerald-accent font-bold animate-pulse">✓ Hero carousel settings saved automatically!</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Form Footer */}
@@ -1269,6 +1669,122 @@ export default function SettingsPage() {
                       }`}
                     />
                   </button>
+                </div>
+
+                {/* Stream Presets Manager */}
+                <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-xs font-extrabold text-white uppercase tracking-wider block">📋 Preset Stream Playlists</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                        Create multiple presets and select which one is active. Only the active preset will sync to matches.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddPreset}
+                      className="px-3 py-1.5 bg-emerald-accent/10 hover:bg-emerald-accent/20 text-emerald-accent border border-emerald-500/25 text-[10px] font-black uppercase rounded-lg transition-colors cursor-pointer"
+                    >
+                      + Create Preset
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {streamPresets.map(preset => {
+                      const isSelected = selectedPresetId === preset.id;
+                      const isActive = preset.is_active;
+                      const isEditing = editingPresetId === preset.id;
+
+                      return (
+                        <div
+                          key={preset.id}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${
+                            isSelected
+                              ? 'bg-slate-900 border-emerald-500/30'
+                              : 'bg-slate-950/60 border-slate-900 hover:border-slate-800'
+                          }`}
+                        >
+                          {/* Active Toggle (Radio-style Indicator) */}
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePresetActive(preset.id)}
+                            className={`h-4 w-4 rounded-full flex items-center justify-center border transition-all ${
+                              isActive
+                                ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                                : 'border-slate-700 bg-slate-950 text-slate-500 hover:border-slate-600'
+                            }`}
+                            title={isActive ? 'Active Preset' : 'Set as Active'}
+                          >
+                            {isActive && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+                          </button>
+
+                          {/* Preset Name / Inline Editor */}
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingPresetName}
+                              onChange={e => setEditingPresetName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  handleRenamePreset(preset.id, editingPresetName);
+                                  setEditingPresetId(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingPresetId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                handleRenamePreset(preset.id, editingPresetName);
+                                setEditingPresetId(null);
+                              }}
+                              className="px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded text-xs text-white max-w-[120px] focus:outline-none focus:border-emerald-500"
+                              autoFocus
+                            />
+                          ) : (
+                            <span
+                              onClick={() => {
+                                setSelectedPresetId(preset.id);
+                                setDefaultStreams(preset.streams || []);
+                              }}
+                              onDoubleClick={() => {
+                                setEditingPresetId(preset.id);
+                                setEditingPresetName(preset.name);
+                              }}
+                              className={`text-xs font-bold cursor-pointer select-none ${
+                                isSelected ? 'text-white' : 'text-slate-400 hover:text-white'
+                              }`}
+                              title="Double click to rename"
+                            >
+                              {preset.name}
+                            </span>
+                          )}
+
+                          {/* Edit / Delete Buttons */}
+                          <div className="flex items-center gap-1 ml-1 border-l border-slate-900 pl-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPresetId(preset.id);
+                                setEditingPresetName(preset.name);
+                              }}
+                              className="text-[10px] text-slate-500 hover:text-white transition-colors"
+                              title="Rename Preset"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePreset(preset.id)}
+                              disabled={streamPresets.length <= 1}
+                              className="text-[10px] text-slate-500 hover:text-red-400 disabled:opacity-30 disabled:hover:text-slate-500 transition-colors"
+                              title="Delete Preset"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <form onSubmit={handleDefaultStreamsSubmit} className="space-y-4">
