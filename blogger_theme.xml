@@ -668,24 +668,53 @@
       if (match.match_timestamp) {
         try {
           const d = new Date(match.match_timestamp);
-          const yr = d.getFullYear();
-          const mo = String(d.getMonth() + 1).padStart(2, '0');
-          const dy = String(d.getDate()).padStart(2, '0');
-          const dateStr = `${yr}${mo}${dy}`;
           
-          const scoreRes = await fetch(`${BACKEND_BASE}/api/live-scores?date=${dateStr}`);
-          if (scoreRes.ok) {
-            const data = await scoreRes.json();
-            const newScores = data.scores || [];
-            newScores.forEach(ns => {
-              const exists = state.espnScores.findIndex(es => es.espnEventId === ns.espnEventId);
-              if (exists !== -1) {
-                state.espnScores[exists] = ns;
-              } else {
-                state.espnScores.push(ns);
-              }
-            });
+          // Main UTC date string
+          const yr = d.getUTCFullYear();
+          const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const dy = String(d.getUTCDate()).padStart(2, '0');
+          const dateStr = `${yr}${mo}${dy}`;
+
+          // Adjacent UTC date string
+          const adj = new Date(d);
+          if (d.getUTCHours() < 12) {
+            adj.setUTCDate(adj.getUTCDate() - 1);
+          } else {
+            adj.setUTCDate(adj.getUTCDate() + 1);
           }
+          const adjYr = adj.getUTCFullYear();
+          const adjMo = String(adj.getUTCMonth() + 1).padStart(2, '0');
+          const adjDy = String(adj.getUTCDate()).padStart(2, '0');
+          const adjDateStr = `${adjYr}${adjMo}${adjDy}`;
+          
+          // Fetch both dates in parallel to handle timezone shifts
+          const [scoreRes1, scoreRes2] = await Promise.all([
+            fetch(`${BACKEND_BASE}/api/live-scores?date=${dateStr}`).then(r => r.ok ? r.json() : { scores: [] }).catch(() => ({ scores: [] })),
+            fetch(`${BACKEND_BASE}/api/live-scores?date=${adjDateStr}`).then(r => r.ok ? r.json() : { scores: [] }).catch(() => ({ scores: [] }))
+          ]);
+
+          const mainScores = scoreRes1.scores || [];
+          const adjScores = scoreRes2.scores || [];
+          
+          // Merge unique events
+          const seen = new Set();
+          const combined = [];
+          for (const s of [...mainScores, ...adjScores]) {
+            if (!seen.has(s.espnEventId)) {
+              seen.add(s.espnEventId);
+              combined.push(s);
+            }
+          }
+          
+          // Update/Merge in state.espnScores
+          combined.forEach(ns => {
+            const idx = state.espnScores.findIndex(es => es.espnEventId === ns.espnEventId);
+            if (idx !== -1) {
+              state.espnScores[idx] = ns;
+            } else {
+              state.espnScores.push(ns);
+            }
+          });
         } catch (e) {
           console.warn("Failed to fetch match-specific scoreboard:", e);
         }
@@ -2017,7 +2046,7 @@
     function renderHeroCarouselHTML(isInsidePlayer = false) {
       const config = state.systemConfig?.custom_scripts?.hero_carousel;
       if (!config || !config.enabled || !Array.isArray(config.slides) || config.slides.length === 0) {
-        return isInsidePlayer ? '' : renderHeroBannerHTML();
+        return '';
       }
 
       const slides = config.slides;
@@ -2102,10 +2131,9 @@
     };
 
     window.updateCarouselDOM = function() {
-      const carouselContainers = document.querySelectorAll('#hero-banner-container, #watch-player-viewport-carousel');
+      const carouselContainers = document.querySelectorAll('#watch-player-viewport-carousel');
       carouselContainers.forEach(container => {
-        const isInsidePlayer = container.id === 'watch-player-viewport-carousel';
-        container.innerHTML = renderHeroCarouselHTML(isInsidePlayer);
+        container.innerHTML = renderHeroCarouselHTML(true);
       });
       if (window.lucide) window.lucide.createIcons();
     };
@@ -2140,7 +2168,7 @@
           </div>
           
           <div class="w-full">
-            <marquee behavior="scroll" direction="left" scrollamount="4" scrolldelay="60" onmouseover="this.stop();" onmouseout="this.start();" class="text-xs font-bold text-white tracking-wide font-bangla block">
+            <marquee behavior="scroll" direction="left" scrollamount="4" scrolldelay="60" onmouseover="this.stop();" onmouseout="this.start();" class="text-xs font-bold text-white tracking-wide font-bangla block" style="white-space: nowrap;">
               ${ticker.ticker_text}
             </marquee>
           </div>
@@ -2585,13 +2613,18 @@
               <span class="text-slate-500">Network Latency:</span>
               <span class="text-white">1.8s (Low Delay)</span>
             </div>
-            <div class="flex justify-between items-center py-1 border-b border-slate-900">
+            <div class="flex justify-between items-center py-2 border-b border-slate-900">
               <span class="text-slate-500">Buffer state:</span>
               <span class="${state.bufferState === 'Healthy' ? 'text-emerald-accent' : 'text-amber-500'}">${state.bufferState}</span>
             </div>
-            <div class="flex justify-between items-center py-1">
-              <span class="text-slate-500">ESPN Event ID:</span>
-              <span class="text-white font-mono">${score.espnEventId}</span>
+            <div class="flex justify-between items-center py-2">
+              <span class="text-slate-500">Score Sync API:</span>
+              <span class="${score.espnEventId ? 'text-emerald-accent flex items-center gap-1.5' : 'text-amber-500'}">
+                ${score.espnEventId ? `
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-accent animate-pulse"></span>
+                  CONNECTED (${score.espnEventId})
+                ` : 'NOT CONNECTED'}
+              </span>
             </div>
           </div>
         `;
