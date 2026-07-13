@@ -1252,22 +1252,37 @@ export default function SettingsPage() {
 
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Or Upload Banner File</label>
-                        <label className="flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
-                          <Upload className="h-5 w-5 text-slate-500 shrink-0" />
-                          <span className="text-xs text-slate-400 font-semibold truncate">
-                            {siteBannerFile ? siteBannerFile.name : 'Upload banner image file (1200x300 recommended)'}
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] || null;
-                              setSiteBannerFile(file);
-                              if (file) setSiteBannerUrl('');
-                            }}
-                            className="hidden"
-                          />
-                        </label>
+                        <div className="flex items-center gap-3">
+                          <label className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-950/60 border border-dashed border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 hover:bg-slate-900/50 transition-all duration-150">
+                            <Upload className="h-5 w-5 text-slate-500 shrink-0" />
+                            <span className="text-xs text-slate-400 font-semibold truncate">
+                              {siteBannerFile ? siteBannerFile.name : 'Upload banner image file (1200x300 recommended)'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                setSiteBannerFile(file);
+                                if (file) setSiteBannerUrl('');
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {(siteBannerUrl || siteBannerFile) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSiteBannerUrl('');
+                                setSiteBannerFile(null);
+                              }}
+                              className="px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold uppercase tracking-wider rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                            >
+                              Delete Banner
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
 
