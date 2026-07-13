@@ -1253,17 +1253,11 @@ export default function UserHomePage() {
         {getAdForPlacement('headerTop')}
         
         {/* Banner Section */}
-        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10] relative aspect-[3.2/1] sm:aspect-[3.6/1] md:aspect-[4.2/1]">
-          {ticker?.banner_url && (
-            <div 
-              className="absolute inset-0 bg-cover bg-center blur-3xl opacity-30 scale-110" 
-              style={{ backgroundImage: `url(${ticker.banner_url})` }} 
-            />
-          )}
+        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
           <img 
             src={ticker?.banner_url || "/banner.png"} 
             alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
-            className="relative z-10 w-full h-full object-contain block mx-auto" 
+            className="w-full h-auto block" 
           />
         </section>
 
