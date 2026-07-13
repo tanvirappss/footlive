@@ -74,6 +74,18 @@ interface Announcement {
   priority: string;
 }
 
+const getLogoSize = (logoUrl?: string | null) => {
+  if (!logoUrl) return 100;
+  try {
+    const url = new URL(logoUrl);
+    const pct = url.searchParams.get('logo_pct');
+    return pct ? parseInt(pct, 10) : 100;
+  } catch {
+    const match = logoUrl.match(/[?&]logo_pct=(\d+)/);
+    return match ? parseInt(match[1], 10) : 100;
+  }
+};
+
 export default function UserHomePage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'streaming' | 'live' | 'upcoming' | 'finished' | 'channels'>('live');
@@ -214,38 +226,39 @@ export default function UserHomePage() {
     setAddChannelSubmitting(true);
     setAddChannelError(null);
     try {
-      const text = await file.text();
-      const lines = text.split('\n');
-      const entries: { name: string; url: string }[] = [];
-      let currentName = '';
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.startsWith('#EXTINF:')) {
-          const commaIdx = line.lastIndexOf(',');
-          currentName = commaIdx !== -1 ? line.substring(commaIdx + 1).trim() : 'Unnamed Channel';
-        } else if (line && !line.startsWith('#')) {
-          entries.push({ name: currentName || `Channel ${entries.length + 1}`, url: line });
-          currentName = '';
-        }
-      }
-      if (entries.length === 0) {
-        setAddChannelError('No valid channels found in the M3U file.');
-        return;
-      }
-      const rows = entries.map(e => ({
-        name: e.name,
-        url: e.url,
-        logo_url: '',
-        is_enabled: true
-      }));
-      const { error } = await supabase.from('m3u_channels').insert(rows);
+      // 1. Upload .m3u file to Supabase Storage in 'teams' bucket under 'user-uploaded/' folder
+      const fileExt = file.name.split('.').pop() || 'm3u';
+      const cleanName = file.name.replace(`.${fileExt}`, '');
+      const uniqueFileName = `${Date.now()}_${file.name}`;
+      const filePath = `user-uploaded/${uniqueFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('teams')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data } = supabase.storage.from('teams').getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
+
+      // 2. Insert single row into m3u_channels
+      const { error } = await supabase
+        .from('m3u_channels')
+        .insert([{
+          name: cleanName,
+          url: publicUrl,
+          logo_url: '',
+          is_enabled: true
+        }]);
+
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['user-channels'] });
       setIsAddChannelModalOpen(false);
       setAddChannelName('');
       setAddChannelUrl('');
     } catch (err: any) {
-      setAddChannelError(err.message || 'Failed to import M3U file.');
+      setAddChannelError(err.message || 'Failed to upload M3U file.');
     } finally {
       setAddChannelSubmitting(false);
       e.target.value = '';
@@ -315,7 +328,7 @@ export default function UserHomePage() {
   });
 
   // Fetch ticker settings
-  const { data: ticker } = useQuery({
+  const { data: ticker, isLoading: isTickerPending } = useQuery({
     queryKey: ['user-ticker'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -1085,11 +1098,16 @@ export default function UserHomePage() {
               }}
               className="flex items-center gap-3 cursor-pointer select-none"
             >
-              {ticker?.use_logo_image && ticker?.logo_url ? (
+              {isTickerPending ? (
+                <div className="h-10 md:h-14 w-32 bg-slate-900/50 animate-pulse rounded-xl" />
+              ) : ticker?.use_logo_image && ticker?.logo_url ? (
                 <img 
                   src={ticker.logo_url} 
                   alt={ticker?.site_name || "Site Logo"} 
-                  className="h-10 md:h-14 w-auto max-w-[200px] md:max-w-[280px] object-contain hover:scale-[1.02] transition-transform duration-200" 
+                  className="logo-scaled w-auto max-w-[200px] md:max-w-[280px] object-contain hover:scale-[1.02] transition-transform duration-200" 
+                  style={{
+                    '--logo-scale': getLogoSize(ticker.logo_url) / 100
+                  } as React.CSSProperties}
                 />
               ) : (
                 <div className="flex items-center gap-3">
@@ -1235,11 +1253,17 @@ export default function UserHomePage() {
         {getAdForPlacement('headerTop')}
         
         {/* Banner Section */}
-        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10]">
+        <section className="w-full rounded-3xl overflow-hidden border border-card-border shadow-2xl bg-[#090c10] relative aspect-[3.2/1] sm:aspect-[3.6/1] md:aspect-[4.2/1]">
+          {ticker?.banner_url && (
+            <div 
+              className="absolute inset-0 bg-cover bg-center blur-3xl opacity-30 scale-110" 
+              style={{ backgroundImage: `url(${ticker.banner_url})` }} 
+            />
+          )}
           <img 
             src={ticker?.banner_url || "/banner.png"} 
             alt="Live Sports Broadcasts - Watch FIFA World Cup 2026 Live Streams" 
-            className="w-full h-auto block" 
+            className="relative z-10 w-full h-full object-contain block mx-auto" 
           />
         </section>
 
@@ -2830,13 +2854,19 @@ const HomepageHeroCarousel = ({
               isCurrent ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
             }`}
           >
+            {slide.image_url && (
+              <div 
+                className="absolute inset-0 bg-cover bg-center blur-3xl opacity-35 scale-110" 
+                style={{ backgroundImage: `url(${slide.image_url})` }} 
+              />
+            )}
             <img
               src={slide.image_url}
               alt={slide.name}
-              className="w-full h-full object-cover block"
+              className="relative z-10 w-full h-full object-contain block mx-auto"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
-            <div className="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent z-10" />
+            <div className="absolute bottom-6 left-6 right-6 flex flex-col md:flex-row md:items-end justify-between gap-4 z-20">
               <div>
                 <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-full text-slate-400">
                   FEATURED MATCH

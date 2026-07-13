@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const [siteName, setSiteName] = useState('WORLD CUP 2026');
   const [siteLogoUrl, setSiteLogoUrl] = useState('');
   const [siteLogoFile, setSiteLogoFile] = useState<File | null>(null);
+  const [logoPct, setLogoPct] = useState(100);
   const [siteBannerUrl, setSiteBannerUrl] = useState('');
   const [siteBannerFile, setSiteBannerFile] = useState<File | null>(null);
   const [showCounters, setShowCounters] = useState(true);
@@ -172,7 +173,16 @@ export default function SettingsPage() {
       setTickerText(tickerData.ticker_text || '');
       setIsTickerEnabled(tickerData.is_enabled !== false);
       setSiteName(tickerData.site_name || 'WORLD CUP 2026');
-      setSiteLogoUrl(tickerData.logo_url || '');
+      const logoUrl = tickerData.logo_url || '';
+      setSiteLogoUrl(logoUrl);
+      try {
+        const url = new URL(logoUrl);
+        const pct = url.searchParams.get('logo_pct');
+        setLogoPct(pct ? parseInt(pct, 10) : 100);
+      } catch {
+        const match = logoUrl.match(/[?&]logo_pct=(\d+)/);
+        setLogoPct(match ? parseInt(match[1], 10) : 100);
+      }
       setSiteBannerUrl(tickerData.banner_url || '');
       setShowCounters(tickerData.show_counters !== false);
       setViewsOffset(tickerData.views_offset || 0);
@@ -734,6 +744,16 @@ export default function SettingsPage() {
       if (siteLogoFile) {
         finalLogoUrl = await uploadSiteLogo(siteLogoFile);
       }
+      if (finalLogoUrl) {
+        try {
+          const url = new URL(finalLogoUrl);
+          url.searchParams.set('logo_pct', logoPct.toString());
+          finalLogoUrl = url.toString();
+        } catch {
+          const base = finalLogoUrl.split('?')[0];
+          finalLogoUrl = `${base}?logo_pct=${logoPct}`;
+        }
+      }
       if (siteBannerFile) {
         finalBannerUrl = await uploadSiteBanner(siteBannerFile);
       }
@@ -1070,33 +1090,57 @@ export default function SettingsPage() {
                   {/* Logo Config */}
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="sm:col-span-2 space-y-1.5">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Custom Logo URL</label>
-                        <input
-                          type="text"
-                          value={siteLogoUrl}
-                          onChange={(e) => {
-                            setSiteLogoUrl(e.target.value);
-                            setSiteLogoFile(null);
-                          }}
-                          placeholder="https://example.com/logo.png"
-                          className="w-full px-4 py-3 glass-input rounded-xl text-sm"
-                        />
+                      <div className="sm:col-span-2 space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Custom Logo URL</label>
+                          <input
+                            type="text"
+                            value={siteLogoUrl}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSiteLogoUrl(val);
+                              setSiteLogoFile(null);
+                              const match = val.match(/[?&]logo_pct=(\d+)/);
+                              if (match) {
+                                setLogoPct(parseInt(match[1], 10));
+                              }
+                            }}
+                            placeholder="https://example.com/logo.png"
+                            className="w-full px-4 py-3 glass-input rounded-xl text-sm"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Logo Size Scale ({logoPct}%)</label>
+                          </div>
+                          <input
+                            type="range"
+                            min="30"
+                            max="250"
+                            value={logoPct}
+                            onChange={(e) => setLogoPct(parseInt(e.target.value, 10))}
+                            className="w-full h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                          />
+                        </div>
                       </div>
 
-                      <div className="flex items-end justify-center">
-                        <div className="h-12 w-32 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                      <div className="flex flex-col items-center justify-end gap-2">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase">Real-Time Preview</span>
+                        <div className="h-20 w-36 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
                           {siteLogoFile ? (
                             <img
                               src={URL.createObjectURL(siteLogoFile)}
                               alt="Preview"
-                              className="h-full w-full object-contain p-1"
+                              className="h-full w-full object-contain p-1 transition-all duration-75"
+                              style={{ transform: `scale(${logoPct / 100})` }}
                             />
                           ) : siteLogoUrl ? (
                             <img
                               src={siteLogoUrl}
                               alt="Site Logo"
-                              className="h-full w-full object-contain p-1"
+                              className="h-full w-full object-contain p-1 transition-all duration-75"
+                              style={{ transform: `scale(${logoPct / 100})` }}
                             />
                           ) : (
                             <span className="text-xs text-slate-600 font-extrabold">No Logo</span>

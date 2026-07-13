@@ -126,7 +126,7 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
               }
               if (!scorer) scorer = 'Unknown Player';
               
-              const minute = goal.clock?.displayValue || '';
+              const minute = (typeof goal.clock === 'object' && goal.clock ? goal.clock.displayValue || `${goal.clock.value}'` : goal.clock) || '';
               
               const gTeamId = String(goal.team?.id || '');
               const hId = String(homeComp.id || homeComp.team?.id || '');
@@ -175,7 +175,7 @@ async function fetchESPNScores(dateStr?: string): Promise<MatchScore[]> {
         for (const detail of details) {
           if (detail.type?.text === 'Goal') {
             const player = detail.athletesInvolved?.[0]?.displayName || 'Unknown';
-            const minute = detail.clock?.displayValue || '';
+            const minute = (typeof detail.clock === 'object' && detail.clock ? detail.clock.displayValue || `${detail.clock.value}'` : detail.clock) || '';
             const teamId = detail.team?.id;
 
             if (teamId === homeComp.id || teamId === homeComp.team?.id) {

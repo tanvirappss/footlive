@@ -102,7 +102,16 @@ body {
 }
 
 .font-bangla {
-  font-family: 'Hind Siliguri', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: var(--font-hind-siliguri), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.logo-scaled {
+  height: calc(2.5rem * var(--logo-scale, 1)) !important;
+}
+@media (min-width: 768px) {
+  .logo-scaled {
+    height: calc(3.5rem * var(--logo-scale, 1)) !important;
+  }
 }
 
 /* Layout-safe ad containers */

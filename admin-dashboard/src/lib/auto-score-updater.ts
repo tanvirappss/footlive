@@ -141,7 +141,7 @@ export async function fetchESPNScoresDirect(dateStr?: string): Promise<any[]> {
                 const match = goal.text.match(/Goal!\s+[^.]+\.\s+([^(\n]+)/);
                 if (match) scorer = match[1].trim();
               }
-              const clock = goal.clock || '0\'';
+              const clock = (typeof goal.clock === 'object' && goal.clock ? goal.clock.displayValue || `${goal.clock.value}'` : goal.clock) || '0\'';
               const teamId = goal.team?.id;
 
               if (scorer) {
